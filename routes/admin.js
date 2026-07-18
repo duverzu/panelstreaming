@@ -220,15 +220,65 @@ router.post('/clientes/:id/impersonar', requireAdmin, wrap(async (req, res) => {
 }));
 
 /**
- * POST /admin/clientes/:id/reiniciar
- * Reinicia (pone al aire) la estación del cliente.
+ * GET /admin/clientes/estados
+ * Estado de la estación de cada cliente (online/offline/suspendido/sin-estacion).
  */
-router.post('/clientes/:id/reiniciar', requireAdmin, wrap(async (req, res) => {
+router.get('/clientes/estados', requireAdmin, wrap(async (req, res) => {
+  const clientes = await clienteModel.findAllWithEmail();
+  const estados = {};
+  await Promise.all(clientes.map(async (c) => {
+    if (!c.activo) { estados[c.id] = 'suspendido'; return; }
+    if (!c.azuracast_station_id) { estados[c.id] = 'sin-estacion'; return; }
+    try {
+      const st = await azuracast.getStationStatus(c.azuracast_station_id);
+      estados[c.id] = st.backendRunning ? 'online' : 'offline';
+    } catch {
+      estados[c.id] = 'error';
+    }
+  }));
+  res.json({ estados });
+}));
+
+/** POST /admin/clientes/:id/iniciar — pone la estación al aire (restart). */
+router.post('/clientes/:id/iniciar', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
   await azuracast.restartStation(cliente.azuracast_station_id);
-  res.json({ message: 'Estación reiniciada / al aire ✅' });
+  res.json({ message: 'Estación al aire ✅' });
+}));
+
+/** POST /admin/clientes/:id/parar — detiene la transmisión (sin suspender). */
+router.post('/clientes/:id/parar', requireAdmin, wrap(async (req, res) => {
+  const cliente = await clienteModel.findById(Number(req.params.id));
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
+  await azuracast.stopStation(cliente.azuracast_station_id);
+  res.json({ message: 'Transmisión detenida ✅' });
+}));
+
+/** POST /admin/clientes/:id/suspender — desactiva el cliente y apaga su estación. */
+router.post('/clientes/:id/suspender', requireAdmin, wrap(async (req, res) => {
+  const cliente = await clienteModel.findById(Number(req.params.id));
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  await clienteModel.update(cliente.id, { activo: false });
+  if (cliente.azuracast_station_id) {
+    try { await azuracast.updateStation(cliente.azuracast_station_id, { is_enabled: false }); } catch (_) {}
+    try { await azuracast.stopStation(cliente.azuracast_station_id); } catch (_) {}
+  }
+  res.json({ message: 'Cliente suspendido ✅' });
+}));
+
+/** POST /admin/clientes/:id/reactivar — reactiva el cliente y pone su estación al aire. */
+router.post('/clientes/:id/reactivar', requireAdmin, wrap(async (req, res) => {
+  const cliente = await clienteModel.findById(Number(req.params.id));
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  await clienteModel.update(cliente.id, { activo: true });
+  if (cliente.azuracast_station_id) {
+    try { await azuracast.updateStation(cliente.azuracast_station_id, { is_enabled: true }); } catch (_) {}
+    try { await azuracast.restartStation(cliente.azuracast_station_id); } catch (_) {}
+  }
+  res.json({ message: 'Cliente reactivado ✅' });
 }));
 
 router.get('/clientes/:id/estacion', requireAdmin, wrap(async (req, res) => {

@@ -82,3 +82,6 @@ export const IconCheck = (p) => (
 export const IconPower = (p) => (
   <svg {...base} {...p}><path d="M12 2v10" /><path d="M18.4 6.6a9 9 0 1 1-12.8 0" /></svg>
 );
+export const IconStop = (p) => (
+  <svg {...base} fill="currentColor" stroke="none" {...p}><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+);

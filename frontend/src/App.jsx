@@ -3,6 +3,7 @@ import { useAuth } from './auth';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import AdminDashboard from './pages/admin/Dashboard';
+import AdminClientes from './pages/admin/Clientes';
 import AdminPlanes from './pages/admin/Planes';
 import ClienteDashboard from './pages/cliente/Dashboard';
 import ClienteMusica from './pages/cliente/Musica';
@@ -31,6 +32,7 @@ export default function App() {
       {/* Panel Admin */}
       <Route path="/admin" element={<Protected role="admin"><Layout /></Protected>}>
         <Route index element={<AdminDashboard />} />
+        <Route path="clientes" element={<AdminClientes />} />
         <Route path="planes" element={<AdminPlanes />} />
       </Route>
 

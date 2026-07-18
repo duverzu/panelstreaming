@@ -170,6 +170,19 @@ async function restartStation(stationId) {
 }
 
 /**
+ * Detiene la transmisión (frontend + backend) de una estación.
+ */
+async function stopStation(stationId) {
+  try {
+    await api.post(`/station/${stationId}/frontend/stop`);
+    await api.post(`/station/${stationId}/backend/stop`);
+    return { stopped: true };
+  } catch (err) {
+    handleError(`stopStation(${stationId})`, err);
+  }
+}
+
+/**
  * Elimina una estación.
  * DELETE /api/admin/station/{id}
  */
@@ -285,6 +298,7 @@ module.exports = {
   updateMount,
   createStreamer,
   restartStation,
+  stopStation,
   deleteStation,
   listMedia,
   uploadMedia,

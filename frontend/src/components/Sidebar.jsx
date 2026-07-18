@@ -10,8 +10,8 @@ const MENUS = {
   admin: [
     { seccion: 'Gestión', items: [
       { label: 'Dashboard', icon: IconDashboard, to: '/admin' },
+      { label: 'Clientes', icon: IconUsers, to: '/admin/clientes' },
       { label: 'Planes', icon: IconInvoice, to: '/admin/planes' },
-      { label: 'Clientes', icon: IconUsers, soon: true },
       { label: 'Estaciones', icon: IconRadio, soon: true },
     ]},
     { seccion: 'Negocio', items: [
