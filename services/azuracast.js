@@ -290,6 +290,46 @@ async function deletePlaylist(stationId, plId) {
   }
 }
 
+/** Oyentes en vivo de una estación. GET /api/station/{id}/listeners */
+async function getListeners(stationId) {
+  try {
+    const { data } = await api.get(`/station/${stationId}/listeners`);
+    return data;
+  } catch (err) {
+    handleError(`getListeners(${stationId})`, err);
+  }
+}
+
+/** Gráficas de audiencia (daily/hourly/day_of_week). GET /api/station/{id}/reports/overview/charts */
+async function getCharts(stationId) {
+  try {
+    const { data } = await api.get(`/station/${stationId}/reports/overview/charts`);
+    return data;
+  } catch (err) {
+    handleError(`getCharts(${stationId})`, err);
+  }
+}
+
+/** Canciones mejor/peor y más reproducidas. GET /api/station/{id}/reports/overview/best-and-worst */
+async function getBestWorst(stationId) {
+  try {
+    const { data } = await api.get(`/station/${stationId}/reports/overview/best-and-worst`);
+    return data;
+  } catch (err) {
+    handleError(`getBestWorst(${stationId})`, err);
+  }
+}
+
+/** NowPlaying de TODAS las estaciones (para totales del admin). GET /api/nowplaying */
+async function getNowPlayingAll() {
+  try {
+    const { data } = await api.get('/nowplaying');
+    return data;
+  } catch (err) {
+    handleError('getNowPlayingAll', err);
+  }
+}
+
 /**
  * Métricas del servidor (VPS): CPU, memoria, disco, red.
  * GET /api/admin/server/stats
@@ -340,4 +380,8 @@ module.exports = {
   deletePlaylist,
   getServerStats,
   getStationStatus,
+  getListeners,
+  getCharts,
+  getBestWorst,
+  getNowPlayingAll,
 };

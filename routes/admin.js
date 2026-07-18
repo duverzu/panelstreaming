@@ -340,7 +340,32 @@ router.get('/servidor', requireAdmin, wrap(async (req, res) => {
 
 router.get('/estadisticas', requireAdmin, wrap(async (req, res) => {
   const s = await clienteModel.stats();
-  res.json({ ...s, oyentes_totales: 0 }); // TODO: sumar nowplaying de cada estación
+
+  // Oyentes reales + ranking desde el nowplaying global de AzuraCast
+  let oyentes_totales = 0;
+  let al_aire = 0;
+  let ranking = [];
+  try {
+    const clientes = await clienteModel.findAllWithEmail();
+    const porStation = {};
+    clientes.forEach((c) => { if (c.azuracast_station_id) porStation[c.azuracast_station_id] = c; });
+
+    const np = await azuracast.getNowPlayingAll();
+    (np || []).forEach((est) => {
+      const stId = est.station?.id;
+      const cli = porStation[stId];
+      if (!cli) return;
+      const oyentes = est.listeners?.current || 0;
+      oyentes_totales += oyentes;
+      if (est.is_online) al_aire += 1;
+      ranking.push({ cliente_id: cli.id, nombre: cli.nombre_empresa, oyentes, online: !!est.is_online });
+    });
+    ranking.sort((a, b) => b.oyentes - a.oyentes);
+  } catch (err) {
+    console.error('[estadisticas] nowplaying global falló:', err.message);
+  }
+
+  res.json({ ...s, oyentes_totales, al_aire, ranking });
 }));
 
 router.get('/estadisticas/cliente/:id', requireAdmin, wrap(async (req, res) => {

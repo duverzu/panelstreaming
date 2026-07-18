@@ -8,8 +8,10 @@ const TITULOS = {
   '/admin': { title: 'Dashboard', subtitle: 'Resumen general del negocio' },
   '/admin/clientes': { title: 'Clientes', subtitle: 'Gestiona radios: iniciar, parar, suspender, borrar' },
   '/admin/planes': { title: 'Planes', subtitle: 'Plantillas de radio y sus límites' },
+  '/admin/estadisticas': { title: 'Estadísticas', subtitle: 'Audiencia y rendimiento del negocio' },
   '/cliente/musica': { title: 'Música', subtitle: 'Tu biblioteca para el AutoDJ' },
   '/cliente/playlists': { title: 'Playlists', subtitle: 'Música, jingles/spots y programas por horario' },
+  '/cliente/estadisticas': { title: 'Estadísticas', subtitle: 'Oyentes en vivo y audiencia de tu radio' },
 };
 
 export default function Layout() {

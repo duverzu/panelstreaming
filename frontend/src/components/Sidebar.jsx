@@ -15,7 +15,7 @@ const MENUS = {
       { label: 'Estaciones', icon: IconRadio, soon: true },
     ]},
     { seccion: 'Negocio', items: [
-      { label: 'Estadísticas', icon: IconChart, soon: true },
+      { label: 'Estadísticas', icon: IconChart, to: '/admin/estadisticas' },
     ]},
   ],
   cliente: [
@@ -27,7 +27,7 @@ const MENUS = {
     { seccion: 'Contenido', items: [
       { label: 'Música', icon: IconMusic, to: '/cliente/musica' },
       { label: 'Playlists', icon: IconPlaylist, to: '/cliente/playlists' },
-      { label: 'Estadísticas', icon: IconChart, soon: true },
+      { label: 'Estadísticas', icon: IconChart, to: '/cliente/estadisticas' },
     ]},
   ],
 };

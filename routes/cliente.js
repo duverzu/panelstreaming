@@ -359,18 +359,59 @@ router.delete('/playlists/:id', requireCliente, wrap(async (req, res) => {
 //  ESTADÍSTICAS PERSONALES (mock por ahora)
 // ==================================================================
 
-router.get('/estadisticas', requireCliente, (req, res) => {
-  res.json({
-    oyentes_hoy: 0,
-    oyentes_semana: 0,
-    oyentes_mes: 0,
-    cancion_mas_escuchada: null,
-    pico_audiencia: 0,
+/** Extrae puntos {x,y} de una gráfica de AzuraCast de forma defensiva. */
+function puntos(chart) {
+  const data = chart?.metrics?.[0]?.data || [];
+  return data.map((p) => {
+    if (Array.isArray(p)) return { x: p[0], y: Number(p[1]) || 0 };
+    return { x: p.x ?? p.label ?? '', y: Number(p.y ?? p.value ?? 0) || 0 };
   });
-});
+}
 
-router.get('/estadisticas/historico', requireCliente, (req, res) => {
-  res.json({ historico: [] });
-});
+/** GET /cliente/estadisticas — oyentes en vivo + audiencia + canciones top */
+router.get('/estadisticas', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) {
+    return res.json({ oyentes_ahora: 0, pico: 0, por_hora: [], por_dia: [], top_canciones: [] });
+  }
+  const stationId = cliente.azuracast_station_id;
+
+  let oyentes_ahora = 0;
+  try {
+    const np = await azuracast.getNowPlaying(stationId);
+    oyentes_ahora = np?.listeners?.current || 0;
+  } catch (_) {}
+
+  let por_hora = [], por_dia = [], top_canciones = [];
+  try {
+    const charts = await azuracast.getCharts(stationId);
+    por_hora = puntos(charts?.hourly);
+    por_dia = puntos(charts?.daily);
+  } catch (_) {}
+  try {
+    const bw = await azuracast.getBestWorst(stationId);
+    top_canciones = (bw?.mostPlayed || []).slice(0, 10).map((s) => ({
+      titulo: s.song?.title || s.title || s.song?.text || 'Desconocida',
+      artista: s.song?.artist || s.artist || '',
+      reproducciones: s.num_plays ?? s.plays ?? 0,
+    }));
+  } catch (_) {}
+
+  const pico = por_hora.reduce((m, p) => Math.max(m, p.y), 0);
+  res.json({ oyentes_ahora, pico, por_hora, por_dia, top_canciones });
+}));
+
+/** GET /cliente/oyentes — lista de oyentes en vivo (país, dispositivo, tiempo) */
+router.get('/oyentes', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.json({ oyentes: [] });
+  const lista = await azuracast.getListeners(cliente.azuracast_station_id);
+  const oyentes = (lista || []).map((l) => ({
+    pais: l.location?.country || l.location?.description || '—',
+    dispositivo: l.device?.client || (l.device?.is_mobile ? 'Móvil' : 'Escritorio'),
+    conectado_seg: l.connected_time || 0,
+  }));
+  res.json({ total: oyentes.length, oyentes });
+}));
 
 module.exports = router;

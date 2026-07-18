@@ -5,9 +5,11 @@ import Login from './pages/Login';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminClientes from './pages/admin/Clientes';
 import AdminPlanes from './pages/admin/Planes';
+import AdminEstadisticas from './pages/admin/Estadisticas';
 import ClienteDashboard from './pages/cliente/Dashboard';
 import ClienteMusica from './pages/cliente/Musica';
 import ClientePlaylists from './pages/cliente/Playlists';
+import ClienteEstadisticas from './pages/cliente/Estadisticas';
 
 /** Ruta protegida por rol. */
 function Protected({ role, children }) {
@@ -35,6 +37,7 @@ export default function App() {
         <Route index element={<AdminDashboard />} />
         <Route path="clientes" element={<AdminClientes />} />
         <Route path="planes" element={<AdminPlanes />} />
+        <Route path="estadisticas" element={<AdminEstadisticas />} />
       </Route>
 
       {/* Panel Cliente */}
@@ -42,6 +45,7 @@ export default function App() {
         <Route index element={<ClienteDashboard />} />
         <Route path="musica" element={<ClienteMusica />} />
         <Route path="playlists" element={<ClientePlaylists />} />
+        <Route path="estadisticas" element={<ClienteEstadisticas />} />
       </Route>
 
       <Route path="*" element={<Navigate to={token ? home : '/login'} replace />} />
