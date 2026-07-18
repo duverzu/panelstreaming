@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api';
 import StatCard from '../../components/StatCard';
 import ServerStats from '../../components/ServerStats';
+import OverviewBar from '../../components/OverviewBar';
 import Player from '../../components/Player';
 import { IconUsers, IconRadio, IconChart } from '../../icons';
 
@@ -20,6 +21,9 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Barra de resumen tipo hosting */}
+      <OverviewBar />
+
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="Clientes" value={stats?.total_clientes ?? '–'} icon={IconUsers} color="brand"

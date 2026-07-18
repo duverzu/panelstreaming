@@ -27,6 +27,15 @@ const requireAdmin = [authFactory('admin'), isAdmin];
 /** Envuelve un handler async para que los errores caigan en el manejador global. */
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
+/** Formatea bytes a algo legible (B/KB/MB/GB/TB). */
+function humanBytes(n) {
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  let v = Number(n) || 0;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return v.toFixed(1) + ' ' + u[i];
+}
+
 // ==================================================================
 //  AUTENTICACIÓN
 // ==================================================================
@@ -316,6 +325,13 @@ router.get('/servidor', requireAdmin, wrap(async (req, res) => {
 
   const pct = (part, total) => (total > 0 ? Math.round((part / total) * 100) : 0);
 
+  // Velocidad de salida actual (suma de interfaces reales, sin loopback)
+  let txBytes = 0;
+  (s.network || []).forEach((n) => {
+    if (n.interface_name === 'lo') return;
+    txBytes += Number(n.transmitted?.speed_bytes || 0);
+  });
+
   res.json({
     cpu: {
       usado_pct: Math.round(Number(s.cpu?.total?.usage || 0)),
@@ -330,6 +346,9 @@ router.get('/servidor', requireAdmin, wrap(async (req, res) => {
       total: s.disk?.total_readable || '—',
       usado: s.disk?.used_readable || '—',
       usado_pct: pct(diskUsed, diskTotal),
+    },
+    transferencia: {
+      velocidad: humanBytes(txBytes) + '/s',
     },
   });
 }));
