@@ -52,19 +52,20 @@ async function seed() {
 
   const { rows: cRows } = await query('SELECT id FROM clientes WHERE user_id = $1', [userId]);
   if (cRows.length === 0) {
-    const { rows: nuevo } = await query(
+    // Cliente demo SIN estación real (para probar login del panel cliente sin tocar AzuraCast)
+    await query(
       `INSERT INTO clientes (user_id, nombre_empresa, plan, azuracast_station_id, url_streaming, activo)
-       VALUES ($1, 'Radio Demo FM', 'basico', 1,
-               'https://server1.streaminghd.co/listen/asiserverradio/radio.mp3', true)
-       RETURNING id`,
+       VALUES ($1, 'Radio Demo FM', 'basico', NULL, NULL, true)`,
       [userId]
     );
-    await query(
-      `INSERT INTO suscripciones (cliente_id, plan_tipo, precio_mensual, estado)
-       VALUES ($1, 'basico', 9.99, 'activa')`,
-      [nuevo[0].id]
-    );
   }
+
+  // Corrección: el demo NO debe apuntar a una estación real (evita borrarla al eliminar el cliente)
+  await query(
+    `UPDATE clientes SET azuracast_station_id = NULL, url_streaming = NULL
+     WHERE user_id = $1 AND azuracast_station_id = 1`,
+    [userId]
+  );
 
   console.log('✅ Seed completado.');
   console.log('   admin@panel.com   / 123456  (admin)');
