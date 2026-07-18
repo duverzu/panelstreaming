@@ -90,6 +90,19 @@ async function updateStation(stationId, fields) {
 }
 
 /**
+ * Lista los mounts de una estación.
+ * GET /api/station/{id}/mounts
+ */
+async function getMounts(stationId) {
+  try {
+    const { data } = await api.get(`/station/${stationId}/mounts`);
+    return data;
+  } catch (err) {
+    handleError(`getMounts(${stationId})`, err);
+  }
+}
+
+/**
  * Crea un punto de montaje (mount) en una estación.
  * POST /api/station/{id}/mounts
  */
@@ -99,6 +112,19 @@ async function createMount(stationId, opts) {
     return data;
   } catch (err) {
     handleError(`createMount(${stationId})`, err);
+  }
+}
+
+/**
+ * Actualiza un mount existente (ej. bitrate del AutoDJ).
+ * PUT /api/station/{id}/mount/{mountId}
+ */
+async function updateMount(stationId, mountId, fields) {
+  try {
+    const { data } = await api.put(`/station/${stationId}/mount/${mountId}`, fields);
+    return data;
+  } catch (err) {
+    handleError(`updateMount(${stationId}/${mountId})`, err);
   }
 }
 
@@ -200,7 +226,9 @@ module.exports = {
   getNowPlaying,
   createStation,
   updateStation,
+  getMounts,
   createMount,
+  updateMount,
   createStreamer,
   restartStation,
   deleteStation,

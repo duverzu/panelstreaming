@@ -92,18 +92,26 @@ router.post('/clientes/crear', requireAdmin, wrap(async (req, res) => {
       enable_streamers: plan.permite_dj,
       enable_public_page: true,
     });
-    const autodjBitrate = plan.max_bitrate > 0 ? Math.min(plan.max_bitrate, 128) : 128;
-    await azuracast.createMount(station.id, {
-      name: '/radio.mp3',
-      is_default: true,
-      enable_autodj: true,
-      autodj_format: 'mp3',
-      autodj_bitrate: autodjBitrate,
-    });
   } catch (err) {
     await userModel.deleteById(user.id); // rollback del usuario si falla AzuraCast
     if (station?.id) { try { await azuracast.deleteStation(station.id); } catch (_) {} }
     return res.status(err.status || 502).json({ error: 'No se pudo crear la estación: ' + err.message });
+  }
+
+  // La estación ya trae un mount /radio.mp3 por defecto: ajustamos su bitrate al plan (no fatal)
+  try {
+    const mounts = await azuracast.getMounts(station.id);
+    const principal = mounts.find((m) => m.is_default) || mounts[0];
+    if (principal) {
+      const autodjBitrate = plan.max_bitrate > 0 ? Math.min(plan.max_bitrate, 320) : 128;
+      await azuracast.updateMount(station.id, principal.id, {
+        enable_autodj: true,
+        autodj_format: 'mp3',
+        autodj_bitrate: autodjBitrate,
+      });
+    }
+  } catch (err) {
+    console.error('[provision] ajuste de mount falló:', err.message);
   }
 
   // 3) Cuenta DJ (si el plan lo permite) — pasos no fatales: si fallan, la estación igual queda creada
