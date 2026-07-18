@@ -12,6 +12,7 @@ const bcrypt = require('bcryptjs');
 const userModel = require('../models/userModel');
 const clienteModel = require('../models/clienteModel');
 const suscripcionModel = require('../models/suscripcionModel');
+const planModel = require('../models/planModel');
 const { generateToken } = require('../services/auth');
 // generateToken se usa también para emitir tokens de cliente al impersonar
 const azuracast = require('../services/azuracast');
@@ -60,13 +61,17 @@ router.get('/clientes', requireAdmin, wrap(async (req, res) => {
 
 /**
  * POST /admin/clientes/crear
- * body: { email, password, nombre_empresa, plan }
+ * body: { email, password, nombre_empresa, plan_id }
+ * Crea el usuario + APROVISIONA la estación real en AzuraCast (aplicando el plan).
  */
 router.post('/clientes/crear', requireAdmin, wrap(async (req, res) => {
-  const { email, password, nombre_empresa, plan = 'basico' } = req.body || {};
-  if (!email || !password || !nombre_empresa) {
-    return res.status(400).json({ error: 'email, password y nombre_empresa son requeridos' });
+  const { email, password, nombre_empresa, plan_id } = req.body || {};
+  if (!email || !password || !nombre_empresa || !plan_id) {
+    return res.status(400).json({ error: 'email, password, nombre_empresa y plan_id son requeridos' });
   }
+
+  const plan = await planModel.findById(Number(plan_id));
+  if (!plan) return res.status(400).json({ error: 'Plan no encontrado' });
 
   const existente = await userModel.findByEmail(email);
   if (existente) return res.status(409).json({ error: 'Ya existe un usuario con ese email' });
@@ -75,29 +80,43 @@ router.post('/clientes/crear', requireAdmin, wrap(async (req, res) => {
   const password_hash = await bcrypt.hash(password, 10);
   const user = await userModel.create({ email, password_hash, role: 'cliente' });
 
-  // 2) (Integración real futura) crear estación en AzuraCast
-  let azuracast_station_id = null;
-  let url_streaming = null;
-  // try {
-  //   const station = await azuracast.createStation(nombre_empresa);
-  //   azuracast_station_id = station.id;
-  //   url_streaming = station.listen_url || null;
-  // } catch (err) {
-  //   await userModel.deleteById(user.id); // rollback del usuario
-  //   return res.status(err.status || 502).json({ error: err.message });
-  // }
+  // 2) Aprovisionar estación en AzuraCast aplicando los límites del plan
+  let station;
+  try {
+    station = await azuracast.createStation(nombre_empresa, `Radio de ${nombre_empresa}`);
+    await azuracast.updateStation(station.id, {
+      max_bitrate: plan.max_bitrate,
+      max_mounts: plan.max_mounts,
+      enable_streamers: plan.permite_dj,
+      enable_public_page: true,
+    });
+    const autodjBitrate = plan.max_bitrate > 0 ? Math.min(plan.max_bitrate, 128) : 128;
+    await azuracast.createMount(station.id, {
+      name: '/radio.mp3',
+      is_default: true,
+      enable_autodj: true,
+      autodj_format: 'mp3',
+      autodj_bitrate: autodjBitrate,
+    });
+  } catch (err) {
+    await userModel.deleteById(user.id); // rollback del usuario si falla AzuraCast
+    if (station?.id) { try { await azuracast.deleteStation(station.id); } catch (_) {} }
+    return res.status(err.status || 502).json({ error: 'No se pudo crear la estación: ' + err.message });
+  }
 
-  // 3) Crear cliente
+  const url_streaming = `${process.env.AZURACAST_BASE_URL}/listen/${station.short_name}/radio.mp3`;
+
+  // 3) Crear cliente ya vinculado a su estación
   const cliente = await clienteModel.create({
     user_id: user.id,
     nombre_empresa,
-    plan,
-    azuracast_station_id,
+    plan: plan.nombre,
+    azuracast_station_id: station.id,
     url_streaming,
   });
 
   res.status(201).json({
-    message: 'Cliente creado ✅',
+    message: 'Cliente y estación creados ✅',
     cliente: { ...cliente, email },
     credenciales: { email, password },
   });
@@ -125,11 +144,14 @@ router.delete('/clientes/:id', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
 
-  // (Integración real futura) eliminar estación en AzuraCast
-  // if (cliente.azuracast_station_id) {
-  //   try { await azuracast.deleteStation(cliente.azuracast_station_id); }
-  //   catch (err) { return res.status(err.status || 502).json({ error: err.message }); }
-  // }
+  // Eliminar la estación en AzuraCast (si falla, seguimos borrando en la BD igual)
+  if (cliente.azuracast_station_id) {
+    try {
+      await azuracast.deleteStation(cliente.azuracast_station_id);
+    } catch (err) {
+      console.error('[DELETE cliente] no se pudo borrar estación:', err.message);
+    }
+  }
 
   await userModel.deleteById(cliente.user_id);
   res.json({ message: 'Cliente eliminado ✅' });
@@ -263,6 +285,36 @@ router.put('/suscripciones/:id', requireAdmin, wrap(async (req, res) => {
     estado,
   });
   res.json({ message: 'Suscripción actualizada ✅', suscripcion });
+}));
+
+// ==================================================================
+//  PLANES / PLANTILLAS
+// ==================================================================
+
+router.get('/planes', requireAdmin, wrap(async (req, res) => {
+  const planes = await planModel.findAll();
+  res.json({ planes });
+}));
+
+router.post('/planes', requireAdmin, wrap(async (req, res) => {
+  const { nombre } = req.body || {};
+  if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
+  const plan = await planModel.create(req.body);
+  res.status(201).json({ message: 'Plan creado ✅', plan });
+}));
+
+router.put('/planes/:id', requireAdmin, wrap(async (req, res) => {
+  const existente = await planModel.findById(Number(req.params.id));
+  if (!existente) return res.status(404).json({ error: 'Plan no encontrado' });
+  const plan = await planModel.update(existente.id, req.body || {});
+  res.json({ message: 'Plan actualizado ✅', plan });
+}));
+
+router.delete('/planes/:id', requireAdmin, wrap(async (req, res) => {
+  const existente = await planModel.findById(Number(req.params.id));
+  if (!existente) return res.status(404).json({ error: 'Plan no encontrado' });
+  await planModel.deleteById(existente.id);
+  res.json({ message: 'Plan eliminado ✅' });
 }));
 
 module.exports = router;

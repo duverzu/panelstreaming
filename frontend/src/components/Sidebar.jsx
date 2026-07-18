@@ -1,25 +1,26 @@
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../auth';
 import {
   IconDashboard, IconUsers, IconRadio, IconInvoice, IconChart,
   IconMic, IconMusic, IconPlaylist,
 } from '../icons';
 
-// Menú por rol. `soon: true` = aún no implementado (se muestra atenuado).
+// `to` = ruta real (navegable). `soon` = aún no implementado (atenuado).
 const MENUS = {
   admin: [
     { seccion: 'Gestión', items: [
-      { label: 'Dashboard', icon: IconDashboard, active: true },
+      { label: 'Dashboard', icon: IconDashboard, to: '/admin' },
+      { label: 'Planes', icon: IconInvoice, to: '/admin/planes' },
       { label: 'Clientes', icon: IconUsers, soon: true },
       { label: 'Estaciones', icon: IconRadio, soon: true },
     ]},
     { seccion: 'Negocio', items: [
-      { label: 'Suscripciones', icon: IconInvoice, soon: true },
       { label: 'Estadísticas', icon: IconChart, soon: true },
     ]},
   ],
   cliente: [
     { seccion: 'Mi Radio', items: [
-      { label: 'Dashboard', icon: IconDashboard, active: true },
+      { label: 'Dashboard', icon: IconDashboard, to: '/cliente' },
       { label: 'Mi Estación', icon: IconRadio, soon: true },
       { label: 'En Vivo', icon: IconMic, soon: true },
     ]},
@@ -34,6 +35,13 @@ const MENUS = {
 export default function Sidebar() {
   const { role } = useAuth();
   const menu = MENUS[role] || MENUS.admin;
+
+  const itemClass = (isActive) =>
+    `w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
+      isActive
+        ? 'bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-400'
+        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+    }`;
 
   return (
     <aside className="hidden md:flex md:w-64 shrink-0 flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
@@ -56,24 +64,24 @@ export default function Sidebar() {
             <div className="space-y-1">
               {grupo.items.map((item) => {
                 const Icon = item.icon;
+                if (item.soon) {
+                  return (
+                    <div key={item.label} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 opacity-45 cursor-not-allowed">
+                      <Icon />
+                      <span className="flex-1 text-left">{item.label}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400">pronto</span>
+                    </div>
+                  );
+                }
                 return (
-                  <button
-                    key={item.label}
-                    disabled={item.soon}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition
-                      ${item.active
-                        ? 'bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-400'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}
-                      ${item.soon ? 'opacity-45 cursor-not-allowed' : ''}`}
-                  >
-                    <Icon className={item.active ? 'text-brand-600 dark:text-brand-400' : ''} />
-                    <span className="flex-1 text-left">{item.label}</span>
-                    {item.soon && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400">
-                        pronto
-                      </span>
+                  <NavLink key={item.label} to={item.to} end className={({ isActive }) => itemClass(isActive)}>
+                    {({ isActive }) => (
+                      <>
+                        <Icon className={isActive ? 'text-brand-600 dark:text-brand-400' : ''} />
+                        <span className="flex-1 text-left">{item.label}</span>
+                      </>
                     )}
-                  </button>
+                  </NavLink>
                 );
               })}
             </div>

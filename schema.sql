@@ -13,6 +13,21 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
+-- Planes / plantillas de radio (definidos por el super admin).
+-- Los límites se aplican en AzuraCast al crear la estación del cliente.
+CREATE TABLE IF NOT EXISTS planes (
+  id              SERIAL PRIMARY KEY,
+  nombre          VARCHAR(80)   NOT NULL,
+  precio_mensual  NUMERIC(10,2) NOT NULL DEFAULT 0,
+  max_bitrate     INTEGER       NOT NULL DEFAULT 128,   -- kbps (0 = ilimitado)
+  max_oyentes     INTEGER       NOT NULL DEFAULT 100,
+  espacio_mb      INTEGER       NOT NULL DEFAULT 1024,  -- cuota AutoDJ en MB
+  max_mounts      INTEGER       NOT NULL DEFAULT 1,
+  permite_dj      BOOLEAN       NOT NULL DEFAULT true,  -- DJ en vivo (streamers)
+  activo          BOOLEAN       NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ   NOT NULL DEFAULT now()
+);
+
 -- Clientes (dueños de radio). Cada uno pertenece a un user.
 CREATE TABLE IF NOT EXISTS clientes (
   id                    SERIAL PRIMARY KEY,

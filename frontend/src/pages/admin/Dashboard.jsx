@@ -13,19 +13,26 @@ export default function AdminDashboard() {
 
   const [stats, setStats] = useState(null);
   const [clientes, setClientes] = useState([]);
+  const [planes, setPlanes] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Formulario nuevo cliente
-  const [form, setForm] = useState({ nombre_empresa: '', email: '', password: '', plan: 'basico' });
+  const [form, setForm] = useState({ nombre_empresa: '', email: '', password: '', plan_id: '' });
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
 
   async function cargar() {
     setLoading(true);
     try {
-      const [s, c] = await Promise.all([apiFetch('/admin/estadisticas'), apiFetch('/admin/clientes')]);
+      const [s, c, p] = await Promise.all([
+        apiFetch('/admin/estadisticas'),
+        apiFetch('/admin/clientes'),
+        apiFetch('/admin/planes'),
+      ]);
       setStats(s);
       setClientes(c.clientes);
+      setPlanes(p.planes);
+      setForm((f) => ({ ...f, plan_id: f.plan_id || p.planes[0]?.id || '' }));
     } catch (e) {
       setMsg({ type: 'err', text: e.message });
     } finally {
@@ -41,8 +48,8 @@ export default function AdminDashboard() {
     setMsg(null);
     try {
       await apiFetch('/admin/clientes/crear', { method: 'POST', body: JSON.stringify(form) });
-      setMsg({ type: 'ok', text: '✅ Cliente creado' });
-      setForm({ nombre_empresa: '', email: '', password: '', plan: 'basico' });
+      setMsg({ type: 'ok', text: '✅ Cliente y estación creados' });
+      setForm({ nombre_empresa: '', email: '', password: '', plan_id: planes[0]?.id || '' });
       cargar();
     } catch (e) {
       setMsg({ type: 'err', text: e.message });
@@ -190,12 +197,17 @@ export default function AdminDashboard() {
             </div>
             <div>
               <label className="label">Plan</label>
-              <select className="input" value={form.plan} onChange={set('plan')}>
-                <option value="basico">Básico</option>
-                <option value="profesional">Profesional</option>
-                <option value="premium">Premium</option>
+              <select className="input" value={form.plan_id} onChange={set('plan_id')} required>
+                {planes.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} — ${p.precio_mensual.toFixed(2)}/mes
+                  </option>
+                ))}
               </select>
             </div>
+            <p className="text-xs text-gray-400 -mt-1">
+              Al crear el cliente se genera su estación en AzuraCast con los límites del plan.
+            </p>
 
             {msg && (
               <div className={`text-sm rounded-xl px-3 py-2 ${msg.type === 'ok'

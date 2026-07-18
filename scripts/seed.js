@@ -13,6 +13,23 @@ const { pool, query } = require('../config/database');
 async function seed() {
   const hash = bcrypt.hashSync('123456', 10);
 
+  // --- Planes por defecto (idempotente por nombre) ---
+  const planes = [
+    { nombre: 'Básico',       precio: 9.99,  bitrate: 128, oyentes: 100,  mb: 1024,  mounts: 1, dj: false },
+    { nombre: 'Profesional',  precio: 19.99, bitrate: 192, oyentes: 500,  mb: 5120,  mounts: 2, dj: true },
+    { nombre: 'Premium',      precio: 39.99, bitrate: 320, oyentes: 2000, mb: 20480, mounts: 3, dj: true },
+  ];
+  for (const p of planes) {
+    const { rows } = await query('SELECT id FROM planes WHERE nombre = $1', [p.nombre]);
+    if (rows.length === 0) {
+      await query(
+        `INSERT INTO planes (nombre, precio_mensual, max_bitrate, max_oyentes, espacio_mb, max_mounts, permite_dj)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [p.nombre, p.precio, p.bitrate, p.oyentes, p.mb, p.mounts, p.dj]
+      );
+    }
+  }
+
   // Admin
   await query(
     `INSERT INTO users (email, password_hash, role)

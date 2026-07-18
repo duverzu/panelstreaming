@@ -77,6 +77,32 @@ async function createStation(nombre, descripcion = '') {
 }
 
 /**
+ * Actualiza ajustes de una estación (aplicar límites del plan).
+ * PUT /api/admin/station/{id}
+ */
+async function updateStation(stationId, fields) {
+  try {
+    const { data } = await api.put(`/admin/station/${stationId}`, fields);
+    return data;
+  } catch (err) {
+    handleError(`updateStation(${stationId})`, err);
+  }
+}
+
+/**
+ * Crea un punto de montaje (mount) en una estación.
+ * POST /api/station/{id}/mounts
+ */
+async function createMount(stationId, opts) {
+  try {
+    const { data } = await api.post(`/station/${stationId}/mounts`, opts);
+    return data;
+  } catch (err) {
+    handleError(`createMount(${stationId})`, err);
+  }
+}
+
+/**
  * Elimina una estación.
  * DELETE /api/admin/station/{id}
  */
@@ -133,6 +159,8 @@ module.exports = {
   getStation,
   getNowPlaying,
   createStation,
+  updateStation,
+  createMount,
   deleteStation,
   listMedia,
   getServerStats,

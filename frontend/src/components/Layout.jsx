@@ -1,17 +1,23 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth';
 import Sidebar from './Sidebar';
 import TopHeader from './TopHeader';
 import { IconEnter } from '../icons';
 
+const TITULOS = {
+  '/admin': { title: 'Dashboard', subtitle: 'Resumen general del negocio' },
+  '/admin/planes': { title: 'Planes', subtitle: 'Plantillas de radio y sus límites' },
+};
+
 export default function Layout() {
   const { role, user, impersonating, stopImpersonating } = useAuth();
+  const { pathname } = useLocation();
 
-  const title = role === 'admin' ? 'Dashboard' : 'Mi Radio';
+  const porRuta = TITULOS[pathname];
+  const title = porRuta?.title || (role === 'admin' ? 'Dashboard' : 'Mi Radio');
   const subtitle =
-    role === 'admin'
-      ? 'Resumen general del negocio'
-      : user?.nombre_empresa || 'Panel de tu estación';
+    porRuta?.subtitle ||
+    (role === 'admin' ? 'Resumen general del negocio' : user?.nombre_empresa || 'Panel de tu estación');
 
   return (
     <div className="flex h-screen overflow-hidden">
