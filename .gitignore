@@ -1,0 +1,27 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno (¡NUNCA subir la API key!)
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Archivos subidos temporalmente (multer)
+uploads/
+tmp/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Claude Code (config local — puede contener comandos con secrets)
+.claude/
