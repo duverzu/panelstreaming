@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api';
 import { IconPlus, IconTrash, IconInvoice } from '../../icons';
 
-const VACIO = { nombre: '', precio_mensual: 0, max_bitrate: 128, max_oyentes: 100, espacio_mb: 1024, max_mounts: 1, permite_dj: true };
+const VACIO = { nombre: '', max_bitrate: 128, max_oyentes: 100, espacio_mb: 1024, max_mounts: 1, permite_dj: true };
 
 export default function AdminPlanes() {
   const [planes, setPlanes] = useState([]);
@@ -65,7 +65,7 @@ export default function AdminPlanes() {
                     </span>
                     <div>
                       <div className="font-semibold">{p.nombre}</div>
-                      <div className="text-sm text-gray-400">${p.precio_mensual.toFixed(2)} / mes</div>
+                      <div className="text-sm text-gray-400">Plantilla de radio</div>
                     </div>
                   </div>
                 </div>
@@ -94,10 +94,6 @@ export default function AdminPlanes() {
             <input className="input" value={form.nombre} onChange={set('nombre')} placeholder="Ej: Empresarial" required />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Precio/mes ($)</label>
-              <input className="input" type="number" step="0.01" value={form.precio_mensual} onChange={set('precio_mensual', true)} />
-            </div>
             <div>
               <label className="label">Bitrate (kbps)</label>
               <input className="input" type="number" value={form.max_bitrate} onChange={set('max_bitrate', true)} />

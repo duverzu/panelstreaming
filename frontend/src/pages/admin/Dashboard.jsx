@@ -200,7 +200,7 @@ export default function AdminDashboard() {
               <select className="input" value={form.plan_id} onChange={set('plan_id')} required>
                 {planes.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.nombre} — ${p.precio_mensual.toFixed(2)}/mes
+                    {p.nombre} · {p.max_bitrate || '∞'} kbps · {p.max_oyentes} oyentes
                   </option>
                 ))}
               </select>
