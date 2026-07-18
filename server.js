@@ -13,6 +13,7 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 
+const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const clienteRoutes = require('./routes/cliente');
 
@@ -45,16 +46,18 @@ app.get('/api/health', (req, res) => {
   res.json({ name: 'Panel Radio Backend', status: 'ok' });
 });
 
+app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/cliente', clienteRoutes);
 
-// ---- Frontend (archivos estáticos) --------------------------------
-app.use(express.static(path.join(__dirname, 'public')));
+// ---- Frontend React compilado (frontend/dist) ---------------------
+const FRONTEND_DIR = path.join(__dirname, 'frontend', 'dist');
+app.use(express.static(FRONTEND_DIR));
 
 // SPA fallback: cualquier GET que NO sea /api devuelve index.html
 app.use((req, res, next) => {
   if (req.method === 'GET' && !req.path.startsWith('/api')) {
-    return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    return res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
   }
   next();
 });

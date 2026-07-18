@@ -13,6 +13,7 @@ const userModel = require('../models/userModel');
 const clienteModel = require('../models/clienteModel');
 const suscripcionModel = require('../models/suscripcionModel');
 const { generateToken } = require('../services/auth');
+// generateToken se usa también para emitir tokens de cliente al impersonar
 const azuracast = require('../services/azuracast');
 const authFactory = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
@@ -132,6 +133,29 @@ router.delete('/clientes/:id', requireAdmin, wrap(async (req, res) => {
 
   await userModel.deleteById(cliente.user_id);
   res.json({ message: 'Cliente eliminado ✅' });
+}));
+
+/**
+ * POST /admin/clientes/:id/impersonar
+ * Emite un token de CLIENTE para que el super admin entre a revisar el
+ * panel de ese cliente. El token incluye `impersonated_by` con el id del admin.
+ */
+router.post('/clientes/:id/impersonar', requireAdmin, wrap(async (req, res) => {
+  const cliente = await clienteModel.findById(Number(req.params.id));
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+  const user = await userModel.findById(cliente.user_id);
+  if (!user) return res.status(404).json({ error: 'Usuario del cliente no encontrado' });
+
+  const token = generateToken(user.id, 'cliente', {
+    cliente_id: cliente.id,
+    impersonated_by: req.user.sub,
+  });
+
+  res.json({
+    token,
+    cliente: { id: cliente.id, nombre_empresa: cliente.nombre_empresa, email: user.email },
+  });
 }));
 
 router.get('/clientes/:id/estacion', requireAdmin, wrap(async (req, res) => {
