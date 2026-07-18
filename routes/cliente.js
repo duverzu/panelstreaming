@@ -9,6 +9,7 @@
  */
 
 const express = require('express');
+const multer = require('multer');
 const bcrypt = require('bcryptjs');
 
 const userModel = require('../models/userModel');
@@ -22,6 +23,16 @@ const isCliente = require('../middleware/isCliente');
 const router = express.Router();
 
 const requireCliente = [authFactory('cliente'), isCliente];
+
+// Subida de archivos en memoria (máx 60 MB, solo audio)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 60 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (/audio\/(mpeg|mp3)|\.mp3$/i.test(file.mimetype + file.originalname)) cb(null, true);
+    else cb(new Error('Solo se permiten archivos MP3'));
+  },
+});
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -165,11 +176,60 @@ router.get('/configurar-dj', requireCliente, wrap(async (req, res) => {
 //  MEDIA (listado; el upload con multer llega en el siguiente paso)
 // ==================================================================
 
+/** GET /cliente/media — lista las canciones de su estación (en vivo desde AzuraCast) */
 router.get('/media', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
-  const media = await mediaModel.findByCliente(cliente.id);
+  if (!cliente.azuracast_station_id) return res.json({ media: [] });
+
+  const archivos = await azuracast.listMedia(cliente.azuracast_station_id);
+  const media = (archivos || []).map((f) => ({
+    id: f.id,
+    titulo: f.title || f.path,
+    artista: f.artist || '',
+    duracion: f.length_text || '',
+    playlists: (f.playlists || []).map((p) => p.name),
+  }));
   res.json({ media });
+}));
+
+/**
+ * POST /cliente/media/subir — sube un MP3 y lo asigna a la playlist del AutoDJ.
+ * form-data: campo "archivo"
+ */
+router.post('/media/subir', requireCliente, upload.single('archivo'), wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'Tu estación aún no está lista' });
+  if (!req.file) return res.status(400).json({ error: 'No se envió ningún archivo' });
+
+  const stationId = cliente.azuracast_station_id;
+  const base64 = req.file.buffer.toString('base64');
+  const media = await azuracast.uploadMedia(stationId, req.file.originalname, base64);
+
+  // Asignar a la playlist por defecto para que el AutoDJ la reproduzca (no fatal)
+  try {
+    const playlists = await azuracast.getPlaylists(stationId);
+    const def = playlists.find((p) => p.is_enabled && p.type === 'default')
+      || playlists.find((p) => p.is_enabled) || playlists[0];
+    if (def) await azuracast.setFilePlaylists(stationId, media.id, [def.id]);
+  } catch (err) {
+    console.error('[media] no se pudo asignar a playlist:', err.message);
+  }
+
+  res.status(201).json({
+    message: 'Canción subida ✅',
+    media: { id: media.id, titulo: media.title || media.path, duracion: media.length_text },
+  });
+}));
+
+/** DELETE /cliente/media/:id — elimina una canción */
+router.delete('/media/:id', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
+  await azuracast.deleteMedia(cliente.azuracast_station_id, req.params.id);
+  res.json({ message: 'Canción eliminada ✅' });
 }));
 
 // ==================================================================

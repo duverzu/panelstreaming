@@ -7,6 +7,7 @@ import { IconEnter } from '../icons';
 const TITULOS = {
   '/admin': { title: 'Dashboard', subtitle: 'Resumen general del negocio' },
   '/admin/planes': { title: 'Planes', subtitle: 'Plantillas de radio y sus límites' },
+  '/cliente/musica': { title: 'Música', subtitle: 'Tu biblioteca para el AutoDJ' },
 };
 
 export default function Layout() {

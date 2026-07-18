@@ -25,7 +25,7 @@ const MENUS = {
       { label: 'En Vivo', icon: IconMic, soon: true },
     ]},
     { seccion: 'Contenido', items: [
-      { label: 'Música', icon: IconMusic, soon: true },
+      { label: 'Música', icon: IconMusic, to: '/cliente/musica' },
       { label: 'Playlists', icon: IconPlaylist, soon: true },
       { label: 'Estadísticas', icon: IconChart, soon: true },
     ]},

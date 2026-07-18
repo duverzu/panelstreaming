@@ -14,7 +14,9 @@ const axios = require('axios');
 // Cliente axios preconfigurado con la base URL y la API key.
 const api = axios.create({
   baseURL: `${process.env.AZURACAST_BASE_URL}/api`,
-  timeout: 15000,
+  timeout: 60000, // subidas de audio pueden tardar
+  maxBodyLength: Infinity, // permitir subir archivos grandes (base64)
+  maxContentLength: Infinity,
   headers: {
     Authorization: `Bearer ${process.env.AZURACAST_API_KEY}`,
     Accept: 'application/json',
@@ -194,6 +196,58 @@ async function listMedia(stationId) {
 }
 
 /**
+ * Sube un archivo de audio (base64) a la estación.
+ * POST /api/station/{id}/files
+ */
+async function uploadMedia(stationId, filename, base64) {
+  try {
+    const { data } = await api.post(`/station/${stationId}/files`, { path: filename, file: base64 });
+    return data;
+  } catch (err) {
+    handleError(`uploadMedia(${stationId})`, err);
+  }
+}
+
+/**
+ * Elimina un archivo de media.
+ * DELETE /api/station/{id}/file/{mediaId}
+ */
+async function deleteMedia(stationId, mediaId) {
+  try {
+    const { data } = await api.delete(`/station/${stationId}/file/${mediaId}`);
+    return data;
+  } catch (err) {
+    handleError(`deleteMedia(${stationId}/${mediaId})`, err);
+  }
+}
+
+/**
+ * Asigna un archivo a una o más playlists (para que el AutoDJ lo reproduzca).
+ * PUT /api/station/{id}/file/{mediaId}
+ */
+async function setFilePlaylists(stationId, mediaId, playlistIds) {
+  try {
+    const { data } = await api.put(`/station/${stationId}/file/${mediaId}`, { playlists: playlistIds });
+    return data;
+  } catch (err) {
+    handleError(`setFilePlaylists(${stationId}/${mediaId})`, err);
+  }
+}
+
+/**
+ * Lista las playlists de una estación.
+ * GET /api/station/{id}/playlists
+ */
+async function getPlaylists(stationId) {
+  try {
+    const { data } = await api.get(`/station/${stationId}/playlists`);
+    return data;
+  } catch (err) {
+    handleError(`getPlaylists(${stationId})`, err);
+  }
+}
+
+/**
  * Métricas del servidor (VPS): CPU, memoria, disco, red.
  * GET /api/admin/server/stats
  */
@@ -233,6 +287,10 @@ module.exports = {
   restartStation,
   deleteStation,
   listMedia,
+  uploadMedia,
+  deleteMedia,
+  setFilePlaylists,
+  getPlaylists,
   getServerStats,
   getStationStatus,
 };
