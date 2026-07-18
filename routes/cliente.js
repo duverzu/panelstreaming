@@ -207,12 +207,14 @@ router.post('/media/subir', requireCliente, upload.single('archivo'), wrap(async
   const base64 = req.file.buffer.toString('base64');
   const media = await azuracast.uploadMedia(stationId, req.file.originalname, base64);
 
-  // Asignar a la playlist por defecto para que el AutoDJ la reproduzca (no fatal)
+  // Asignar a la playlist elegida (o a la default) para que el AutoDJ la reproduzca (no fatal)
   try {
+    const destinoId = req.body?.playlist_id ? Number(req.body.playlist_id) : null;
     const playlists = await azuracast.getPlaylists(stationId);
-    const def = playlists.find((p) => p.is_enabled && p.type === 'default')
+    const destino = (destinoId && playlists.find((p) => p.id === destinoId))
+      || playlists.find((p) => p.is_enabled && p.type === 'default')
       || playlists.find((p) => p.is_enabled) || playlists[0];
-    if (def) await azuracast.setFilePlaylists(stationId, media.id, [def.id]);
+    if (destino) await azuracast.setFilePlaylists(stationId, media.id, [destino.id]);
   } catch (err) {
     console.error('[media] no se pudo asignar a playlist:', err.message);
   }
@@ -258,18 +260,53 @@ function mapPlaylist(p) {
   let tipo = 'general';
   if (p.is_jingle || p.type === 'once_per_x_songs' || p.type === 'once_per_x_minutes') tipo = 'jingle';
   else if ((p.schedule_items || []).length) tipo = 'programa';
+  const h = (p.schedule_items || [])[0];
   return {
     id: p.id,
     nombre: p.name,
     activa: p.is_enabled,
     tipo,
-    cada_canciones: p.play_per_songs || null,
+    orden: p.order === 'sequential' ? 'orden' : 'aleatorio',
+    cada_canciones: p.play_per_songs || 4,
+    dias: h?.days || [1, 2, 3, 4, 5],
+    hora_inicio: h ? intAHora(h.start_time) : '09:00',
+    hora_fin: h ? intAHora(h.end_time) : '11:00',
     horario: (p.schedule_items || []).map((s) => ({
       dias: s.days || [],
-      inicio: String(Math.floor(s.start_time / 100)).padStart(2, '0') + ':' + String(s.start_time % 100).padStart(2, '0'),
-      fin: String(Math.floor(s.end_time / 100)).padStart(2, '0') + ':' + String(s.end_time % 100).padStart(2, '0'),
+      inicio: intAHora(s.start_time),
+      fin: intAHora(s.end_time),
     })),
   };
+}
+
+/** entero HHMM -> "HH:MM" */
+function intAHora(n) {
+  return String(Math.floor(n / 100)).padStart(2, '0') + ':' + String(n % 100).padStart(2, '0');
+}
+
+/** Construye el payload de AzuraCast a partir de campos amigables. */
+function payloadPlaylist({ nombre, tipo, orden, activa, cada_canciones, dias, hora_inicio, hora_fin }) {
+  const p = {};
+  if (nombre !== undefined) p.name = nombre;
+  if (orden !== undefined) p.order = orden === 'orden' ? 'sequential' : 'shuffle';
+  if (activa !== undefined) p.is_enabled = Boolean(activa);
+  if (tipo !== undefined) {
+    if (tipo === 'jingle') {
+      p.type = 'once_per_x_songs';
+      p.play_per_songs = Number(cada_canciones) || 4;
+      p.is_jingle = true;
+    } else {
+      p.type = 'default';
+      p.is_jingle = false;
+    }
+    // El horario solo aplica a "programa"; si cambia a otro tipo se limpia
+    if (tipo === 'programa' && Array.isArray(dias) && dias.length && hora_inicio && hora_fin) {
+      p.schedule_items = [{ start_time: horaAInt(hora_inicio), end_time: horaAInt(hora_fin), days: dias.map(Number), loop_once: false }];
+    } else {
+      p.schedule_items = [];
+    }
+  }
+  return p;
 }
 
 /** GET /cliente/playlists */
@@ -290,39 +327,22 @@ router.post('/playlists', requireCliente, wrap(async (req, res) => {
   if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Tu estación aún no está lista' });
   const stationId = cliente.azuracast_station_id;
 
-  const { nombre, tipo = 'general', cada_canciones, dias, hora_inicio, hora_fin } = req.body || {};
+  const { nombre, tipo = 'general' } = req.body || {};
   if (!nombre) return res.status(400).json({ error: 'El nombre es requerido' });
 
-  const payload = { name: nombre, type: 'default', is_enabled: true };
-  if (tipo === 'jingle') {
-    payload.type = 'once_per_x_songs';
-    payload.play_per_songs = Number(cada_canciones) || 4;
-    payload.is_jingle = true;
-  }
+  // Crear con lo básico y luego aplicar todo por PUT (el POST no guarda el horario)
+  const pl = await azuracast.createPlaylist(stationId, { name: nombre, is_enabled: true });
+  const full = payloadPlaylist({ activa: true, ...req.body, nombre, tipo });
+  await azuracast.updatePlaylist(stationId, pl.id, full);
 
-  const pl = await azuracast.createPlaylist(stationId, payload);
-
-  // Programa por horario → se aplica con un PUT posterior
-  if (tipo === 'programa' && Array.isArray(dias) && dias.length && hora_inicio && hora_fin) {
-    await azuracast.updatePlaylist(stationId, pl.id, {
-      schedule_items: [{
-        start_time: horaAInt(hora_inicio),
-        end_time: horaAInt(hora_fin),
-        days: dias.map(Number),
-        loop_once: false,
-      }],
-    });
-  }
-
-  res.status(201).json({ message: 'Playlist creada ✅', playlist: mapPlaylist(pl) });
+  res.status(201).json({ message: 'Playlist creada ✅', playlist: { id: pl.id, nombre, tipo } });
 }));
 
-/** PUT /cliente/playlists/:id — activar/desactivar (body: { activa }) */
+/** PUT /cliente/playlists/:id — editar (nombre, tipo, orden, horario…) o activar/pausar */
 router.put('/playlists/:id', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
-  const fields = {};
-  if (req.body?.activa !== undefined) fields.is_enabled = Boolean(req.body.activa);
+  const fields = payloadPlaylist(req.body || {});
   await azuracast.updatePlaylist(cliente.azuracast_station_id, req.params.id, fields);
   res.json({ message: 'Playlist actualizada ✅' });
 }));

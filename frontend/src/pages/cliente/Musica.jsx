@@ -7,6 +7,7 @@ export default function ClienteMusica() {
   const [playlists, setPlaylists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [subiendo, setSubiendo] = useState(false);
+  const [destino, setDestino] = useState(''); // playlist destino de la subida
   const [msg, setMsg] = useState(null);
   const inputRef = useRef(null);
 
@@ -45,6 +46,7 @@ export default function ClienteMusica() {
       try {
         const fd = new FormData();
         fd.append('archivo', file);
+        if (destino) fd.append('playlist_id', destino);
         await apiUpload('/cliente/media/subir', fd);
         ok++;
       } catch (err) {
@@ -67,6 +69,16 @@ export default function ClienteMusica() {
     <div className="space-y-6">
       {/* Zona de subida */}
       <div className="card p-6">
+        {playlists.length > 0 && (
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-sm text-gray-500">Subir a:</span>
+            <select value={destino} onChange={(e) => setDestino(e.target.value)}
+              className="input !w-auto !py-1.5 text-sm">
+              <option value="">Playlist principal (default)</option>
+              {playlists.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
+          </div>
+        )}
         <div
           onClick={() => inputRef.current?.click()}
           className="border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-2xl p-8 text-center cursor-pointer hover:border-brand-500 transition"
