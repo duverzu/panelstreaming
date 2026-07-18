@@ -2,13 +2,18 @@
  * routes/cliente.js
  * ------------------------------------------------------------------
  * Panel Cliente — rutas montadas bajo /cliente
- * Cada cliente solo accede a SU estación. El cliente_id viaja
- * dentro del token, nunca se confía en un id que mande el frontend.
+ * Cada cliente solo accede a SU estación. El cliente_id viaja dentro
+ * del token (nunca se confía en un id enviado por el frontend).
+ * Ahora con PostgreSQL real vía la capa de modelos.
  * ------------------------------------------------------------------
  */
 
 const express = require('express');
-const { db, bcrypt } = require('../config/database');
+const bcrypt = require('bcryptjs');
+
+const userModel = require('../models/userModel');
+const clienteModel = require('../models/clienteModel');
+const mediaModel = require('../models/mediaModel');
 const { generateToken } = require('../services/auth');
 const azuracast = require('../services/azuracast');
 const authFactory = require('../middleware/auth');
@@ -18,57 +23,48 @@ const router = express.Router();
 
 const requireCliente = [authFactory('cliente'), isCliente];
 
-/** Helper: obtiene el cliente asociado al token actual. */
-function getClienteFromReq(req) {
-  return db.clientes.find((c) => c.id === req.user.cliente_id);
+const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+/** Obtiene el cliente asociado al token actual (cliente_id va en el JWT). */
+function getCliente(req) {
+  return clienteModel.findById(req.user.cliente_id);
 }
 
 // ==================================================================
 //  AUTENTICACIÓN
 // ==================================================================
 
-/**
- * POST /cliente/login
- * body: { email, password }
- * -> token JWT de cliente (incluye cliente_id en el payload)
- */
-router.post('/login', async (req, res) => {
+router.post('/login', wrap(async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ error: 'email y password son requeridos' });
   }
 
-  const user = db.users.find((u) => u.email === email && u.role === 'cliente');
+  const user = await userModel.findByEmailAndRole(email, 'cliente');
   if (!user) return res.status(401).json({ error: 'Credenciales inválidas' });
 
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: 'Credenciales inválidas' });
 
-  const cliente = db.clientes.find((c) => c.user_id === user.id);
+  const cliente = await clienteModel.findByUserId(user.id);
   if (!cliente) return res.status(403).json({ error: 'El usuario no tiene un cliente asociado' });
   if (!cliente.activo) return res.status(403).json({ error: 'Cuenta desactivada. Contacta al administrador.' });
 
-  // Guardamos cliente_id dentro del token para aislar el acceso.
   const token = generateToken(user.id, 'cliente', { cliente_id: cliente.id });
   res.json({
     token,
     user: { id: user.id, email: user.email, role: user.role, cliente_id: cliente.id },
   });
-});
+}));
 
-/** POST /cliente/logout */
 router.post('/logout', requireCliente, (req, res) => {
   res.json({ message: 'Sesión cerrada. Elimina el token en el cliente.' });
 });
 
-/**
- * GET /cliente/perfil
- * Datos del cliente logueado.
- */
-router.get('/perfil', requireCliente, (req, res) => {
-  const cliente = getClienteFromReq(req);
+router.get('/perfil', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
-  const user = db.users.find((u) => u.id === cliente.user_id);
+  const user = await userModel.findById(cliente.user_id);
 
   res.json({
     perfil: {
@@ -79,19 +75,14 @@ router.get('/perfil', requireCliente, (req, res) => {
       activo: cliente.activo,
     },
   });
-});
+}));
 
 // ==================================================================
 //  MI ESTACIÓN
 // ==================================================================
 
-/**
- * GET /cliente/mi-estacion
- * Detalles de SU estación. Si hay station_id real, consulta AzuraCast;
- * si no, devuelve un mock básico.
- */
-router.get('/mi-estacion', requireCliente, async (req, res) => {
-  const cliente = getClienteFromReq(req);
+router.get('/mi-estacion', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
 
   const base = {
@@ -102,7 +93,7 @@ router.get('/mi-estacion', requireCliente, async (req, res) => {
   };
 
   if (!cliente.azuracast_station_id) {
-    return res.json({ estacion: { ...base, aviso: 'Estación aún no aprovisionada en AzuraCast (mock).' } });
+    return res.json({ estacion: { ...base, aviso: 'Estación aún no aprovisionada en AzuraCast.' } });
   }
 
   try {
@@ -111,55 +102,45 @@ router.get('/mi-estacion', requireCliente, async (req, res) => {
   } catch (err) {
     res.status(err.status || 502).json({ error: err.message });
   }
-});
+}));
 
-/**
- * GET /cliente/nowplaying
- * Info en vivo desde AzuraCast (canción actual, oyentes, historial).
- */
-router.get('/nowplaying', requireCliente, async (req, res) => {
-  const cliente = getClienteFromReq(req);
+router.get('/nowplaying', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
 
-  const stationId = cliente.azuracast_station_id || 1; // fallback a la 1 para pruebas
+  const stationId = cliente.azuracast_station_id || 1;
   try {
     const data = await azuracast.getNowPlaying(stationId);
     res.json({ nowplaying: data });
   } catch (err) {
     res.status(err.status || 502).json({ error: err.message });
   }
-});
+}));
 
-/**
- * PUT /cliente/mi-estacion
- * Editar nombre/descripción de su radio (por ahora solo en memoria).
- */
-router.put('/mi-estacion', requireCliente, (req, res) => {
-  const cliente = getClienteFromReq(req);
+router.put('/mi-estacion', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
 
   const { nombre } = req.body || {};
-  if (nombre !== undefined) cliente.nombre_empresa = nombre;
-
-  res.json({ message: 'Estación actualizada ✅', estacion: { nombre: cliente.nombre_empresa } });
-});
+  const actualizado = await clienteModel.update(cliente.id, { nombre_empresa: nombre });
+  res.json({ message: 'Estación actualizada ✅', estacion: { nombre: actualizado.nombre_empresa } });
+}));
 
 // ==================================================================
-//  MEDIA (placeholder — se completa con multer en el siguiente paso)
+//  MEDIA (listado; el upload con multer llega en el siguiente paso)
 // ==================================================================
 
-/** GET /cliente/media — lista canciones (mock) */
-router.get('/media', requireCliente, (req, res) => {
-  const cliente = getClienteFromReq(req);
-  const media = db.media.filter((m) => m.cliente_id === cliente.id);
+router.get('/media', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  const media = await mediaModel.findByCliente(cliente.id);
   res.json({ media });
-});
+}));
 
 // ==================================================================
-//  ESTADÍSTICAS PERSONALES (mock)
+//  ESTADÍSTICAS PERSONALES (mock por ahora)
 // ==================================================================
 
-/** GET /cliente/estadisticas */
 router.get('/estadisticas', requireCliente, (req, res) => {
   res.json({
     oyentes_hoy: 0,
@@ -170,7 +151,6 @@ router.get('/estadisticas', requireCliente, (req, res) => {
   });
 });
 
-/** GET /cliente/estadisticas/historico */
 router.get('/estadisticas/historico', requireCliente, (req, res) => {
   res.json({ historico: [] });
 });
