@@ -63,6 +63,11 @@ CREATE TABLE IF NOT EXISTS media (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Datos de conexión DJ en vivo del cliente (source/streamer en AzuraCast)
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS dj_puerto   INTEGER;
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS dj_usuario  VARCHAR(100);
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS dj_password VARCHAR(100);
+
 -- Índices para búsquedas frecuentes
 CREATE INDEX IF NOT EXISTS idx_clientes_user_id     ON clientes(user_id);
 CREATE INDEX IF NOT EXISTS idx_suscripciones_cliente ON suscripciones(cliente_id);

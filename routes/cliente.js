@@ -127,6 +127,40 @@ router.put('/mi-estacion', requireCliente, wrap(async (req, res) => {
 }));
 
 // ==================================================================
+//  CONECTAR DJ EN VIVO
+// ==================================================================
+
+/**
+ * GET /cliente/configurar-dj
+ * Datos para conectar software de transmisión (BUTT, Mixxx, OBS…) desde el PC.
+ */
+router.get('/configurar-dj', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+  if (!cliente.dj_usuario) {
+    return res.json({
+      disponible: false,
+      mensaje: 'Tu plan no incluye DJ en vivo. Usa el AutoDJ subiendo tu música.',
+    });
+  }
+
+  // host = dominio de AzuraCast sin el protocolo
+  const host = (process.env.AZURACAST_BASE_URL || '').replace(/^https?:\/\//, '');
+
+  res.json({
+    disponible: true,
+    servidor: host,
+    puerto: cliente.dj_puerto,
+    punto_montaje: '/radio.mp3',
+    usuario: cliente.dj_usuario,
+    password: cliente.dj_password,
+    formato: 'MP3',
+    protocolo: 'Icecast 2',
+  });
+}));
+
+// ==================================================================
 //  MEDIA (listado; el upload con multer llega en el siguiente paso)
 // ==================================================================
 

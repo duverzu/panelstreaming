@@ -103,6 +103,45 @@ async function createMount(stationId, opts) {
 }
 
 /**
+ * Detalle admin de una estación (incluye backend_config con dj_port, etc.).
+ * GET /api/admin/station/{id}
+ */
+async function getStationAdmin(stationId) {
+  try {
+    const { data } = await api.get(`/admin/station/${stationId}`);
+    return data;
+  } catch (err) {
+    handleError(`getStationAdmin(${stationId})`, err);
+  }
+}
+
+/**
+ * Crea una cuenta de DJ/streamer para conectar en vivo.
+ * POST /api/station/{id}/streamers
+ */
+async function createStreamer(stationId, opts) {
+  try {
+    const { data } = await api.post(`/station/${stationId}/streamers`, opts);
+    return data;
+  } catch (err) {
+    handleError(`createStreamer(${stationId})`, err);
+  }
+}
+
+/**
+ * Reinicia (y pone al aire) una estación. Registra los servicios en Supervisor.
+ * POST /api/station/{id}/restart
+ */
+async function restartStation(stationId) {
+  try {
+    const { data } = await api.post(`/station/${stationId}/restart`);
+    return data;
+  } catch (err) {
+    handleError(`restartStation(${stationId})`, err);
+  }
+}
+
+/**
  * Elimina una estación.
  * DELETE /api/admin/station/{id}
  */
@@ -157,10 +196,13 @@ async function getStationStatus(stationId) {
 module.exports = {
   api, // exportado por si se necesita una llamada puntual
   getStation,
+  getStationAdmin,
   getNowPlaying,
   createStation,
   updateStation,
   createMount,
+  createStreamer,
+  restartStation,
   deleteStation,
   listMedia,
   getServerStats,

@@ -73,3 +73,12 @@ export const IconServer = (p) => (
 export const IconVolume = (p) => (
   <svg {...base} {...p}><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /></svg>
 );
+export const IconCopy = (p) => (
+  <svg {...base} {...p}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+);
+export const IconCheck = (p) => (
+  <svg {...base} {...p}><path d="M20 6 9 17l-5-5" /></svg>
+);
+export const IconPower = (p) => (
+  <svg {...base} {...p}><path d="M12 2v10" /><path d="M18.4 6.6a9 9 0 1 1-12.8 0" /></svg>
+);

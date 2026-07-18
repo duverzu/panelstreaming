@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api';
 import StatCard from '../../components/StatCard';
 import Player from '../../components/Player';
+import ConectarDJ from '../../components/ConectarDJ';
 import { IconMic, IconChart, IconRadio } from '../../icons';
 
 export default function ClienteDashboard() {
@@ -75,6 +76,9 @@ export default function ClienteDashboard() {
           )}
         </div>
       </div>
+
+      {/* Conectar DJ en vivo */}
+      <ConectarDJ />
     </div>
   );
 }

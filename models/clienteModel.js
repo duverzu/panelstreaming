@@ -41,7 +41,8 @@ async function create({
 
 /** Actualiza solo los campos permitidos que vengan definidos. */
 async function update(id, fields) {
-  const allowed = ['nombre_empresa', 'plan', 'activo', 'azuracast_station_id', 'url_streaming'];
+  const allowed = ['nombre_empresa', 'plan', 'activo', 'azuracast_station_id', 'url_streaming',
+    'dj_puerto', 'dj_usuario', 'dj_password'];
   const sets = [];
   const values = [];
   let i = 1;

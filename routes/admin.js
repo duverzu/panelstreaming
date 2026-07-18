@@ -7,6 +7,7 @@
  */
 
 const express = require('express');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 
 const userModel = require('../models/userModel');
@@ -82,6 +83,7 @@ router.post('/clientes/crear', requireAdmin, wrap(async (req, res) => {
 
   // 2) Aprovisionar estación en AzuraCast aplicando los límites del plan
   let station;
+  const dj = {}; // datos de conexión DJ que guardaremos
   try {
     station = await azuracast.createStation(nombre_empresa, `Radio de ${nombre_empresa}`);
     await azuracast.updateStation(station.id, {
@@ -104,9 +106,34 @@ router.post('/clientes/crear', requireAdmin, wrap(async (req, res) => {
     return res.status(err.status || 502).json({ error: 'No se pudo crear la estación: ' + err.message });
   }
 
+  // 3) Cuenta DJ (si el plan lo permite) — pasos no fatales: si fallan, la estación igual queda creada
+  if (plan.permite_dj) {
+    try {
+      dj.dj_usuario = station.short_name;
+      dj.dj_password = crypto.randomBytes(6).toString('hex');
+      await azuracast.createStreamer(station.id, {
+        streamer_username: dj.dj_usuario,
+        streamer_password: dj.dj_password,
+        display_name: nombre_empresa,
+        is_active: true,
+      });
+      const admin = await azuracast.getStationAdmin(station.id);
+      dj.dj_puerto = admin?.backend_config?.dj_port || null;
+    } catch (err) {
+      console.error('[provision] cuenta DJ falló:', err.message);
+    }
+  }
+
+  // 4) Poner la estación al aire (registra servicios en Supervisor)
+  try {
+    await azuracast.restartStation(station.id);
+  } catch (err) {
+    console.error('[provision] restart falló:', err.message);
+  }
+
   const url_streaming = `${process.env.AZURACAST_BASE_URL}/listen/${station.short_name}/radio.mp3`;
 
-  // 3) Crear cliente ya vinculado a su estación
+  // 5) Crear cliente ya vinculado a su estación + datos DJ
   const cliente = await clienteModel.create({
     user_id: user.id,
     nombre_empresa,
@@ -114,6 +141,10 @@ router.post('/clientes/crear', requireAdmin, wrap(async (req, res) => {
     azuracast_station_id: station.id,
     url_streaming,
   });
+  if (dj.dj_usuario) {
+    await clienteModel.update(cliente.id, dj);
+    Object.assign(cliente, dj);
+  }
 
   res.status(201).json({
     message: 'Cliente y estación creados ✅',
@@ -178,6 +209,18 @@ router.post('/clientes/:id/impersonar', requireAdmin, wrap(async (req, res) => {
     token,
     cliente: { id: cliente.id, nombre_empresa: cliente.nombre_empresa, email: user.email },
   });
+}));
+
+/**
+ * POST /admin/clientes/:id/reiniciar
+ * Reinicia (pone al aire) la estación del cliente.
+ */
+router.post('/clientes/:id/reiniciar', requireAdmin, wrap(async (req, res) => {
+  const cliente = await clienteModel.findById(Number(req.params.id));
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
+  await azuracast.restartStation(cliente.azuracast_station_id);
+  res.json({ message: 'Estación reiniciada / al aire ✅' });
 }));
 
 router.get('/clientes/:id/estacion', requireAdmin, wrap(async (req, res) => {
