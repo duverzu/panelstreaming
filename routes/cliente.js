@@ -10,6 +10,7 @@
 
 const express = require('express');
 const multer = require('multer');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 
 const userModel = require('../models/userModel');
@@ -412,6 +413,111 @@ router.get('/oyentes', requireCliente, wrap(async (req, res) => {
     conectado_seg: l.connected_time || 0,
   }));
   res.json({ total: oyentes.length, oyentes });
+}));
+
+// ==================================================================
+//  CONFIGURACIÓN DE LA CUENTA / RADIO
+// ==================================================================
+
+/** GET /cliente/configuracion */
+router.get('/configuracion', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  const user = await userModel.findById(req.user.sub);
+  if (!cliente?.azuracast_station_id) {
+    return res.json({ config: { email: user?.email, plan: cliente?.plan, sin_estacion: true } });
+  }
+  const st = await azuracast.getStationAdmin(cliente.azuracast_station_id);
+  res.json({
+    config: {
+      email: user?.email,
+      plan: cliente.plan,
+      nombre: st.name,
+      descripcion: st.description || '',
+      genero: st.genre || '',
+      sitio_web: st.url || '',
+      timezone: st.timezone || 'UTC',
+      pagina_publica: st.enable_public_page,
+      permite_solicitudes: st.enable_requests,
+      url_publica: `${process.env.AZURACAST_BASE_URL}/public/${st.short_name}`,
+    },
+  });
+}));
+
+/** PUT /cliente/configuracion — edita perfil de la radio */
+router.put('/configuracion', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Tu estación aún no está lista' });
+  const { nombre, descripcion, genero, sitio_web, timezone, pagina_publica, permite_solicitudes } = req.body || {};
+  const fields = {};
+  if (nombre !== undefined) fields.name = nombre;
+  if (descripcion !== undefined) fields.description = descripcion;
+  if (genero !== undefined) fields.genre = genero;
+  if (sitio_web !== undefined) fields.url = sitio_web;
+  if (timezone !== undefined) fields.timezone = timezone;
+  if (pagina_publica !== undefined) fields.enable_public_page = Boolean(pagina_publica);
+  if (permite_solicitudes !== undefined) fields.enable_requests = Boolean(permite_solicitudes);
+  await azuracast.updateStation(cliente.azuracast_station_id, fields);
+  if (nombre !== undefined) await clienteModel.update(cliente.id, { nombre_empresa: nombre });
+  res.json({ message: 'Configuración guardada ✅' });
+}));
+
+/** PUT /cliente/cuenta/password — cambia la contraseña de acceso al panel */
+router.put('/cuenta/password', requireCliente, wrap(async (req, res) => {
+  const { actual, nueva } = req.body || {};
+  if (!actual || !nueva) return res.status(400).json({ error: 'Contraseña actual y nueva son requeridas' });
+  if (String(nueva).length < 6) return res.status(400).json({ error: 'La nueva debe tener al menos 6 caracteres' });
+  const user = await userModel.findById(req.user.sub);
+  const ok = await bcrypt.compare(actual, user.password_hash);
+  if (!ok) return res.status(401).json({ error: 'La contraseña actual no es correcta' });
+  await userModel.updatePassword(user.id, await bcrypt.hash(nueva, 10));
+  res.json({ message: 'Contraseña actualizada ✅' });
+}));
+
+/** POST /cliente/dj/regenerar — genera una nueva contraseña de DJ */
+router.post('/dj/regenerar', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
+  const streamers = await azuracast.getStreamers(cliente.azuracast_station_id);
+  const st = streamers.find((s) => s.streamer_username === cliente.dj_usuario) || streamers[0];
+  if (!st) return res.status(400).json({ error: 'Tu plan no incluye DJ en vivo' });
+  const nueva = crypto.randomBytes(6).toString('hex');
+  await azuracast.updateStreamer(cliente.azuracast_station_id, st.id, { streamer_password: nueva });
+  await clienteModel.update(cliente.id, { dj_password: nueva });
+  res.json({ message: 'Contraseña de DJ regenerada ✅', password: nueva });
+}));
+
+// ==================================================================
+//  AUTODJ
+// ==================================================================
+
+/** GET /cliente/autodj */
+router.get('/autodj', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.json({ autodj: null });
+  const st = await azuracast.getStationAdmin(cliente.azuracast_station_id);
+  const bc = st.backend_config || {};
+  res.json({
+    autodj: {
+      crossfade_tipo: bc.crossfade_type || 'normal',
+      crossfade_seg: bc.crossfade ?? 2,
+      evitar_repetir_min: Math.round((bc.duplicate_prevention_time_range ?? 120) / 60),
+      cola: bc.autodj_queue_length ?? 3,
+    },
+  });
+}));
+
+/** PUT /cliente/autodj */
+router.put('/autodj', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
+  const { crossfade_tipo, crossfade_seg, evitar_repetir_min, cola } = req.body || {};
+  const backend_config = {};
+  if (crossfade_tipo !== undefined) backend_config.crossfade_type = crossfade_tipo;
+  if (crossfade_seg !== undefined) backend_config.crossfade = Number(crossfade_seg);
+  if (evitar_repetir_min !== undefined) backend_config.duplicate_prevention_time_range = Number(evitar_repetir_min) * 60;
+  if (cola !== undefined) backend_config.autodj_queue_length = Number(cola);
+  await azuracast.updateStation(cliente.azuracast_station_id, { backend_config });
+  res.json({ message: 'AutoDJ actualizado ✅' });
 }));
 
 module.exports = router;

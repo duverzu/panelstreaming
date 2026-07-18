@@ -156,6 +156,26 @@ async function createStreamer(stationId, opts) {
   }
 }
 
+/** Lista las cuentas DJ/streamer. GET /api/station/{id}/streamers */
+async function getStreamers(stationId) {
+  try {
+    const { data } = await api.get(`/station/${stationId}/streamers`);
+    return data;
+  } catch (err) {
+    handleError(`getStreamers(${stationId})`, err);
+  }
+}
+
+/** Actualiza una cuenta DJ (ej. contraseña). PUT /api/station/{id}/streamer/{sid} */
+async function updateStreamer(stationId, sid, data) {
+  try {
+    const res = await api.put(`/station/${stationId}/streamer/${sid}`, data);
+    return res.data;
+  } catch (err) {
+    handleError(`updateStreamer(${stationId}/${sid})`, err);
+  }
+}
+
 /**
  * Reinicia (y pone al aire) una estación. Registra los servicios en Supervisor.
  * POST /api/station/{id}/restart
@@ -367,6 +387,8 @@ module.exports = {
   createMount,
   updateMount,
   createStreamer,
+  getStreamers,
+  updateStreamer,
   restartStation,
   stopStation,
   deleteStation,

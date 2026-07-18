@@ -12,6 +12,8 @@ const TITULOS = {
   '/cliente/musica': { title: 'Música', subtitle: 'Tu biblioteca para el AutoDJ' },
   '/cliente/playlists': { title: 'Playlists', subtitle: 'Música, jingles/spots y programas por horario' },
   '/cliente/estadisticas': { title: 'Estadísticas', subtitle: 'Oyentes en vivo y audiencia de tu radio' },
+  '/cliente/autodj': { title: 'AutoDJ', subtitle: 'Cómo suena tu radio en automático' },
+  '/cliente/configuracion': { title: 'Configuración', subtitle: 'Tu radio y tu cuenta' },
 };
 
 export default function Layout() {

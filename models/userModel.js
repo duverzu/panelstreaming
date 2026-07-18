@@ -34,4 +34,8 @@ async function deleteById(id) {
   await query('DELETE FROM users WHERE id = $1', [id]);
 }
 
-module.exports = { findByEmailAndRole, findByEmail, findById, create, deleteById };
+async function updatePassword(id, password_hash) {
+  await query('UPDATE users SET password_hash = $1 WHERE id = $2', [password_hash, id]);
+}
+
+module.exports = { findByEmailAndRole, findByEmail, findById, create, deleteById, updatePassword };

@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../auth';
 import {
   IconDashboard, IconUsers, IconRadio, IconInvoice, IconChart,
-  IconMic, IconMusic, IconPlaylist,
+  IconMic, IconMusic, IconPlaylist, IconSliders, IconSettings,
 } from '../icons';
 
 // `to` = ruta real (navegable). `soon` = aún no implementado (atenuado).
@@ -21,13 +21,15 @@ const MENUS = {
   cliente: [
     { seccion: 'Mi Radio', items: [
       { label: 'Dashboard', icon: IconDashboard, to: '/cliente' },
-      { label: 'Mi Estación', icon: IconRadio, soon: true },
-      { label: 'En Vivo', icon: IconMic, soon: true },
+      { label: 'AutoDJ', icon: IconSliders, to: '/cliente/autodj' },
     ]},
     { seccion: 'Contenido', items: [
       { label: 'Música', icon: IconMusic, to: '/cliente/musica' },
       { label: 'Playlists', icon: IconPlaylist, to: '/cliente/playlists' },
       { label: 'Estadísticas', icon: IconChart, to: '/cliente/estadisticas' },
+    ]},
+    { seccion: 'Cuenta', items: [
+      { label: 'Configuración', icon: IconSettings, to: '/cliente/configuracion' },
     ]},
   ],
 };
