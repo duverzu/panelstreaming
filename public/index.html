@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel Radio — Admin</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+  <!-- ============ VISTA LOGIN ============ -->
+  <section id="login-view" class="login-wrap">
+    <form id="login-form" class="card login-card">
+      <div class="brand">🎙️ <span>Panel Radio</span></div>
+      <p class="subtitle">Acceso Administrador</p>
+
+      <label>Email
+        <input type="email" id="login-email" value="admin@panel.com" required autocomplete="username" />
+      </label>
+      <label>Contraseña
+        <input type="password" id="login-password" value="123456" required autocomplete="current-password" />
+      </label>
+
+      <button type="submit" class="btn btn-primary" id="login-btn">Entrar</button>
+      <p class="error" id="login-error"></p>
+    </form>
+  </section>
+
+  <!-- ============ VISTA DASHBOARD ============ -->
+  <section id="dash-view" class="hidden">
+    <header class="topbar">
+      <div class="brand small">🎙️ <span>Panel Radio</span></div>
+      <div class="topbar-right">
+        <span id="user-email" class="muted"></span>
+        <button class="btn btn-ghost" id="logout-btn">Salir</button>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- Stats -->
+      <div class="stats" id="stats">
+        <div class="stat card"><span class="stat-num" id="stat-total">–</span><span class="stat-label">Clientes</span></div>
+        <div class="stat card"><span class="stat-num" id="stat-activos">–</span><span class="stat-label">Activos</span></div>
+        <div class="stat card"><span class="stat-num" id="stat-estaciones">–</span><span class="stat-label">Estaciones</span></div>
+      </div>
+
+      <div class="grid">
+        <!-- Lista de clientes -->
+        <div class="card">
+          <div class="card-head">
+            <h2>Clientes</h2>
+            <button class="btn btn-ghost small" id="refresh-btn">↻ Actualizar</button>
+          </div>
+          <div class="table-wrap">
+            <table id="clientes-table">
+              <thead>
+                <tr><th>ID</th><th>Empresa</th><th>Email</th><th>Plan</th><th>Estado</th><th></th></tr>
+              </thead>
+              <tbody id="clientes-body">
+                <tr><td colspan="6" class="muted center">Cargando…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Crear cliente -->
+        <div class="card">
+          <div class="card-head"><h2>Nuevo cliente</h2></div>
+          <form id="crear-form" class="form">
+            <label>Nombre de la radio
+              <input type="text" id="c-nombre" placeholder="Rock FM" required />
+            </label>
+            <label>Email de acceso
+              <input type="email" id="c-email" placeholder="dueno@radio.com" required />
+            </label>
+            <label>Contraseña temporal
+              <input type="text" id="c-password" placeholder="temporal123" required />
+            </label>
+            <label>Plan
+              <select id="c-plan">
+                <option value="basico">Básico</option>
+                <option value="profesional">Profesional</option>
+                <option value="premium">Premium</option>
+              </select>
+            </label>
+            <button type="submit" class="btn btn-primary" id="crear-btn">Crear cliente</button>
+            <p class="msg" id="crear-msg"></p>
+          </form>
+        </div>
+      </div>
+    </main>
+  </section>
+
+  <script src="/app.js"></script>
+</body>
+</html>

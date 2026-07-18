@@ -2,12 +2,14 @@
  * server.js
  * ------------------------------------------------------------------
  * Punto de entrada del backend Express.
- * Monta los dos paneles:  /admin  y  /cliente
+ *   • API:      /api/admin/*   y   /api/cliente/*
+ *   • Frontend: archivos estáticos en /public (panel visual)
  * ------------------------------------------------------------------
  */
 
 require('dotenv').config();
 
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 
@@ -26,7 +28,6 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
 app.use(
   cors({
     origin: (origin, cb) => {
-      // Permite herramientas sin origin (curl, Postman) y los orígenes de la lista.
       if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
         return cb(null, true);
       }
@@ -39,20 +40,26 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ---- Healthcheck --------------------------------------------------
-app.get('/', (req, res) => {
-  res.json({
-    name: 'Panel Radio Backend',
-    status: 'ok',
-    paneles: { admin: '/admin', cliente: '/cliente' },
-  });
+// ---- API ----------------------------------------------------------
+app.get('/api/health', (req, res) => {
+  res.json({ name: 'Panel Radio Backend', status: 'ok' });
 });
 
-// ---- Rutas --------------------------------------------------------
-app.use('/admin', adminRoutes);
-app.use('/cliente', clienteRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/cliente', clienteRoutes);
 
-// ---- 404 ----------------------------------------------------------
+// ---- Frontend (archivos estáticos) --------------------------------
+app.use(express.static(path.join(__dirname, 'public')));
+
+// SPA fallback: cualquier GET que NO sea /api devuelve index.html
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api')) {
+    return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  }
+  next();
+});
+
+// ---- 404 (solo llega aquí lo que empieza por /api y no existe) ----
 app.use((req, res) => {
   res.status(404).json({ error: `Ruta no encontrada: ${req.method} ${req.originalUrl}` });
 });
@@ -67,12 +74,10 @@ app.use((err, req, res, next) => {
 
 // ---- Arranque -----------------------------------------------------
 app.listen(PORT, () => {
-  console.log(`\n🎙️  Panel Radio Backend corriendo en http://localhost:${PORT}`);
-  console.log(`   • Panel Admin   -> http://localhost:${PORT}/admin`);
-  console.log(`   • Panel Cliente -> http://localhost:${PORT}/cliente\n`);
-  console.log('   Usuarios demo (password: 123456):');
-  console.log('   • admin@panel.com   (admin)');
-  console.log('   • cliente@radio.com (cliente)\n');
+  console.log(`\n🎙️  Panel Radio Backend en http://localhost:${PORT}`);
+  console.log(`   • Frontend      -> /`);
+  console.log(`   • API Admin     -> /api/admin`);
+  console.log(`   • API Cliente   -> /api/cliente\n`);
 });
 
 module.exports = app;
