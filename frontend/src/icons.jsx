@@ -61,3 +61,15 @@ export const IconChevronDown = (p) => (
 export const IconRefresh = (p) => (
   <svg {...base} {...p}><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" /></svg>
 );
+export const IconPlay = (p) => (
+  <svg {...base} fill="currentColor" stroke="none" {...p}><path d="M8 5v14l11-7z" /></svg>
+);
+export const IconPause = (p) => (
+  <svg {...base} fill="currentColor" stroke="none" {...p}><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
+);
+export const IconServer = (p) => (
+  <svg {...base} {...p}><rect x="2" y="3" width="20" height="8" rx="2" /><rect x="2" y="13" width="20" height="8" rx="2" /><path d="M6 7h.01M6 17h.01" /></svg>
+);
+export const IconVolume = (p) => (
+  <svg {...base} {...p}><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /></svg>
+);

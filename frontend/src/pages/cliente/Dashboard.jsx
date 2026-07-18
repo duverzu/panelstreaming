@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api';
 import StatCard from '../../components/StatCard';
+import Player from '../../components/Player';
 import { IconMic, IconChart, IconRadio } from '../../icons';
 
 export default function ClienteDashboard() {
@@ -28,6 +29,11 @@ export default function ClienteDashboard() {
           Plan {perfil?.plan || '—'} · Bienvenido a tu panel de streaming
         </p>
       </div>
+
+      {/* Player de su radio */}
+      {estacion?.url_streaming && (
+        <Player src={estacion.url_streaming} title={estacion.nombre} subtitle="Tu radio en vivo" />
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

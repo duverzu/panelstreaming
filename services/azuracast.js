@@ -102,6 +102,32 @@ async function listMedia(stationId) {
   }
 }
 
+/**
+ * Métricas del servidor (VPS): CPU, memoria, disco, red.
+ * GET /api/admin/server/stats
+ */
+async function getServerStats() {
+  try {
+    const { data } = await api.get('/admin/server/stats');
+    return data;
+  } catch (err) {
+    handleError('getServerStats', err);
+  }
+}
+
+/**
+ * Estado del backend/frontend de una estación (encendido/apagado).
+ * GET /api/station/{id}/status
+ */
+async function getStationStatus(stationId) {
+  try {
+    const { data } = await api.get(`/station/${stationId}/status`);
+    return data;
+  } catch (err) {
+    handleError(`getStationStatus(${stationId})`, err);
+  }
+}
+
 module.exports = {
   api, // exportado por si se necesita una llamada puntual
   getStation,
@@ -109,4 +135,6 @@ module.exports = {
   createStation,
   deleteStation,
   listMedia,
+  getServerStats,
+  getStationStatus,
 };

@@ -174,6 +174,44 @@ router.get('/clientes/:id/estacion', requireAdmin, wrap(async (req, res) => {
 }));
 
 // ==================================================================
+//  MONITOREO DEL SERVIDOR (VPS)
+// ==================================================================
+
+/**
+ * GET /admin/servidor
+ * Métricas del VPS (CPU, RAM, disco) tomadas de AzuraCast, ya simplificadas.
+ */
+router.get('/servidor', requireAdmin, wrap(async (req, res) => {
+  const s = await azuracast.getServerStats();
+
+  const memTotal = Number(s.memory?.total_bytes || 0);
+  const memFree = Number(s.memory?.free_bytes || 0);
+  const memUsed = Math.max(0, memTotal - memFree);
+
+  const diskTotal = Number(s.disk?.total_bytes || 0);
+  const diskUsed = Number(s.disk?.used_bytes || 0);
+
+  const pct = (part, total) => (total > 0 ? Math.round((part / total) * 100) : 0);
+
+  res.json({
+    cpu: {
+      usado_pct: Math.round(Number(s.cpu?.total?.usage || 0)),
+      cores: Array.isArray(s.cpu?.cores) ? s.cpu.cores.length : null,
+      load: s.cpu?.load || [],
+    },
+    memoria: {
+      total: s.memory?.total_readable || '—',
+      usado_pct: pct(memUsed, memTotal),
+    },
+    disco: {
+      total: s.disk?.total_readable || '—',
+      usado: s.disk?.used_readable || '—',
+      usado_pct: pct(diskUsed, diskTotal),
+    },
+  });
+}));
+
+// ==================================================================
 //  ESTADÍSTICAS GLOBALES
 // ==================================================================
 
