@@ -25,3 +25,6 @@ Thumbs.db
 
 # Claude Code (config local — puede contener comandos con secrets)
 .claude/
+
+# Biblioteca de música: los MP3 viven en el servidor, no en git
+biblioteca/*.mp3

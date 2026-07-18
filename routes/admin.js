@@ -14,6 +14,7 @@ const userModel = require('../models/userModel');
 const clienteModel = require('../models/clienteModel');
 const suscripcionModel = require('../models/suscripcionModel');
 const planModel = require('../models/planModel');
+const biblioteca = require('../services/biblioteca');
 const { generateToken } = require('../services/auth');
 // generateToken se usa también para emitir tokens de cliente al impersonar
 const azuracast = require('../services/azuracast');
@@ -148,6 +149,11 @@ router.post('/clientes/crear', requireAdmin, wrap(async (req, res) => {
     console.error('[provision] restart falló:', err.message);
   }
 
+  // 4b) Copiar la biblioteca de cortesía en segundo plano (no bloquea la respuesta)
+  biblioteca.copiarAEstacion(station.id)
+    .then((r) => r.copiados && console.log(`[biblioteca] estación ${station.id}: ${r.copiados}/${r.total} tracks`))
+    .catch((err) => console.error('[biblioteca]', err.message));
+
   const url_streaming = `${process.env.AZURACAST_BASE_URL}/listen/${station.short_name}/radio.mp3`;
 
   // 5) Crear cliente ya vinculado a su estación + datos DJ
@@ -255,6 +261,16 @@ router.post('/clientes/:id/iniciar', requireAdmin, wrap(async (req, res) => {
   if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
   await azuracast.restartStation(cliente.azuracast_station_id);
   res.json({ message: 'Estación al aire ✅' });
+}));
+
+/** POST /admin/clientes/:id/biblioteca — copia la música de cortesía a la estación. */
+router.post('/clientes/:id/biblioteca', requireAdmin, wrap(async (req, res) => {
+  const cliente = await clienteModel.findById(Number(req.params.id));
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
+  const r = await biblioteca.copiarAEstacion(cliente.azuracast_station_id);
+  if (!r.total) return res.json({ message: 'No hay música en la biblioteca del servidor todavía.', ...r });
+  res.json({ message: `Música de cortesía agregada: ${r.copiados}/${r.total} tracks ✅`, ...r });
 }));
 
 /** POST /admin/clientes/:id/parar — detiene la transmisión (sin suspender). */

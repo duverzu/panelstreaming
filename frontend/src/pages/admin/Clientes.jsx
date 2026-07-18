@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../api';
 import { useAuth } from '../../auth';
 import Modal from '../../components/Modal';
-import { IconPlay, IconStop, IconPower, IconEnter, IconTrash, IconPlus, IconRefresh } from '../../icons';
+import { IconPlay, IconStop, IconPower, IconEnter, IconTrash, IconPlus, IconRefresh, IconMusic } from '../../icons';
 
 const ESTADO_BADGE = {
   online: { txt: 'Al aire', cls: 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400', dot: 'bg-brand-500 animate-pulse' },
@@ -91,6 +91,18 @@ export default function AdminClientes() {
     catch (e) { alert(e.message); }
   }
 
+  async function agregarBiblioteca(c) {
+    setBusy(c.id);
+    try {
+      const r = await apiFetch(`/admin/clientes/${c.id}/biblioteca`, { method: 'POST' });
+      alert(r.message);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Tabla de clientes */}
@@ -149,6 +161,7 @@ export default function AdminClientes() {
                               ) : (
                                 <IconBtn title="Suspender" onClick={() => accion(c, 'suspender', `¿Suspender a "${c.nombre_empresa}"? Se apaga su radio y no podrá entrar.`)} hover="red"><IconPower width={14} height={14} /></IconBtn>
                               )}
+                              <IconBtn title="Agregar música de cortesía" onClick={() => agregarBiblioteca(c)} hover="brand"><IconMusic width={14} height={14} /></IconBtn>
                               <IconBtn title="Entrar al panel" onClick={() => entrar(c)} hover="brand"><IconEnter width={14} height={14} /></IconBtn>
                               <IconBtn title="Eliminar" onClick={() => borrar(c)} hover="red"><IconTrash width={14} height={14} /></IconBtn>
                             </>
