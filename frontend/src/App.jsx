@@ -7,6 +7,7 @@ import AdminClientes from './pages/admin/Clientes';
 import AdminPlanes from './pages/admin/Planes';
 import ClienteDashboard from './pages/cliente/Dashboard';
 import ClienteMusica from './pages/cliente/Musica';
+import ClientePlaylists from './pages/cliente/Playlists';
 
 /** Ruta protegida por rol. */
 function Protected({ role, children }) {
@@ -40,6 +41,7 @@ export default function App() {
       <Route path="/cliente" element={<Protected role="cliente"><Layout /></Protected>}>
         <Route index element={<ClienteDashboard />} />
         <Route path="musica" element={<ClienteMusica />} />
+        <Route path="playlists" element={<ClientePlaylists />} />
       </Route>
 
       <Route path="*" element={<Navigate to={token ? home : '/login'} replace />} />

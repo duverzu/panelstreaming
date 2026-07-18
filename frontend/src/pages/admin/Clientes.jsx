@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../api';
 import { useAuth } from '../../auth';
+import Modal from '../../components/Modal';
 import { IconPlay, IconStop, IconPower, IconEnter, IconTrash, IconPlus, IconRefresh } from '../../icons';
 
 const ESTADO_BADGE = {
@@ -25,6 +26,7 @@ export default function AdminClientes() {
   const [form, setForm] = useState({ nombre_empresa: '', email: '', password: '', plan_id: '' });
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
 
   async function cargar() {
     setLoading(true);
@@ -49,6 +51,7 @@ export default function AdminClientes() {
       await apiFetch('/admin/clientes/crear', { method: 'POST', body: JSON.stringify(form) });
       setMsg({ type: 'ok', text: '✅ Cliente y estación creados' });
       setForm({ nombre_empresa: '', email: '', password: '', plan_id: planes[0]?.id || '' });
+      setModalOpen(false);
       cargar();
     } catch (e) {
       setMsg({ type: 'err', text: e.message });
@@ -89,12 +92,17 @@ export default function AdminClientes() {
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+    <div className="space-y-6">
       {/* Tabla de clientes */}
-      <div className="xl:col-span-2 card p-5">
+      <div className="card p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold">Clientes <span className="text-gray-400 font-normal">({clientes.length})</span></h2>
-          <button onClick={cargar} className="btn-ghost !py-2 !px-3 text-xs"><IconRefresh width={15} height={15} /> Actualizar</button>
+          <div className="flex items-center gap-2">
+            <button onClick={cargar} className="btn-ghost !py-2 !px-3 text-xs"><IconRefresh width={15} height={15} /> Actualizar</button>
+            <button onClick={() => { setMsg(null); setModalOpen(true); }} className="btn-primary !py-2 !px-3 text-xs">
+              <IconPlus width={15} height={15} /> Crear radio
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -156,16 +164,15 @@ export default function AdminClientes() {
         </div>
       </div>
 
-      {/* Crear cliente */}
-      <div className="card p-5 h-fit">
-        <h2 className="font-semibold mb-4">Nuevo cliente</h2>
+      {/* Modal crear cliente/radio */}
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Crear nueva radio">
         <form onSubmit={crear} className="space-y-3">
           <div>
             <label className="label">Nombre de la radio</label>
             <input className="input" value={form.nombre_empresa} onChange={set('nombre_empresa')} placeholder="Rock FM" required />
           </div>
           <div>
-            <label className="label">Email de acceso</label>
+            <label className="label">Email de acceso del cliente</label>
             <input className="input" type="email" value={form.email} onChange={set('email')} placeholder="dueno@radio.com" required />
           </div>
           <div>
@@ -180,18 +187,24 @@ export default function AdminClientes() {
               ))}
             </select>
           </div>
-          {msg && (
-            <div className={`text-sm rounded-xl px-3 py-2 ${msg.type === 'ok'
-              ? 'text-brand-700 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-400'
-              : 'text-red-600 bg-red-50 dark:bg-red-500/10'}`}>
-              {msg.text}
-            </div>
+          <p className="text-xs text-gray-400">Se creará su estación en AzuraCast con los límites del plan y quedará al aire.</p>
+          {msg && msg.type === 'err' && (
+            <div className="text-sm rounded-xl px-3 py-2 text-red-600 bg-red-50 dark:bg-red-500/10">{msg.text}</div>
           )}
-          <button className="btn-primary w-full" disabled={saving}>
-            <IconPlus width={16} height={16} /> {saving ? 'Creando…' : 'Crear cliente'}
-          </button>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={() => setModalOpen(false)} className="btn-ghost flex-1">Cancelar</button>
+            <button className="btn-primary flex-1" disabled={saving}>
+              <IconPlus width={16} height={16} /> {saving ? 'Creando…' : 'Crear radio'}
+            </button>
+          </div>
         </form>
-      </div>
+      </Modal>
+
+      {msg && msg.type === 'ok' && (
+        <div className="fixed bottom-5 right-5 z-50 text-sm rounded-xl px-4 py-3 shadow-lg text-white bg-brand-600">
+          {msg.text}
+        </div>
+      )}
     </div>
   );
 }

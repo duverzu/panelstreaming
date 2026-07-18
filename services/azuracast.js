@@ -260,6 +260,36 @@ async function getPlaylists(stationId) {
   }
 }
 
+/** Crea una playlist. POST /api/station/{id}/playlists */
+async function createPlaylist(stationId, data) {
+  try {
+    const res = await api.post(`/station/${stationId}/playlists`, data);
+    return res.data;
+  } catch (err) {
+    handleError(`createPlaylist(${stationId})`, err);
+  }
+}
+
+/** Actualiza una playlist (horario, activar/desactivar…). PUT /api/station/{id}/playlist/{plId} */
+async function updatePlaylist(stationId, plId, data) {
+  try {
+    const res = await api.put(`/station/${stationId}/playlist/${plId}`, data);
+    return res.data;
+  } catch (err) {
+    handleError(`updatePlaylist(${stationId}/${plId})`, err);
+  }
+}
+
+/** Elimina una playlist. DELETE /api/station/{id}/playlist/{plId} */
+async function deletePlaylist(stationId, plId) {
+  try {
+    const res = await api.delete(`/station/${stationId}/playlist/${plId}`);
+    return res.data;
+  } catch (err) {
+    handleError(`deletePlaylist(${stationId}/${plId})`, err);
+  }
+}
+
 /**
  * Métricas del servidor (VPS): CPU, memoria, disco, red.
  * GET /api/admin/server/stats
@@ -305,6 +335,9 @@ module.exports = {
   deleteMedia,
   setFilePlaylists,
   getPlaylists,
+  createPlaylist,
+  updatePlaylist,
+  deletePlaylist,
   getServerStats,
   getStationStatus,
 };

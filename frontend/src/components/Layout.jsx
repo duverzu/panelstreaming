@@ -9,6 +9,7 @@ const TITULOS = {
   '/admin/clientes': { title: 'Clientes', subtitle: 'Gestiona radios: iniciar, parar, suspender, borrar' },
   '/admin/planes': { title: 'Planes', subtitle: 'Plantillas de radio y sus límites' },
   '/cliente/musica': { title: 'Música', subtitle: 'Tu biblioteca para el AutoDJ' },
+  '/cliente/playlists': { title: 'Playlists', subtitle: 'Música, jingles/spots y programas por horario' },
 };
 
 export default function Layout() {

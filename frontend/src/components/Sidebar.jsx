@@ -26,7 +26,7 @@ const MENUS = {
     ]},
     { seccion: 'Contenido', items: [
       { label: 'Música', icon: IconMusic, to: '/cliente/musica' },
-      { label: 'Playlists', icon: IconPlaylist, soon: true },
+      { label: 'Playlists', icon: IconPlaylist, to: '/cliente/playlists' },
       { label: 'Estadísticas', icon: IconChart, soon: true },
     ]},
   ],

@@ -4,6 +4,7 @@ import { IconMusic, IconTrash, IconPlus, IconRefresh } from '../../icons';
 
 export default function ClienteMusica() {
   const [media, setMedia] = useState([]);
+  const [playlists, setPlaylists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [subiendo, setSubiendo] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -12,8 +13,9 @@ export default function ClienteMusica() {
   async function cargar() {
     setLoading(true);
     try {
-      const { media } = await apiFetch('/cliente/media');
-      setMedia(media);
+      const [m, p] = await Promise.all([apiFetch('/cliente/media'), apiFetch('/cliente/playlists')]);
+      setMedia(m.media);
+      setPlaylists(p.playlists);
     } catch (e) {
       setMsg({ type: 'err', text: e.message });
     } finally {
@@ -21,6 +23,17 @@ export default function ClienteMusica() {
     }
   }
   useEffect(() => { cargar(); }, []);
+
+  async function setPlaylistsDe(m, nuevosIds) {
+    try {
+      await apiFetch(`/cliente/media/${m.id}/playlists`, {
+        method: 'PUT', body: JSON.stringify({ playlist_ids: nuevosIds }),
+      });
+      cargar();
+    } catch (e) { alert(e.message); }
+  }
+  const agregarA = (m, plId) => setPlaylistsDe(m, [...m.playlists.map((p) => p.id), Number(plId)]);
+  const quitarDe = (m, plId) => setPlaylistsDe(m, m.playlists.filter((p) => p.id !== plId).map((p) => p.id));
 
   async function subir(e) {
     const files = Array.from(e.target.files || []);
@@ -100,7 +113,23 @@ export default function ClienteMusica() {
                   <div className="font-medium truncate">{m.titulo}</div>
                   <div className="text-xs text-gray-400 truncate">
                     {m.artista || 'Sin artista'}{m.duracion ? ` · ${m.duracion}` : ''}
-                    {m.playlists?.length ? ` · ▶ ${m.playlists.join(', ')}` : ' · sin playlist'}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                    {m.playlists.map((p) => (
+                      <span key={p.id} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400">
+                        {p.nombre}
+                        <button onClick={() => quitarDe(m, p.id)} className="hover:text-red-500" title="Quitar">×</button>
+                      </span>
+                    ))}
+                    {playlists.filter((pl) => !m.playlists.some((mp) => mp.id === pl.id)).length > 0 && (
+                      <select value="" onChange={(e) => e.target.value && agregarA(m, e.target.value)}
+                        className="text-[10px] bg-transparent border border-gray-200 dark:border-gray-800 rounded-full px-2 py-0.5 text-gray-500 outline-none cursor-pointer">
+                        <option value="">＋ playlist</option>
+                        {playlists.filter((pl) => !m.playlists.some((mp) => mp.id === pl.id)).map((pl) => (
+                          <option key={pl.id} value={pl.id}>{pl.nombre}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 </div>
                 <button onClick={() => eliminar(m)} title="Eliminar"
