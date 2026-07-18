@@ -64,6 +64,12 @@ export default function ConectarDJ() {
             Formato recomendado: <b>{dj.formato}</b>. Al conectar tu software, tu transmisión en vivo
             reemplaza automáticamente al AutoDJ.
           </div>
+          {dj.url_escucha && (
+            <div className="mt-2 pt-3 border-t border-gray-100 dark:border-gray-800">
+              <div className="text-[11px] text-gray-400 mb-1.5">🎧 Enlace para que tus oyentes escuchen:</div>
+              <Campo label="URL de escucha" value={dj.url_escucha} />
+            </div>
+          )}
         </div>
       )}
     </div>

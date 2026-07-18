@@ -152,11 +152,12 @@ router.get('/configurar-dj', requireCliente, wrap(async (req, res) => {
     disponible: true,
     servidor: host,
     puerto: cliente.dj_puerto,
-    punto_montaje: '/radio.mp3',
+    punto_montaje: '/', // mount de FUENTE para transmitir (AzuraCast dj_mount_point)
     usuario: cliente.dj_usuario,
     password: cliente.dj_password,
     formato: 'MP3',
     protocolo: 'Icecast 2',
+    url_escucha: cliente.url_streaming, // donde los oyentes sintonizan
   });
 }));
 
