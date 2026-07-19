@@ -15,7 +15,7 @@ export default function AdminRevendedores() {
 
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ nombre_empresa: '', email: '', password: '', cupo_radios: 5 });
+  const [form, setForm] = useState({ nombre_empresa: '', email: '', password: '', cupo_radios: 5, max_oyentes_total: 500, espacio_total_mb: 10240 });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -26,15 +26,21 @@ export default function AdminRevendedores() {
   }
   useEffect(() => { cargar(); }, []);
 
-  function abrirCrear() { setEditId(null); setForm({ nombre_empresa: '', email: '', password: '', cupo_radios: 5 }); setError(null); setOpen(true); }
-  function abrirEditar(r) { setEditId(r.id); setForm({ nombre_empresa: r.nombre_empresa, cupo_radios: r.cupo_radios }); setError(null); setOpen(true); }
+  function abrirCrear() { setEditId(null); setForm({ nombre_empresa: '', email: '', password: '', cupo_radios: 5, max_oyentes_total: 500, espacio_total_mb: 10240 }); setError(null); setOpen(true); }
+  function abrirEditar(r) { setEditId(r.id); setForm({ nombre_empresa: r.nombre_empresa, cupo_radios: r.cupo_radios, max_oyentes_total: r.max_oyentes_total, espacio_total_mb: r.espacio_total_mb }); setError(null); setOpen(true); }
 
   async function guardar(e) {
     e.preventDefault();
     setSaving(true); setError(null);
     try {
-      if (editId) await apiFetch('/admin/resellers/' + editId, { method: 'PUT', body: JSON.stringify({ nombre_empresa: form.nombre_empresa, cupo_radios: Number(form.cupo_radios) }) });
-      else await apiFetch('/admin/resellers/crear', { method: 'POST', body: JSON.stringify(form) });
+      const payload = {
+        nombre_empresa: form.nombre_empresa,
+        cupo_radios: Number(form.cupo_radios),
+        max_oyentes_total: Number(form.max_oyentes_total),
+        espacio_total_mb: Number(form.espacio_total_mb),
+      };
+      if (editId) await apiFetch('/admin/resellers/' + editId, { method: 'PUT', body: JSON.stringify(payload) });
+      else await apiFetch('/admin/resellers/crear', { method: 'POST', body: JSON.stringify({ ...payload, email: form.email, password: form.password }) });
       setOpen(false);
       cargar();
     } catch (err) { setError(err.message); }
@@ -127,7 +133,12 @@ export default function AdminRevendedores() {
               <div><label className="label">Contraseña</label><input className="input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="temporal123" required /></div>
             </>
           )}
-          <div><label className="label">Cupo de radios</label><input className="input" type="number" min="0" value={form.cupo_radios} onChange={(e) => setForm({ ...form, cupo_radios: e.target.value })} /></div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div><label className="label">Cupo de radios</label><input className="input" type="number" min="0" value={form.cupo_radios} onChange={(e) => setForm({ ...form, cupo_radios: e.target.value })} /></div>
+            <div><label className="label">Oyentes totales</label><input className="input" type="number" min="0" value={form.max_oyentes_total} onChange={(e) => setForm({ ...form, max_oyentes_total: e.target.value })} /></div>
+            <div><label className="label">Espacio total (MB)</label><input className="input" type="number" min="0" value={form.espacio_total_mb} onChange={(e) => setForm({ ...form, espacio_total_mb: e.target.value })} /></div>
+          </div>
+          <p className="text-xs text-gray-400">La suma de los planes de sus radios no puede exceder estos totales.</p>
           {error && <div className="text-sm rounded-xl px-3 py-2 text-red-600 bg-red-50 dark:bg-red-500/10">{error}</div>}
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={() => setOpen(false)} className="btn-ghost flex-1">Cancelar</button>

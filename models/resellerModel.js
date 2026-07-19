@@ -24,16 +24,29 @@ async function findAllWithEmail() {
   return rows;
 }
 
-async function create({ user_id, nombre_empresa, cupo_radios = 5 }) {
+async function create({ user_id, nombre_empresa, cupo_radios = 5, max_oyentes_total = 500, espacio_total_mb = 10240 }) {
   const { rows } = await query(
-    `INSERT INTO resellers (user_id, nombre_empresa, cupo_radios) VALUES ($1, $2, $3) RETURNING *`,
-    [user_id, nombre_empresa, cupo_radios]
+    `INSERT INTO resellers (user_id, nombre_empresa, cupo_radios, max_oyentes_total, espacio_total_mb)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [user_id, nombre_empresa, cupo_radios, max_oyentes_total, espacio_total_mb]
+  );
+  return rows[0];
+}
+
+/** Recursos ya usados por el revendedor (suma de los planes de sus radios). */
+async function usoRecursos(resellerId) {
+  const { rows } = await query(
+    `SELECT COALESCE(SUM(p.max_oyentes),0)::int AS oyentes,
+            COALESCE(SUM(p.espacio_mb),0)::int  AS espacio
+       FROM clientes c LEFT JOIN planes p ON p.nombre = c.plan
+      WHERE c.reseller_id = $1`,
+    [resellerId]
   );
   return rows[0];
 }
 
 async function update(id, fields) {
-  const allowed = ['nombre_empresa', 'cupo_radios', 'activo'];
+  const allowed = ['nombre_empresa', 'cupo_radios', 'activo', 'max_oyentes_total', 'espacio_total_mb'];
   const sets = [];
   const values = [];
   let i = 1;
@@ -46,4 +59,4 @@ async function update(id, fields) {
   return rows[0] || null;
 }
 
-module.exports = { findByUserId, findById, findAllWithEmail, create, update };
+module.exports = { findByUserId, findById, findAllWithEmail, create, update, usoRecursos };

@@ -18,6 +18,11 @@ async function findById(id) {
   return normaliza(rows[0]) || null;
 }
 
+async function findByNombre(nombre) {
+  const { rows } = await query('SELECT * FROM planes WHERE nombre = $1 LIMIT 1', [nombre]);
+  return normaliza(rows[0]) || null;
+}
+
 async function create(p) {
   const { rows } = await query(
     `INSERT INTO planes (nombre, precio_mensual, max_bitrate, max_oyentes, espacio_mb, max_mounts, permite_dj)
@@ -49,4 +54,4 @@ async function deleteById(id) {
   await query('DELETE FROM planes WHERE id = $1', [id]);
 }
 
-module.exports = { findAll, findById, create, update, deleteById };
+module.exports = { findAll, findById, findByNombre, create, update, deleteById };

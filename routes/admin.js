@@ -161,6 +161,17 @@ router.get('/clientes/estados', requireAdmin, wrap(async (req, res) => {
   res.json({ estados });
 }));
 
+/** POST /admin/clientes/:id/reaplicar-plan — vuelve a empujar los límites del plan a la estación. */
+router.post('/clientes/:id/reaplicar-plan', requireAdmin, wrap(async (req, res) => {
+  const cliente = await clienteModel.findById(Number(req.params.id));
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
+  const plan = await planModel.findByNombre(cliente.plan);
+  if (!plan) return res.status(400).json({ error: `El plan "${cliente.plan}" ya no existe` });
+  await provisioning.aplicarLimitesPlan(cliente.azuracast_station_id, plan);
+  res.json({ message: 'Límites del plan re-aplicados ✅' });
+}));
+
 /** POST /admin/clientes/:id/iniciar — pone la estación al aire (restart). */
 router.post('/clientes/:id/iniciar', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
@@ -394,9 +405,9 @@ router.get('/resellers', requireAdmin, wrap(async (req, res) => {
   res.json({ resellers });
 }));
 
-/** POST /admin/resellers/crear  body: { email, password, nombre_empresa, cupo_radios } */
+/** POST /admin/resellers/crear  body: { email, password, nombre_empresa, cupo_radios, max_oyentes_total, espacio_total_mb } */
 router.post('/resellers/crear', requireAdmin, wrap(async (req, res) => {
-  const { email, password, nombre_empresa, cupo_radios = 5 } = req.body || {};
+  const { email, password, nombre_empresa, cupo_radios = 5, max_oyentes_total = 500, espacio_total_mb = 10240 } = req.body || {};
   if (!email || !password || !nombre_empresa) {
     return res.status(400).json({ error: 'email, password y nombre_empresa son requeridos' });
   }
@@ -405,7 +416,12 @@ router.post('/resellers/crear', requireAdmin, wrap(async (req, res) => {
   }
   const password_hash = await bcrypt.hash(password, 10);
   const user = await userModel.create({ email, password_hash, role: 'reseller' });
-  const reseller = await resellerModel.create({ user_id: user.id, nombre_empresa, cupo_radios: Number(cupo_radios) });
+  const reseller = await resellerModel.create({
+    user_id: user.id, nombre_empresa,
+    cupo_radios: Number(cupo_radios),
+    max_oyentes_total: Number(max_oyentes_total),
+    espacio_total_mb: Number(espacio_total_mb),
+  });
   res.status(201).json({
     message: 'Revendedor creado ✅',
     reseller: { ...reseller, email },
@@ -413,15 +429,18 @@ router.post('/resellers/crear', requireAdmin, wrap(async (req, res) => {
   });
 }));
 
-/** PUT /admin/resellers/:id  body: { cupo_radios, activo, nombre_empresa } */
+/** PUT /admin/resellers/:id  body: { cupo_radios, activo, nombre_empresa, max_oyentes_total, espacio_total_mb } */
 router.put('/resellers/:id', requireAdmin, wrap(async (req, res) => {
   const reseller = await resellerModel.findById(Number(req.params.id));
   if (!reseller) return res.status(404).json({ error: 'Revendedor no encontrado' });
-  const { cupo_radios, activo, nombre_empresa } = req.body || {};
+  const { cupo_radios, activo, nombre_empresa, max_oyentes_total, espacio_total_mb } = req.body || {};
+  const num = (v) => (v === undefined ? undefined : Number(v));
   const actualizado = await resellerModel.update(reseller.id, {
-    cupo_radios: cupo_radios === undefined ? undefined : Number(cupo_radios),
+    cupo_radios: num(cupo_radios),
     activo: activo === undefined ? undefined : Boolean(activo),
     nombre_empresa,
+    max_oyentes_total: num(max_oyentes_total),
+    espacio_total_mb: num(espacio_total_mb),
   });
   res.json({ message: 'Revendedor actualizado ✅', reseller: actualizado });
 }));

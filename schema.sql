@@ -27,6 +27,10 @@ CREATE TABLE IF NOT EXISTS resellers (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Límites agregados de la cuenta del revendedor (suma de todas sus radios)
+ALTER TABLE resellers ADD COLUMN IF NOT EXISTS max_oyentes_total INTEGER NOT NULL DEFAULT 500;
+ALTER TABLE resellers ADD COLUMN IF NOT EXISTS espacio_total_mb  INTEGER NOT NULL DEFAULT 10240;
+
 -- Planes / plantillas de radio (definidos por el super admin).
 -- Los límites se aplican en AzuraCast al crear la estación del cliente.
 CREATE TABLE IF NOT EXISTS planes (

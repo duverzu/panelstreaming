@@ -36,12 +36,17 @@ router.get('/perfil', requireReseller, wrap(async (req, res) => {
   const reseller = await getReseller(req);
   if (!reseller) return res.status(404).json({ error: 'Revendedor no encontrado' });
   const usadas = await clienteModel.countByReseller(reseller.id);
+  const uso = await resellerModel.usoRecursos(reseller.id);
   res.json({
     perfil: {
       nombre_empresa: reseller.nombre_empresa,
       cupo_radios: reseller.cupo_radios,
       radios_usadas: usadas,
       disponibles: Math.max(0, reseller.cupo_radios - usadas),
+      max_oyentes_total: reseller.max_oyentes_total,
+      oyentes_usados: uso.oyentes,
+      espacio_total_mb: reseller.espacio_total_mb,
+      espacio_usado_mb: uso.espacio,
     },
   });
 }));
@@ -81,6 +86,18 @@ router.post('/clientes/crear', requireReseller, wrap(async (req, res) => {
   }
 
   const { email, password, nombre_empresa, plan_id } = req.body || {};
+
+  // Verificar límites agregados de la cuenta (oyentes y espacio totales)
+  const plan = await planModel.findById(Number(plan_id));
+  if (!plan) return res.status(400).json({ error: 'Plan no encontrado' });
+  const uso = await resellerModel.usoRecursos(reseller.id);
+  if (uso.oyentes + plan.max_oyentes > reseller.max_oyentes_total) {
+    return res.status(403).json({ error: `Sin oyentes disponibles: usarías ${uso.oyentes + plan.max_oyentes}/${reseller.max_oyentes_total}. Elige un plan menor o pide más al administrador.` });
+  }
+  if (uso.espacio + plan.espacio_mb > reseller.espacio_total_mb) {
+    return res.status(403).json({ error: `Sin espacio disponible: usarías ${uso.espacio + plan.espacio_mb}/${reseller.espacio_total_mb} MB. Elige un plan menor o pide más al administrador.` });
+  }
+
   const resultado = await provisioning.crearClienteConEstacion({
     email, password, nombre_empresa, plan_id, reseller_id: reseller.id,
   });

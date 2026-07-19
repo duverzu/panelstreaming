@@ -21,6 +21,36 @@ function err(msg, status) {
 }
 
 /**
+ * Aplica (o re-aplica) los límites de un plan a una estación existente.
+ * Todos los pasos son tolerantes a fallos (no fatales).
+ */
+async function aplicarLimitesPlan(stationId, plan) {
+  await azuracast.updateStation(stationId, {
+    max_bitrate: plan.max_bitrate,
+    max_mounts: plan.max_mounts,
+    enable_streamers: plan.permite_dj,
+    enable_public_page: true,
+    frontend_config: { max_listeners: plan.max_oyentes || null },
+  });
+  // Bitrate del mount por defecto
+  try {
+    const mounts = await azuracast.getMounts(stationId);
+    const principal = mounts.find((m) => m.is_default) || mounts[0];
+    if (principal) {
+      const autodjBitrate = plan.max_bitrate > 0 ? Math.min(plan.max_bitrate, 320) : 128;
+      await azuracast.updateMount(stationId, principal.id, { enable_autodj: true, autodj_format: 'mp3', autodj_bitrate: autodjBitrate });
+    }
+  } catch (e) { console.error('[limites] mount:', e.message); }
+  // Cuota de espacio
+  try {
+    const info = await azuracast.getStationAdmin(stationId);
+    if (info?.media_storage_location && plan.espacio_mb) {
+      await azuracast.updateStorageLocation(info.media_storage_location, { storageQuota: `${plan.espacio_mb} MB` });
+    }
+  } catch (e) { console.error('[limites] storage:', e.message); }
+}
+
+/**
  * @param {{email,password,nombre_empresa,plan_id,reseller_id?}} datos
  * @returns {{cliente, credenciales}}
  */
@@ -36,40 +66,19 @@ async function crearClienteConEstacion({ email, password, nombre_empresa, plan_i
   const password_hash = await bcrypt.hash(password, 10);
   const user = await userModel.create({ email, password_hash, role: 'cliente' });
 
-  // 2) Estación + límites del plan (bitrate, mounts, DJ, MÁX OYENTES)
+  // 2) Estación
   let station;
   try {
     station = await azuracast.createStation(nombre_empresa, `Radio de ${nombre_empresa}`);
-    await azuracast.updateStation(station.id, {
-      max_bitrate: plan.max_bitrate,
-      max_mounts: plan.max_mounts,
-      enable_streamers: plan.permite_dj,
-      enable_public_page: true,
-      frontend_config: { max_listeners: plan.max_oyentes || null },
-    });
   } catch (e) {
     await userModel.deleteById(user.id);
-    if (station?.id) { try { await azuracast.deleteStation(station.id); } catch (_) {} }
     throw err('No se pudo crear la estación: ' + e.message, e.status || 502);
   }
 
-  // 2b) Cuota de espacio del AutoDJ (storage location propia de la estación) — no fatal
+  // 2b) Aplicar límites del plan (bitrate, mounts, DJ, máx oyentes, cuota de espacio)
   try {
-    const info = await azuracast.getStationAdmin(station.id);
-    if (info?.media_storage_location && plan.espacio_mb) {
-      await azuracast.updateStorageLocation(info.media_storage_location, { storageQuota: `${plan.espacio_mb} MB` });
-    }
-  } catch (e) { console.error('[provision] cuota de espacio:', e.message); }
-
-  // 3) Ajustar bitrate del mount por defecto (no fatal)
-  try {
-    const mounts = await azuracast.getMounts(station.id);
-    const principal = mounts.find((m) => m.is_default) || mounts[0];
-    if (principal) {
-      const autodjBitrate = plan.max_bitrate > 0 ? Math.min(plan.max_bitrate, 320) : 128;
-      await azuracast.updateMount(station.id, principal.id, { enable_autodj: true, autodj_format: 'mp3', autodj_bitrate: autodjBitrate });
-    }
-  } catch (e) { console.error('[provision] mount:', e.message); }
+    await aplicarLimitesPlan(station.id, plan);
+  } catch (e) { console.error('[provision] límites:', e.message); }
 
   // 4) Cuenta DJ (si el plan lo permite)
   const dj = {};
@@ -104,4 +113,4 @@ async function crearClienteConEstacion({ email, password, nombre_empresa, plan_i
   return { cliente: { ...cliente, email }, credenciales: { email, password } };
 }
 
-module.exports = { crearClienteConEstacion };
+module.exports = { crearClienteConEstacion, aplicarLimitesPlan };
