@@ -83,6 +83,7 @@ export default function AdminApiIntegracion() {
           <div className="rounded-xl bg-gray-50 dark:bg-gray-950 p-3 font-mono text-xs space-y-1 overflow-x-auto">
             <div><span className="text-brand-600">GET</span>    /test                         → prueba de conexión</div>
             <div><span className="text-brand-600">GET</span>    /planes                       → planes disponibles</div>
+            <div><span className="text-brand-600">GET</span>    /servicios                    → LISTA todas las radios (sincronizar)</div>
             <div><span className="text-blue-600">POST</span>   /servicios                    → crear radio (al pagar)</div>
             <div><span className="text-blue-600">POST</span>   /servicios/:id/suspender      → suspender (impago)</div>
             <div><span className="text-blue-600">POST</span>   /servicios/:id/reactivar      → reactivar (pagó)</div>

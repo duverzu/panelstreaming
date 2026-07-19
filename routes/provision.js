@@ -48,6 +48,30 @@ router.get('/planes', wrap(async (req, res) => {
 }));
 
 /**
+ * GET /api/provision/servicios — LISTA todas las radios (para sincronizar cuentas).
+ * ?oyentes=1 incluye oyentes en vivo (más lento).
+ */
+router.get('/servicios', wrap(async (req, res) => {
+  const clientes = await clienteModel.findAllWithEmail();
+  let oyentesPorCliente = {};
+  if (req.query.oyentes === '1') {
+    const { ranking } = await agregarOyentes(clientes);
+    ranking.forEach((r) => { oyentesPorCliente[r.cliente_id] = { oyentes: r.oyentes, online: r.online }; });
+  }
+  const servicios = clientes.map((c) => ({
+    servicio_id: c.id,
+    nombre_empresa: c.nombre_empresa,
+    email: c.email,
+    plan: c.plan,
+    activo: c.activo,
+    url_streaming: c.url_streaming,
+    servidor_id: c.servidor_id,
+    ...(req.query.oyentes === '1' ? { oyentes: oyentesPorCliente[c.id]?.oyentes || 0, al_aire: oyentesPorCliente[c.id]?.online || false } : {}),
+  }));
+  res.json({ total: servicios.length, servicios });
+}));
+
+/**
  * POST /api/provision/servicios — CREA una radio (CreateAccount).
  * body: { email, nombre_empresa, plan_id | plan, password? }
  */
