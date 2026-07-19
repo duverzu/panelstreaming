@@ -10,14 +10,29 @@ export default function ClienteDashboard() {
   const [estacion, setEstacion] = useState(null);
   const [nowplaying, setNowplaying] = useState(null);
   const [npError, setNpError] = useState(null);
+  const [saltando, setSaltando] = useState(false);
+
+  function cargarNP() {
+    apiFetch('/cliente/nowplaying').then((d) => setNowplaying(d.nowplaying)).catch((e) => setNpError(e.message));
+  }
 
   useEffect(() => {
     apiFetch('/cliente/perfil').then((d) => setPerfil(d.perfil)).catch(() => {});
     apiFetch('/cliente/mi-estacion').then((d) => setEstacion(d.estacion)).catch(() => {});
-    apiFetch('/cliente/nowplaying')
-      .then((d) => setNowplaying(d.nowplaying))
-      .catch((e) => setNpError(e.message));
+    cargarNP();
   }, []);
+
+  async function saltar() {
+    setSaltando(true);
+    try {
+      await apiFetch('/cliente/saltar', { method: 'POST' });
+      setTimeout(cargarNP, 2000); // refresca lo que suena tras el salto
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setSaltando(false);
+    }
+  }
 
   const cancion = nowplaying?.now_playing?.song;
 
@@ -47,7 +62,13 @@ export default function ClienteDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sonando ahora */}
         <div className="card p-5">
-          <h2 className="font-semibold mb-4 flex items-center gap-2"><IconMic width={18} height={18} /> Sonando ahora</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold flex items-center gap-2"><IconMic width={18} height={18} /> Sonando ahora</h2>
+            <button onClick={saltar} disabled={saltando}
+              className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-brand-500 hover:text-brand-600 transition disabled:opacity-50">
+              {saltando ? 'Saltando…' : '⏭ Saltar canción'}
+            </button>
+          </div>
           {cancion ? (
             <div>
               <div className="text-lg font-semibold">{cancion.title || 'Sin título'}</div>

@@ -189,6 +189,16 @@ async function restartStation(stationId) {
   }
 }
 
+/** Salta la canción actual del AutoDJ. POST /api/station/{id}/backend/skip */
+async function skipSong(stationId) {
+  try {
+    const { data } = await api.post(`/station/${stationId}/backend/skip`);
+    return data;
+  } catch (err) {
+    handleError(`skipSong(${stationId})`, err);
+  }
+}
+
 /**
  * Detiene la transmisión (frontend + backend) de una estación.
  */
@@ -391,6 +401,7 @@ module.exports = {
   updateStreamer,
   restartStation,
   stopStation,
+  skipSong,
   deleteStation,
   listMedia,
   uploadMedia,

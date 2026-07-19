@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api';
 import StatCard from '../../components/StatCard';
 import BarChart from '../../components/BarChart';
+import MapaOyentes from '../../components/MapaOyentes';
 import { IconMic, IconChart, IconUsers } from '../../icons';
 
 /** timestamp/hora -> etiqueta corta */
@@ -59,6 +60,12 @@ export default function ClienteEstadisticas() {
           <h2 className="font-semibold mb-4">Audiencia por día</h2>
           <BarChart data={porDia} unidad=" oyentes" />
         </div>
+      </div>
+
+      {/* Mapa de oyentes */}
+      <div className="card p-5">
+        <h2 className="font-semibold mb-4 flex items-center gap-2"><IconUsers width={18} height={18} /> Mapa de oyentes</h2>
+        <MapaOyentes oyentes={oyentes} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

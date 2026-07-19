@@ -402,17 +402,28 @@ router.get('/estadisticas', requireCliente, wrap(async (req, res) => {
   res.json({ oyentes_ahora, pico, por_hora, por_dia, top_canciones });
 }));
 
-/** GET /cliente/oyentes — lista de oyentes en vivo (país, dispositivo, tiempo) */
+/** GET /cliente/oyentes — lista de oyentes en vivo (país, ciudad, coords, dispositivo, tiempo) */
 router.get('/oyentes', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   if (!cliente?.azuracast_station_id) return res.json({ oyentes: [] });
   const lista = await azuracast.getListeners(cliente.azuracast_station_id);
   const oyentes = (lista || []).map((l) => ({
     pais: l.location?.country || l.location?.description || '—',
+    ciudad: l.location?.city || '',
+    lat: l.location?.lat ?? null,
+    lon: l.location?.lon ?? null,
     dispositivo: l.device?.client || (l.device?.is_mobile ? 'Móvil' : 'Escritorio'),
     conectado_seg: l.connected_time || 0,
   }));
   res.json({ total: oyentes.length, oyentes });
+}));
+
+/** POST /cliente/saltar — salta la canción que está sonando ahora */
+router.post('/saltar', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
+  await azuracast.skipSong(cliente.azuracast_station_id);
+  res.json({ message: 'Canción saltada ✅' });
 }));
 
 // ==================================================================
