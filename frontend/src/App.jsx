@@ -2,7 +2,9 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './auth';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import Aprende from './pages/Aprende';
 import AdminDashboard from './pages/admin/Dashboard';
+import AdminDocumentacion from './pages/admin/Documentacion';
 import AdminClientes from './pages/admin/Clientes';
 import AdminPlanes from './pages/admin/Planes';
 import AdminEstadisticas from './pages/admin/Estadisticas';
@@ -19,6 +21,7 @@ import ClienteEstadisticas from './pages/cliente/Estadisticas';
 import ClienteAutoDJ from './pages/cliente/AutoDJ';
 import ClienteReproductor from './pages/cliente/Reproductor';
 import ClienteRedes from './pages/cliente/Redes';
+import ClienteConectar from './pages/cliente/Conectar';
 import ClienteConfiguracion from './pages/cliente/Configuracion';
 
 /** Ruta protegida por rol. */
@@ -51,6 +54,7 @@ export default function App() {
         <Route path="planes" element={<AdminPlanes />} />
         <Route path="revendedores" element={<AdminRevendedores />} />
         <Route path="servidores" element={<AdminServidores />} />
+        <Route path="documentacion" element={<AdminDocumentacion />} />
         <Route path="estadisticas" element={<AdminEstadisticas />} />
       </Route>
 
@@ -60,6 +64,7 @@ export default function App() {
         <Route path="clientes" element={<ResellerClientes />} />
         <Route path="planes" element={<ResellerPlanes />} />
         <Route path="estadisticas" element={<ResellerEstadisticas />} />
+        <Route path="aprende" element={<Aprende />} />
       </Route>
 
       {/* Panel Cliente */}
@@ -70,7 +75,9 @@ export default function App() {
         <Route path="autodj" element={<ClienteAutoDJ />} />
         <Route path="reproductor" element={<ClienteReproductor />} />
         <Route path="redes" element={<ClienteRedes />} />
+        <Route path="conectar" element={<ClienteConectar />} />
         <Route path="estadisticas" element={<ClienteEstadisticas />} />
+        <Route path="aprende" element={<Aprende />} />
         <Route path="configuracion" element={<ClienteConfiguracion />} />
       </Route>
 

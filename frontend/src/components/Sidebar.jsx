@@ -17,6 +17,7 @@ const MENUS = {
     { seccion: 'Infraestructura', items: [
       { label: 'Servidores', icon: IconServer, to: '/admin/servidores' },
       { label: 'Estadísticas', icon: IconChart, to: '/admin/estadisticas' },
+      { label: 'Documentación', icon: IconInvoice, to: '/admin/documentacion' },
     ]},
   ],
   reseller: [
@@ -26,11 +27,15 @@ const MENUS = {
       { label: 'Mis Planes', icon: IconInvoice, to: '/reseller/planes' },
       { label: 'Estadísticas', icon: IconChart, to: '/reseller/estadisticas' },
     ]},
+    { seccion: 'Ayuda', items: [
+      { label: 'Aprende', icon: IconMic, to: '/reseller/aprende' },
+    ]},
   ],
   cliente: [
     { seccion: 'Mi Radio', items: [
       { label: 'Dashboard', icon: IconDashboard, to: '/cliente' },
       { label: 'AutoDJ', icon: IconSliders, to: '/cliente/autodj' },
+      { label: 'Conectar', icon: IconMic, to: '/cliente/conectar' },
     ]},
     { seccion: 'Contenido', items: [
       { label: 'Música', icon: IconMusic, to: '/cliente/musica' },
@@ -41,6 +46,9 @@ const MENUS = {
     ]},
     { seccion: 'Cuenta', items: [
       { label: 'Configuración', icon: IconSettings, to: '/cliente/configuracion' },
+    ]},
+    { seccion: 'Ayuda', items: [
+      { label: 'Aprende', icon: IconMic, to: '/cliente/aprende' },
     ]},
   ],
 };

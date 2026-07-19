@@ -3,7 +3,6 @@ import { apiFetch } from '../../api';
 import StatTile from '../../components/charts/StatTile';
 import AreaChart from '../../components/charts/AreaChart';
 import Player from '../../components/Player';
-import ConectarDJ from '../../components/ConectarDJ';
 import { IconMic, IconChart, IconRadio, IconUsers } from '../../icons';
 
 function label(x) {
@@ -90,8 +89,6 @@ export default function ClienteDashboard() {
           ) : <div className="text-sm text-gray-400">Cargando…</div>}
         </div>
       </div>
-
-      <ConectarDJ />
     </div>
   );
 }

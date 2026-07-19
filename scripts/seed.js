@@ -76,6 +76,102 @@ async function seed() {
     [userId]
   );
 
+  // --- Documentación por defecto (si no hay artículos) ---
+  const { rows: dcount } = await query('SELECT COUNT(*)::int AS n FROM documentacion');
+  if (dcount[0].n === 0) {
+    const docs = [
+      { titulo: 'Bienvenido a tu panel de radio', categoria: 'Primeros pasos', orden: 1, contenido:
+`# 👋 Bienvenido
+
+Este panel controla **tu radio online**. Desde aquí puedes subir música, armar tu programación, transmitir en vivo y ver tus oyentes.
+
+## Menú de tu panel
+- **Dashboard**: resumen de oyentes y lo que suena.
+- **AutoDJ**: cómo se mezcla la música automáticamente.
+- **Música**: sube tus canciones (MP3).
+- **Playlists**: agrupa música, jingles y programas por horario.
+- **Reproductor**: código para poner tu radio en tu web.
+- **Redes Sociales**: publica automáticamente lo que suena.
+- **Estadísticas**: oyentes en vivo, audiencia y mapa.
+- **Conectar**: los datos para transmitir en vivo desde tu PC.
+- **Configuración**: nombre, descripción, zona horaria y tu contraseña.
+
+> Consejo: primero **sube música** y **crea una playlist**, así tu radio suena sola 24/7 aunque no estés en vivo.` },
+
+      { titulo: 'Cómo conectar tu radio en vivo (DJ)', categoria: 'Transmitir', orden: 1, contenido:
+`# 🎤 Transmitir en vivo desde tu PC
+
+Cuando conectas en vivo, tu voz/música **reemplaza al AutoDJ**; al desconectarte, el AutoDJ vuelve solo.
+
+## 1) Consigue tus datos
+Ve a **Conectar** en el menú. Ahí verás: **Servidor, Puerto, Punto de montaje, Usuario y Contraseña**.
+
+## 2) Descarga un programa de transmisión
+- **BUTT** (gratis, fácil): https://danielnoethen.de/butt/
+- O **Mixxx**, **RadioDJ**, **OBS**.
+
+## 3) Configura BUTT
+1. Abre BUTT → **Settings → Main → Add server**.
+2. Tipo: **Icecast**.
+3. Pega **Servidor**, **Puerto**, **Usuario** y **Contraseña** de la página Conectar.
+4. **Mountpoint**: escribe \`/\` (una barra).
+5. Guarda y pulsa **Play** ▶️.
+
+¡Ya estás al aire! Compruébalo en tu **Dashboard**.
+
+> Si no ves los datos de conexión, tu plan quizás no incluye DJ en vivo — usa el AutoDJ subiendo música.` },
+
+      { titulo: 'Configurar el AutoDJ', categoria: 'AutoDJ', orden: 1, contenido:
+`# 🎛️ AutoDJ
+
+El AutoDJ reproduce tu música **automáticamente 24/7** cuando no hay nadie en vivo.
+
+## Opciones (menú AutoDJ)
+- **Tipo de mezcla (crossfade)**: cómo se unen las canciones.
+  - *Normal*: mezcla suave.
+  - *Inteligente*: ajusta según el volumen.
+  - *Sin mezcla*: corte seco.
+- **Duración de la mezcla**: segundos que dura el cruce entre canciones.
+- **Evitar repetir**: minutos antes de que una canción pueda volver a sonar.
+- **Cola**: cuántas canciones prepara por adelantado.
+
+> Para que el AutoDJ tenga qué reproducir necesitas **música en una playlist activa**.` },
+
+      { titulo: 'Subir música y crear playlists', categoria: 'Contenido', orden: 1, contenido:
+`# 🎵 Música y playlists
+
+## Subir música
+1. Ve a **Música**.
+2. (Opcional) elige la playlist destino en **"Subir a"**.
+3. Haz clic y selecciona tus **MP3** (puedes varios a la vez).
+
+## Tipos de playlist (menú Playlists)
+- **Música general**: rotación normal.
+- **Jingle / Spot**: suena **cada X canciones** (ideal para cuñas y anuncios).
+- **Programa**: suena en **días y horas** específicas (ej. "Mañanas 6–10am").
+
+## Orden
+- **Aleatorio**: mezcla las canciones.
+- **En orden**: las reproduce en secuencia.
+
+> En **Música**, cada canción tiene chips para agregarla o quitarla de playlists.` },
+
+      { titulo: 'Pon tu radio en tu sitio web', categoria: 'Difusión', orden: 1, contenido:
+`# 🌐 Reproductor para tu web
+
+Ve a **Reproductor** en el menú. Ahí tienes:
+- Un **reproductor con carátula** listo para incrustar (copia el código \`iframe\`).
+- **Stream directo**, enlaces **.pls** y **.m3u** para Winamp/VLC/iTunes.
+- Un **reproductor HTML5** simple.
+
+Copia el que prefieras y pégalo en tu página. El reproductor con carátula muestra
+**lo que suena en vivo** y se actualiza solo.` },
+    ];
+    for (const d of docs) {
+      await query('INSERT INTO documentacion (titulo, categoria, contenido, orden) VALUES ($1,$2,$3,$4)', [d.titulo, d.categoria, d.contenido, d.orden]);
+    }
+  }
+
   console.log('✅ Seed completado.');
   console.log('   admin@panel.com   / 123456  (admin)');
   console.log('   cliente@radio.com / 123456  (cliente)');

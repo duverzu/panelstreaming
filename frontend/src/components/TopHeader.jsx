@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { useTheme } from '../theme';
 import { IconSun, IconMoon, IconLogout, IconChevronDown } from '../icons';
@@ -7,6 +8,7 @@ export default function TopHeader({ title, subtitle }) {
   const { user, role, logout } = useAuth();
   const { dark, toggle } = useTheme();
   const [open, setOpen] = useState(false);
+  const aprendeUrl = role === 'reseller' ? '/reseller/aprende' : role === 'cliente' ? '/cliente/aprende' : null;
 
   const email = user?.email || '';
   const inicial = (email[0] || '?').toUpperCase();
@@ -19,6 +21,13 @@ export default function TopHeader({ title, subtitle }) {
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Botón llamativo Aprende (cliente y revendedor) */}
+        {aprendeUrl && (
+          <Link to={aprendeUrl}
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-brand-500 to-emerald-600 hover:opacity-90 shadow-sm transition">
+            📚 Aprende
+          </Link>
+        )}
         {/* Toggle día/noche */}
         <button
           onClick={toggle}

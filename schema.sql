@@ -68,6 +68,18 @@ CREATE TABLE IF NOT EXISTS consumo_banda (
   PRIMARY KEY (servidor_id, fecha)
 );
 
+-- Documentación / centro de ayuda (artículos que edita el admin).
+CREATE TABLE IF NOT EXISTS documentacion (
+  id         SERIAL PRIMARY KEY,
+  titulo     VARCHAR(200) NOT NULL,
+  categoria  VARCHAR(80)  NOT NULL DEFAULT 'General',
+  contenido  TEXT         NOT NULL DEFAULT '',
+  orden      INTEGER      NOT NULL DEFAULT 0,
+  publicado  BOOLEAN      NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
 -- Dueño del plan: NULL = plan global (del admin); si no, es de un revendedor.
 ALTER TABLE planes ADD COLUMN IF NOT EXISTS reseller_id INTEGER REFERENCES resellers(id) ON DELETE CASCADE;
 

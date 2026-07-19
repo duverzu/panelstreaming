@@ -17,6 +17,7 @@ const planModel = require('../models/planModel');
 const resellerModel = require('../models/resellerModel');
 const servidorModel = require('../models/servidorModel');
 const consumoModel = require('../models/consumoModel');
+const docModel = require('../models/docModel');
 const biblioteca = require('../services/biblioteca');
 const provisioning = require('../services/provisioning');
 const { agregarOyentes } = require('../services/stats');
@@ -528,6 +529,40 @@ router.delete('/servidores/:id', requireAdmin, wrap(async (req, res) => {
   if (!servidor) return res.status(404).json({ error: 'Servidor no encontrado' });
   await servidorModel.deleteById(servidor.id);
   res.json({ message: 'Servidor eliminado ✅ (sus radios quedan apuntando al servidor por defecto)' });
+}));
+
+// ==================================================================
+//  DOCUMENTACIÓN (CENTRO DE AYUDA)
+// ==================================================================
+
+router.get('/docs', requireAdmin, wrap(async (req, res) => {
+  res.json({ docs: await docModel.findAll() });
+}));
+
+router.get('/docs/:id', requireAdmin, wrap(async (req, res) => {
+  const doc = await docModel.findById(Number(req.params.id));
+  if (!doc) return res.status(404).json({ error: 'Artículo no encontrado' });
+  res.json({ doc });
+}));
+
+router.post('/docs', requireAdmin, wrap(async (req, res) => {
+  if (!req.body?.titulo) return res.status(400).json({ error: 'El título es requerido' });
+  const doc = await docModel.create(req.body);
+  res.status(201).json({ message: 'Artículo creado ✅', doc });
+}));
+
+router.put('/docs/:id', requireAdmin, wrap(async (req, res) => {
+  const existente = await docModel.findById(Number(req.params.id));
+  if (!existente) return res.status(404).json({ error: 'Artículo no encontrado' });
+  const doc = await docModel.update(existente.id, req.body || {});
+  res.json({ message: 'Artículo actualizado ✅', doc });
+}));
+
+router.delete('/docs/:id', requireAdmin, wrap(async (req, res) => {
+  const existente = await docModel.findById(Number(req.params.id));
+  if (!existente) return res.status(404).json({ error: 'Artículo no encontrado' });
+  await docModel.deleteById(existente.id);
+  res.json({ message: 'Artículo eliminado ✅' });
 }));
 
 module.exports = router;

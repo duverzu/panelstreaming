@@ -9,9 +9,22 @@
 const express = require('express');
 const azuracast = require('../services/azuracast');
 const clienteModel = require('../models/clienteModel');
+const docModel = require('../models/docModel');
 
 const router = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+/** GET /api/public/docs — lista de artículos publicados (sin contenido). */
+router.get('/docs', wrap(async (req, res) => {
+  res.json({ docs: await docModel.findPublicadas() });
+}));
+
+/** GET /api/public/docs/:id — artículo completo (si está publicado). */
+router.get('/docs/:id', wrap(async (req, res) => {
+  const doc = await docModel.findById(Number(req.params.id));
+  if (!doc || !doc.publicado) return res.status(404).json({ error: 'Artículo no encontrado' });
+  res.json({ doc: { id: doc.id, titulo: doc.titulo, categoria: doc.categoria, contenido: doc.contenido } });
+}));
 
 /** GET /api/public/nowplaying/:shortcode — metadata en vivo para el widget. */
 router.get('/nowplaying/:shortcode', wrap(async (req, res) => {
