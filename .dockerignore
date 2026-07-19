@@ -1,0 +1,11 @@
+node_modules
+frontend/node_modules
+frontend/dist
+.git
+.env
+.env.*
+biblioteca/*.mp3
+*.log
+npm-debug.log*
+.DS_Store
+.claude

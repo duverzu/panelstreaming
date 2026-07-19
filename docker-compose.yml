@@ -1,0 +1,40 @@
+# ==================================================================
+#  docker-compose.yml — levanta el panel + PostgreSQL juntos.
+#  Migrar a otro servidor = copiar la carpeta y ejecutar:
+#     docker compose up -d
+# ==================================================================
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: panel_radio
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cambia_esta_password}
+      POSTGRES_DB: panel_radio
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U panel_radio"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  panel:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      # Dentro de docker la BD es el servicio "db", no localhost.
+      DATABASE_URL: postgresql://panel_radio:${DB_PASSWORD:-cambia_esta_password}@db:5432/panel_radio
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      # La biblioteca de música vive fuera de la imagen (persiste entre updates).
+      - ./biblioteca:/app/biblioteca
+
+volumes:
+  pgdata:
