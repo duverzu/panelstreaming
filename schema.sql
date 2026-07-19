@@ -46,6 +46,17 @@ CREATE TABLE IF NOT EXISTS planes (
   created_at      TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 
+-- Servidores AzuraCast (multi-servidor). Cada radio vive en uno.
+CREATE TABLE IF NOT EXISTS servidores (
+  id               SERIAL PRIMARY KEY,
+  nombre           VARCHAR(120) NOT NULL,
+  url              VARCHAR(255) NOT NULL,
+  api_key          VARCHAR(255) NOT NULL,
+  capacidad_radios INTEGER NOT NULL DEFAULT 100,
+  activo           BOOLEAN NOT NULL DEFAULT true,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Dueño del plan: NULL = plan global (del admin); si no, es de un revendedor.
 ALTER TABLE planes ADD COLUMN IF NOT EXISTS reseller_id INTEGER REFERENCES resellers(id) ON DELETE CASCADE;
 
@@ -91,6 +102,11 @@ ALTER TABLE clientes ADD COLUMN IF NOT EXISTS dj_password VARCHAR(100);
 
 -- Revendedor dueño del cliente (NULL = creado directo por el super admin)
 ALTER TABLE clientes ADD COLUMN IF NOT EXISTS reseller_id INTEGER REFERENCES resellers(id) ON DELETE SET NULL;
+
+-- Servidor AzuraCast donde vive la radio (NULL = servidor por defecto del .env)
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS servidor_id INTEGER REFERENCES servidores(id) ON DELETE SET NULL;
+-- Shortcode de la estación (para el reproductor/embed público sin exponer el id)
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS short_name VARCHAR(150);
 
 -- Índices para búsquedas frecuentes
 CREATE INDEX IF NOT EXISTS idx_clientes_user_id     ON clientes(user_id);

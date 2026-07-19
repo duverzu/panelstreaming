@@ -27,18 +27,19 @@ function listarTracks() {
 /**
  * Copia todos los tracks de la biblioteca a una estación,
  * dentro de una playlist "Biblioteca".
+ * @param az cliente AzuraCast del servidor de esa estación (por defecto el del .env)
  * @returns {{ copiados: number, total: number }}
  */
-async function copiarAEstacion(stationId) {
+async function copiarAEstacion(stationId, az = azuracast) {
   const tracks = listarTracks();
   if (!tracks.length) return { copiados: 0, total: 0 };
 
   // Crear/encontrar la playlist "Biblioteca"
   let playlist;
   try {
-    const existentes = await azuracast.getPlaylists(stationId);
+    const existentes = await az.getPlaylists(stationId);
     playlist = existentes.find((p) => p.name === 'Biblioteca');
-    if (!playlist) playlist = await azuracast.createPlaylist(stationId, { name: 'Biblioteca', is_enabled: true });
+    if (!playlist) playlist = await az.createPlaylist(stationId, { name: 'Biblioteca', is_enabled: true });
   } catch (err) {
     console.error('[biblioteca] no se pudo preparar la playlist:', err.message);
     return { copiados: 0, total: tracks.length };
@@ -48,8 +49,8 @@ async function copiarAEstacion(stationId) {
   for (const nombre of tracks) {
     try {
       const base64 = fs.readFileSync(path.join(DIR, nombre)).toString('base64');
-      const media = await azuracast.uploadMedia(stationId, nombre, base64);
-      await azuracast.setFilePlaylists(stationId, media.id, [playlist.id]);
+      const media = await az.uploadMedia(stationId, nombre, base64);
+      await az.setFilePlaylists(stationId, media.id, [playlist.id]);
       copiados++;
     } catch (err) {
       console.error(`[biblioteca] falló "${nombre}":`, err.message);

@@ -9,6 +9,7 @@ const TITULOS = {
   '/admin/clientes': { title: 'Clientes', subtitle: 'Gestiona radios: iniciar, parar, suspender, borrar' },
   '/admin/planes': { title: 'Planes', subtitle: 'Plantillas de radio y sus límites' },
   '/admin/revendedores': { title: 'Revendedores', subtitle: 'Mayoristas y su cupo de radios' },
+  '/admin/servidores': { title: 'Servidores', subtitle: 'Nodos AzuraCast y su capacidad' },
   '/admin/estadisticas': { title: 'Estadísticas', subtitle: 'Audiencia y rendimiento del negocio' },
   '/reseller': { title: 'Dashboard', subtitle: 'Tu cupo y tus radios' },
   '/reseller/clientes': { title: 'Mis Radios', subtitle: 'Crea y gestiona tus estaciones' },

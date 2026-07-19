@@ -1,27 +1,16 @@
 /**
  * services/azuracast.js
  * ------------------------------------------------------------------
- * Único punto de contacto con la API de AzuraCast.
- * La API Key vive SOLO aquí (backend) vía variables de entorno.
- * El frontend jamás la conoce.
+ * Cliente de la API de AzuraCast — MULTI-SERVIDOR.
  *
- * Docs API: https://<tu-azuracast>/api/docs
+ *   azuracast.getStation(id)            → usa el servidor por defecto (.env)
+ *   azuracast.crearCliente(url, key)    → cliente para un servidor concreto
+ *   await azuracast.paraServidorId(id)  → cliente del servidor guardado en BD
+ *
+ * Cada radio guarda su `servidor_id`; las llamadas se enrutan a SU servidor.
  * ------------------------------------------------------------------
  */
-
 const axios = require('axios');
-
-// Cliente axios preconfigurado con la base URL y la API key.
-const api = axios.create({
-  baseURL: `${process.env.AZURACAST_BASE_URL}/api`,
-  timeout: 60000, // subidas de audio pueden tardar
-  maxBodyLength: Infinity, // permitir subir archivos grandes (base64)
-  maxContentLength: Infinity,
-  headers: {
-    Authorization: `Bearer ${process.env.AZURACAST_API_KEY}`,
-    Accept: 'application/json',
-  },
-});
 
 /** Normaliza errores de axios a algo legible para nuestras rutas. */
 function handleError(context, err) {
@@ -33,443 +22,76 @@ function handleError(context, err) {
   throw error;
 }
 
-/**
- * Detalles de una estación.
- * GET /api/station/{id}
- */
-async function getStation(stationId) {
-  try {
-    const { data } = await api.get(`/station/${stationId}`);
-    return data;
-  } catch (err) {
-    handleError(`getStation(${stationId})`, err);
-  }
+/** Crea un conjunto de métodos ligados a UN servidor AzuraCast. */
+function crearCliente(baseURL, apiKey) {
+  const api = axios.create({
+    baseURL: `${baseURL}/api`,
+    timeout: 60000,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+    headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+  });
+
+  const getStation = async (id) => { try { return (await api.get(`/station/${id}`)).data; } catch (e) { handleError(`getStation(${id})`, e); } };
+  const getStationAdmin = async (id) => { try { return (await api.get(`/admin/station/${id}`)).data; } catch (e) { handleError(`getStationAdmin(${id})`, e); } };
+  const getNowPlaying = async (id) => { try { return (await api.get(`/nowplaying/${id}`)).data; } catch (e) { handleError(`getNowPlaying(${id})`, e); } };
+  const getNowPlayingAll = async () => { try { return (await api.get('/nowplaying')).data; } catch (e) { handleError('getNowPlayingAll', e); } };
+  const createStation = async (nombre, descripcion = '') => { try { return (await api.post('/admin/stations', { name: nombre, description: descripcion })).data; } catch (e) { handleError(`createStation(${nombre})`, e); } };
+  const updateStation = async (id, fields) => { try { return (await api.put(`/admin/station/${id}`, fields)).data; } catch (e) { handleError(`updateStation(${id})`, e); } };
+  const deleteStation = async (id) => { try { return (await api.delete(`/admin/station/${id}`)).data; } catch (e) { handleError(`deleteStation(${id})`, e); } };
+  const getMounts = async (id) => { try { return (await api.get(`/station/${id}/mounts`)).data; } catch (e) { handleError(`getMounts(${id})`, e); } };
+  const createMount = async (id, opts) => { try { return (await api.post(`/station/${id}/mounts`, opts)).data; } catch (e) { handleError(`createMount(${id})`, e); } };
+  const updateMount = async (id, mid, fields) => { try { return (await api.put(`/station/${id}/mount/${mid}`, fields)).data; } catch (e) { handleError(`updateMount(${id}/${mid})`, e); } };
+  const createStreamer = async (id, opts) => { try { return (await api.post(`/station/${id}/streamers`, opts)).data; } catch (e) { handleError(`createStreamer(${id})`, e); } };
+  const getStreamers = async (id) => { try { return (await api.get(`/station/${id}/streamers`)).data; } catch (e) { handleError(`getStreamers(${id})`, e); } };
+  const updateStreamer = async (id, sid, data) => { try { return (await api.put(`/station/${id}/streamer/${sid}`, data)).data; } catch (e) { handleError(`updateStreamer(${id}/${sid})`, e); } };
+  const restartStation = async (id) => { try { return (await api.post(`/station/${id}/restart`)).data; } catch (e) { handleError(`restartStation(${id})`, e); } };
+  const skipSong = async (id) => { try { return (await api.post(`/station/${id}/backend/skip`)).data; } catch (e) { handleError(`skipSong(${id})`, e); } };
+  const stopStation = async (id) => { try { await api.post(`/station/${id}/frontend/stop`); await api.post(`/station/${id}/backend/stop`); return { stopped: true }; } catch (e) { handleError(`stopStation(${id})`, e); } };
+  const getStationStatus = async (id) => { try { return (await api.get(`/station/${id}/status`)).data; } catch (e) { handleError(`getStationStatus(${id})`, e); } };
+  const listMedia = async (id) => { try { return (await api.get(`/station/${id}/files`)).data; } catch (e) { handleError(`listMedia(${id})`, e); } };
+  const uploadMedia = async (id, filename, base64) => { try { return (await api.post(`/station/${id}/files`, { path: filename, file: base64 })).data; } catch (e) { handleError(`uploadMedia(${id})`, e); } };
+  const deleteMedia = async (id, mid) => { try { return (await api.delete(`/station/${id}/file/${mid}`)).data; } catch (e) { handleError(`deleteMedia(${id}/${mid})`, e); } };
+  const setFilePlaylists = async (id, mid, ids) => { try { return (await api.put(`/station/${id}/file/${mid}`, { playlists: ids })).data; } catch (e) { handleError(`setFilePlaylists(${id}/${mid})`, e); } };
+  const getPlaylists = async (id) => { try { return (await api.get(`/station/${id}/playlists`)).data; } catch (e) { handleError(`getPlaylists(${id})`, e); } };
+  const createPlaylist = async (id, data) => { try { return (await api.post(`/station/${id}/playlists`, data)).data; } catch (e) { handleError(`createPlaylist(${id})`, e); } };
+  const updatePlaylist = async (id, plId, data) => { try { return (await api.put(`/station/${id}/playlist/${plId}`, data)).data; } catch (e) { handleError(`updatePlaylist(${id}/${plId})`, e); } };
+  const deletePlaylist = async (id, plId) => { try { return (await api.delete(`/station/${id}/playlist/${plId}`)).data; } catch (e) { handleError(`deletePlaylist(${id}/${plId})`, e); } };
+  const getWebhooks = async (id) => { try { return (await api.get(`/station/${id}/webhooks`)).data; } catch (e) { handleError(`getWebhooks(${id})`, e); } };
+  const createWebhook = async (id, data) => { try { return (await api.post(`/station/${id}/webhooks`, data)).data; } catch (e) { handleError(`createWebhook(${id})`, e); } };
+  const updateWebhook = async (id, wid, data) => { try { return (await api.put(`/station/${id}/webhook/${wid}`, data)).data; } catch (e) { handleError(`updateWebhook(${id}/${wid})`, e); } };
+  const deleteWebhook = async (id, wid) => { try { return (await api.delete(`/station/${id}/webhook/${wid}`)).data; } catch (e) { handleError(`deleteWebhook(${id}/${wid})`, e); } };
+  const getListeners = async (id) => { try { return (await api.get(`/station/${id}/listeners`)).data; } catch (e) { handleError(`getListeners(${id})`, e); } };
+  const getCharts = async (id) => { try { return (await api.get(`/station/${id}/reports/overview/charts`)).data; } catch (e) { handleError(`getCharts(${id})`, e); } };
+  const getBestWorst = async (id) => { try { return (await api.get(`/station/${id}/reports/overview/best-and-worst`)).data; } catch (e) { handleError(`getBestWorst(${id})`, e); } };
+  const updateStorageLocation = async (id, data) => { try { return (await api.put(`/admin/storage_location/${id}`, data)).data; } catch (e) { handleError(`updateStorageLocation(${id})`, e); } };
+  const getServerStats = async () => { try { return (await api.get('/admin/server/stats')).data; } catch (e) { handleError('getServerStats', e); } };
+
+  return {
+    baseURL, apiKey, api,
+    getStation, getStationAdmin, getNowPlaying, getNowPlayingAll, createStation, updateStation, deleteStation,
+    getMounts, createMount, updateMount, createStreamer, getStreamers, updateStreamer,
+    restartStation, skipSong, stopStation, getStationStatus,
+    listMedia, uploadMedia, deleteMedia, setFilePlaylists,
+    getPlaylists, createPlaylist, updatePlaylist, deletePlaylist,
+    getWebhooks, createWebhook, updateWebhook, deleteWebhook,
+    getListeners, getCharts, getBestWorst, updateStorageLocation, getServerStats,
+  };
 }
+
+// Cliente del servidor por defecto (el del .env). Compat con todo el código previo.
+const porDefecto = crearCliente(process.env.AZURACAST_BASE_URL, process.env.AZURACAST_API_KEY);
 
 /**
- * Info "en vivo": canción actual, oyentes, historial.
- * GET /api/nowplaying/{id}
+ * Devuelve el cliente del servidor guardado en BD por id.
+ * Si no hay id o no existe, cae al servidor por defecto.
  */
-async function getNowPlaying(stationId) {
-  try {
-    const { data } = await api.get(`/nowplaying/${stationId}`);
-    return data;
-  } catch (err) {
-    handleError(`getNowPlaying(${stationId})`, err);
-  }
+async function paraServidorId(servidorId) {
+  if (!servidorId) return porDefecto;
+  const servidorModel = require('../models/servidorModel');
+  const s = await servidorModel.findById(servidorId);
+  if (!s || !s.url) return porDefecto;
+  return crearCliente(s.url, s.api_key);
 }
 
-/**
- * Crea una nueva estación en AzuraCast.
- * POST /api/admin/stations
- * @param {string} nombre
- * @param {string} descripcion
- */
-async function createStation(nombre, descripcion = '') {
-  try {
-    const { data } = await api.post('/admin/stations', {
-      name: nombre,
-      description: descripcion,
-      // Se pueden añadir más campos: genre, url, enable_public_page, etc.
-    });
-    return data;
-  } catch (err) {
-    handleError(`createStation(${nombre})`, err);
-  }
-}
-
-/**
- * Actualiza ajustes de una estación (aplicar límites del plan).
- * PUT /api/admin/station/{id}
- */
-async function updateStation(stationId, fields) {
-  try {
-    const { data } = await api.put(`/admin/station/${stationId}`, fields);
-    return data;
-  } catch (err) {
-    handleError(`updateStation(${stationId})`, err);
-  }
-}
-
-/**
- * Lista los mounts de una estación.
- * GET /api/station/{id}/mounts
- */
-async function getMounts(stationId) {
-  try {
-    const { data } = await api.get(`/station/${stationId}/mounts`);
-    return data;
-  } catch (err) {
-    handleError(`getMounts(${stationId})`, err);
-  }
-}
-
-/**
- * Crea un punto de montaje (mount) en una estación.
- * POST /api/station/{id}/mounts
- */
-async function createMount(stationId, opts) {
-  try {
-    const { data } = await api.post(`/station/${stationId}/mounts`, opts);
-    return data;
-  } catch (err) {
-    handleError(`createMount(${stationId})`, err);
-  }
-}
-
-/**
- * Actualiza un mount existente (ej. bitrate del AutoDJ).
- * PUT /api/station/{id}/mount/{mountId}
- */
-async function updateMount(stationId, mountId, fields) {
-  try {
-    const { data } = await api.put(`/station/${stationId}/mount/${mountId}`, fields);
-    return data;
-  } catch (err) {
-    handleError(`updateMount(${stationId}/${mountId})`, err);
-  }
-}
-
-/**
- * Detalle admin de una estación (incluye backend_config con dj_port, etc.).
- * GET /api/admin/station/{id}
- */
-async function getStationAdmin(stationId) {
-  try {
-    const { data } = await api.get(`/admin/station/${stationId}`);
-    return data;
-  } catch (err) {
-    handleError(`getStationAdmin(${stationId})`, err);
-  }
-}
-
-/**
- * Crea una cuenta de DJ/streamer para conectar en vivo.
- * POST /api/station/{id}/streamers
- */
-async function createStreamer(stationId, opts) {
-  try {
-    const { data } = await api.post(`/station/${stationId}/streamers`, opts);
-    return data;
-  } catch (err) {
-    handleError(`createStreamer(${stationId})`, err);
-  }
-}
-
-/** Lista las cuentas DJ/streamer. GET /api/station/{id}/streamers */
-async function getStreamers(stationId) {
-  try {
-    const { data } = await api.get(`/station/${stationId}/streamers`);
-    return data;
-  } catch (err) {
-    handleError(`getStreamers(${stationId})`, err);
-  }
-}
-
-/** Actualiza una cuenta DJ (ej. contraseña). PUT /api/station/{id}/streamer/{sid} */
-async function updateStreamer(stationId, sid, data) {
-  try {
-    const res = await api.put(`/station/${stationId}/streamer/${sid}`, data);
-    return res.data;
-  } catch (err) {
-    handleError(`updateStreamer(${stationId}/${sid})`, err);
-  }
-}
-
-/**
- * Reinicia (y pone al aire) una estación. Registra los servicios en Supervisor.
- * POST /api/station/{id}/restart
- */
-async function restartStation(stationId) {
-  try {
-    const { data } = await api.post(`/station/${stationId}/restart`);
-    return data;
-  } catch (err) {
-    handleError(`restartStation(${stationId})`, err);
-  }
-}
-
-/** Salta la canción actual del AutoDJ. POST /api/station/{id}/backend/skip */
-async function skipSong(stationId) {
-  try {
-    const { data } = await api.post(`/station/${stationId}/backend/skip`);
-    return data;
-  } catch (err) {
-    handleError(`skipSong(${stationId})`, err);
-  }
-}
-
-/**
- * Detiene la transmisión (frontend + backend) de una estación.
- */
-async function stopStation(stationId) {
-  try {
-    await api.post(`/station/${stationId}/frontend/stop`);
-    await api.post(`/station/${stationId}/backend/stop`);
-    return { stopped: true };
-  } catch (err) {
-    handleError(`stopStation(${stationId})`, err);
-  }
-}
-
-/**
- * Elimina una estación.
- * DELETE /api/admin/station/{id}
- */
-async function deleteStation(stationId) {
-  try {
-    const { data } = await api.delete(`/admin/station/${stationId}`);
-    return data;
-  } catch (err) {
-    handleError(`deleteStation(${stationId})`, err);
-  }
-}
-
-/**
- * Lista los archivos de media de una estación.
- * GET /api/station/{id}/files
- */
-async function listMedia(stationId) {
-  try {
-    const { data } = await api.get(`/station/${stationId}/files`);
-    return data;
-  } catch (err) {
-    handleError(`listMedia(${stationId})`, err);
-  }
-}
-
-/**
- * Sube un archivo de audio (base64) a la estación.
- * POST /api/station/{id}/files
- */
-async function uploadMedia(stationId, filename, base64) {
-  try {
-    const { data } = await api.post(`/station/${stationId}/files`, { path: filename, file: base64 });
-    return data;
-  } catch (err) {
-    handleError(`uploadMedia(${stationId})`, err);
-  }
-}
-
-/**
- * Elimina un archivo de media.
- * DELETE /api/station/{id}/file/{mediaId}
- */
-async function deleteMedia(stationId, mediaId) {
-  try {
-    const { data } = await api.delete(`/station/${stationId}/file/${mediaId}`);
-    return data;
-  } catch (err) {
-    handleError(`deleteMedia(${stationId}/${mediaId})`, err);
-  }
-}
-
-/**
- * Asigna un archivo a una o más playlists (para que el AutoDJ lo reproduzca).
- * PUT /api/station/{id}/file/{mediaId}
- */
-async function setFilePlaylists(stationId, mediaId, playlistIds) {
-  try {
-    const { data } = await api.put(`/station/${stationId}/file/${mediaId}`, { playlists: playlistIds });
-    return data;
-  } catch (err) {
-    handleError(`setFilePlaylists(${stationId}/${mediaId})`, err);
-  }
-}
-
-/**
- * Lista las playlists de una estación.
- * GET /api/station/{id}/playlists
- */
-async function getPlaylists(stationId) {
-  try {
-    const { data } = await api.get(`/station/${stationId}/playlists`);
-    return data;
-  } catch (err) {
-    handleError(`getPlaylists(${stationId})`, err);
-  }
-}
-
-/** Crea una playlist. POST /api/station/{id}/playlists */
-async function createPlaylist(stationId, data) {
-  try {
-    const res = await api.post(`/station/${stationId}/playlists`, data);
-    return res.data;
-  } catch (err) {
-    handleError(`createPlaylist(${stationId})`, err);
-  }
-}
-
-/** Actualiza una playlist (horario, activar/desactivar…). PUT /api/station/{id}/playlist/{plId} */
-async function updatePlaylist(stationId, plId, data) {
-  try {
-    const res = await api.put(`/station/${stationId}/playlist/${plId}`, data);
-    return res.data;
-  } catch (err) {
-    handleError(`updatePlaylist(${stationId}/${plId})`, err);
-  }
-}
-
-/** Elimina una playlist. DELETE /api/station/{id}/playlist/{plId} */
-async function deletePlaylist(stationId, plId) {
-  try {
-    const res = await api.delete(`/station/${stationId}/playlist/${plId}`);
-    return res.data;
-  } catch (err) {
-    handleError(`deletePlaylist(${stationId}/${plId})`, err);
-  }
-}
-
-/** Lista los webhooks (auto-post a redes). GET /api/station/{id}/webhooks */
-async function getWebhooks(stationId) {
-  try {
-    const { data } = await api.get(`/station/${stationId}/webhooks`);
-    return data;
-  } catch (err) {
-    handleError(`getWebhooks(${stationId})`, err);
-  }
-}
-
-/** Crea un webhook. POST /api/station/{id}/webhooks */
-async function createWebhook(stationId, data) {
-  try {
-    const res = await api.post(`/station/${stationId}/webhooks`, data);
-    return res.data;
-  } catch (err) {
-    handleError(`createWebhook(${stationId})`, err);
-  }
-}
-
-/** Activa/desactiva un webhook. PUT /api/station/{id}/webhook/{wid} */
-async function updateWebhook(stationId, wid, data) {
-  try {
-    const res = await api.put(`/station/${stationId}/webhook/${wid}`, data);
-    return res.data;
-  } catch (err) {
-    handleError(`updateWebhook(${stationId}/${wid})`, err);
-  }
-}
-
-/** Elimina un webhook. DELETE /api/station/{id}/webhook/{wid} */
-async function deleteWebhook(stationId, wid) {
-  try {
-    const res = await api.delete(`/station/${stationId}/webhook/${wid}`);
-    return res.data;
-  } catch (err) {
-    handleError(`deleteWebhook(${stationId}/${wid})`, err);
-  }
-}
-
-/** Oyentes en vivo de una estación. GET /api/station/{id}/listeners */
-async function getListeners(stationId) {
-  try {
-    const { data } = await api.get(`/station/${stationId}/listeners`);
-    return data;
-  } catch (err) {
-    handleError(`getListeners(${stationId})`, err);
-  }
-}
-
-/** Gráficas de audiencia (daily/hourly/day_of_week). GET /api/station/{id}/reports/overview/charts */
-async function getCharts(stationId) {
-  try {
-    const { data } = await api.get(`/station/${stationId}/reports/overview/charts`);
-    return data;
-  } catch (err) {
-    handleError(`getCharts(${stationId})`, err);
-  }
-}
-
-/** Canciones mejor/peor y más reproducidas. GET /api/station/{id}/reports/overview/best-and-worst */
-async function getBestWorst(stationId) {
-  try {
-    const { data } = await api.get(`/station/${stationId}/reports/overview/best-and-worst`);
-    return data;
-  } catch (err) {
-    handleError(`getBestWorst(${stationId})`, err);
-  }
-}
-
-/** NowPlaying de TODAS las estaciones (para totales del admin). GET /api/nowplaying */
-async function getNowPlayingAll() {
-  try {
-    const { data } = await api.get('/nowplaying');
-    return data;
-  } catch (err) {
-    handleError('getNowPlayingAll', err);
-  }
-}
-
-/** Actualiza una ubicación de almacenamiento (ej. cuota). PUT /api/admin/storage_location/{id} */
-async function updateStorageLocation(id, data) {
-  try {
-    const res = await api.put(`/admin/storage_location/${id}`, data);
-    return res.data;
-  } catch (err) {
-    handleError(`updateStorageLocation(${id})`, err);
-  }
-}
-
-/**
- * Métricas del servidor (VPS): CPU, memoria, disco, red.
- * GET /api/admin/server/stats
- */
-async function getServerStats() {
-  try {
-    const { data } = await api.get('/admin/server/stats');
-    return data;
-  } catch (err) {
-    handleError('getServerStats', err);
-  }
-}
-
-/**
- * Estado del backend/frontend de una estación (encendido/apagado).
- * GET /api/station/{id}/status
- */
-async function getStationStatus(stationId) {
-  try {
-    const { data } = await api.get(`/station/${stationId}/status`);
-    return data;
-  } catch (err) {
-    handleError(`getStationStatus(${stationId})`, err);
-  }
-}
-
-module.exports = {
-  api, // exportado por si se necesita una llamada puntual
-  getStation,
-  getStationAdmin,
-  getNowPlaying,
-  createStation,
-  updateStation,
-  getMounts,
-  createMount,
-  updateMount,
-  createStreamer,
-  getStreamers,
-  updateStreamer,
-  restartStation,
-  stopStation,
-  skipSong,
-  deleteStation,
-  listMedia,
-  uploadMedia,
-  deleteMedia,
-  setFilePlaylists,
-  getPlaylists,
-  createPlaylist,
-  updatePlaylist,
-  deletePlaylist,
-  updateStorageLocation,
-  getServerStats,
-  getStationStatus,
-  getListeners,
-  getCharts,
-  getBestWorst,
-  getNowPlayingAll,
-  getWebhooks,
-  createWebhook,
-  updateWebhook,
-  deleteWebhook,
-};
+module.exports = { ...porDefecto, crearCliente, paraServidorId, porDefecto };

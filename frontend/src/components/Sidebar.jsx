@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../auth';
 import {
   IconDashboard, IconUsers, IconRadio, IconInvoice, IconChart,
-  IconMic, IconMusic, IconPlaylist, IconSliders, IconSettings, IconShare,
+  IconMic, IconMusic, IconPlaylist, IconSliders, IconSettings, IconShare, IconServer,
 } from '../icons';
 
 // `to` = ruta real (navegable). `soon` = aún no implementado (atenuado).
@@ -14,7 +14,8 @@ const MENUS = {
       { label: 'Revendedores', icon: IconShare, to: '/admin/revendedores' },
       { label: 'Planes', icon: IconInvoice, to: '/admin/planes' },
     ]},
-    { seccion: 'Negocio', items: [
+    { seccion: 'Infraestructura', items: [
+      { label: 'Servidores', icon: IconServer, to: '/admin/servidores' },
       { label: 'Estadísticas', icon: IconChart, to: '/admin/estadisticas' },
     ]},
   ],

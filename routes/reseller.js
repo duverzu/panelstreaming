@@ -13,6 +13,7 @@ const resellerModel = require('../models/resellerModel');
 const planModel = require('../models/planModel');
 const provisioning = require('../services/provisioning');
 const azuracast = require('../services/azuracast');
+const { agregarOyentes } = require('../services/stats');
 const { generateToken } = require('../services/auth');
 const authFactory = require('../middleware/auth');
 const isReseller = require('../middleware/isReseller');
@@ -30,6 +31,8 @@ async function clientePropio(req, id) {
   if (!cliente || cliente.reseller_id !== req.user.reseller_id) return null;
   return cliente;
 }
+/** Cliente AzuraCast del servidor de esa radio. */
+const azDe = (cliente) => azuracast.paraServidorId(cliente?.servidor_id);
 
 // ---- Perfil / cupo -----------------------------------------------
 router.get('/perfil', requireReseller, wrap(async (req, res) => {
@@ -81,29 +84,11 @@ router.delete('/planes/:id', requireReseller, wrap(async (req, res) => {
 // ---- Estadísticas del revendedor (sus radios) --------------------
 router.get('/estadisticas', requireReseller, wrap(async (req, res) => {
   const clientes = await clienteModel.findByReseller(req.user.reseller_id);
-  const porStation = {};
-  clientes.forEach((c) => { if (c.azuracast_station_id) porStation[c.azuracast_station_id] = c; });
-
-  let oyentes_totales = 0;
-  let al_aire = 0;
-  const ranking = [];
-  try {
-    const np = await azuracast.getNowPlayingAll();
-    (np || []).forEach((est) => {
-      const cli = porStation[est.station?.id];
-      if (!cli) return;
-      const oy = est.listeners?.current || 0;
-      oyentes_totales += oy;
-      if (est.is_online) al_aire += 1;
-      ranking.push({ cliente_id: cli.id, nombre: cli.nombre_empresa, oyentes: oy, online: !!est.is_online });
-    });
-    ranking.sort((a, b) => b.oyentes - a.oyentes);
-  } catch (e) { console.error('[reseller stats]', e.message); }
-
+  const { oyentes_totales, al_aire, ranking } = await agregarOyentes(clientes);
   res.json({
     total_radios: clientes.length,
     activas: clientes.filter((c) => c.activo).length,
-    estaciones: Object.keys(porStation).length,
+    estaciones: clientes.filter((c) => c.azuracast_station_id).length,
     oyentes_totales, al_aire, ranking,
   });
 }));
@@ -120,7 +105,8 @@ router.get('/clientes/estados', requireReseller, wrap(async (req, res) => {
     if (!c.activo) { estados[c.id] = 'suspendido'; return; }
     if (!c.azuracast_station_id) { estados[c.id] = 'sin-estacion'; return; }
     try {
-      const st = await azuracast.getStationStatus(c.azuracast_station_id);
+      const az = await azDe(c);
+      const st = await az.getStationStatus(c.azuracast_station_id);
       estados[c.id] = st.backendRunning ? 'online' : 'offline';
     } catch { estados[c.id] = 'error'; }
   }));
@@ -162,7 +148,7 @@ router.delete('/clientes/:id', requireReseller, wrap(async (req, res) => {
   const cliente = await clientePropio(req, req.params.id);
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   if (cliente.azuracast_station_id) {
-    try { await azuracast.deleteStation(cliente.azuracast_station_id); } catch (e) { console.error(e.message); }
+    try { const az = await azDe(cliente); await az.deleteStation(cliente.azuracast_station_id); } catch (e) { console.error(e.message); }
   }
   await userModel.deleteById(cliente.user_id);
   res.json({ message: 'Cliente eliminado ✅' });
@@ -173,19 +159,21 @@ async function control(req, res, accion) {
   const cliente = await clientePropio(req, req.params.id);
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
-  await accion(cliente);
+  const az = await azDe(cliente);
+  await accion(cliente, az);
   res.json({ message: 'Listo ✅' });
 }
-router.post('/clientes/:id/iniciar', requireReseller, wrap((req, res) => control(req, res, (c) => azuracast.restartStation(c.azuracast_station_id))));
-router.post('/clientes/:id/parar', requireReseller, wrap((req, res) => control(req, res, (c) => azuracast.stopStation(c.azuracast_station_id))));
+router.post('/clientes/:id/iniciar', requireReseller, wrap((req, res) => control(req, res, (c, az) => az.restartStation(c.azuracast_station_id))));
+router.post('/clientes/:id/parar', requireReseller, wrap((req, res) => control(req, res, (c, az) => az.stopStation(c.azuracast_station_id))));
 
 router.post('/clientes/:id/suspender', requireReseller, wrap(async (req, res) => {
   const cliente = await clientePropio(req, req.params.id);
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   await clienteModel.update(cliente.id, { activo: false });
   if (cliente.azuracast_station_id) {
-    try { await azuracast.updateStation(cliente.azuracast_station_id, { is_enabled: false }); } catch (_) {}
-    try { await azuracast.stopStation(cliente.azuracast_station_id); } catch (_) {}
+    const az = await azDe(cliente);
+    try { await az.updateStation(cliente.azuracast_station_id, { is_enabled: false }); } catch (_) {}
+    try { await az.stopStation(cliente.azuracast_station_id); } catch (_) {}
   }
   res.json({ message: 'Cliente suspendido ✅' });
 }));
@@ -194,8 +182,9 @@ router.post('/clientes/:id/reactivar', requireReseller, wrap(async (req, res) =>
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   await clienteModel.update(cliente.id, { activo: true });
   if (cliente.azuracast_station_id) {
-    try { await azuracast.updateStation(cliente.azuracast_station_id, { is_enabled: true }); } catch (_) {}
-    try { await azuracast.restartStation(cliente.azuracast_station_id); } catch (_) {}
+    const az = await azDe(cliente);
+    try { await az.updateStation(cliente.azuracast_station_id, { is_enabled: true }); } catch (_) {}
+    try { await az.restartStation(cliente.azuracast_station_id); } catch (_) {}
   }
   res.json({ message: 'Cliente reactivado ✅' });
 }));

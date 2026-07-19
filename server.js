@@ -56,10 +56,18 @@ app.use('/api/reseller', resellerRoutes);
 app.use('/api/cliente', clienteRoutes);
 
 // ---- Reproductor embebible (iframe) — antes del fallback SPA ------
-app.get('/embed/:shortcode', (req, res) => {
+const clienteModel = require('./models/clienteModel');
+const azuracast = require('./services/azuracast');
+app.get('/embed/:shortcode', async (req, res) => {
   res.set('Content-Type', 'text/html; charset=utf-8');
   res.set('X-Frame-Options', 'ALLOWALL'); // permite embeber en cualquier sitio
-  res.send(embedPage(req.params.shortcode));
+  let baseURL = process.env.AZURACAST_BASE_URL;
+  try {
+    const cliente = await clienteModel.findByShortName(req.params.shortcode);
+    const az = await azuracast.paraServidorId(cliente?.servidor_id);
+    baseURL = az.baseURL;
+  } catch (_) {}
+  res.send(embedPage(req.params.shortcode, baseURL));
 });
 
 // ---- Frontend React compilado (frontend/dist) ---------------------

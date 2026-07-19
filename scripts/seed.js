@@ -13,6 +13,15 @@ const { pool, query } = require('../config/database');
 async function seed() {
   const hash = bcrypt.hashSync('123456', 10);
 
+  // --- Servidor AzuraCast principal (del .env) si no hay ninguno ---
+  const { rows: srv } = await query('SELECT id FROM servidores LIMIT 1');
+  if (srv.length === 0 && process.env.AZURACAST_BASE_URL) {
+    await query(
+      `INSERT INTO servidores (nombre, url, api_key, capacidad_radios) VALUES ('Principal', $1, $2, 100)`,
+      [process.env.AZURACAST_BASE_URL, process.env.AZURACAST_API_KEY || '']
+    );
+  }
+
   // --- Planes por defecto (idempotente por nombre) ---
   const planes = [
     { nombre: 'Básico',       precio: 9.99,  bitrate: 128, oyentes: 100,  mb: 1024,  mounts: 1, dj: false },

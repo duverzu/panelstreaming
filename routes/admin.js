@@ -15,8 +15,10 @@ const clienteModel = require('../models/clienteModel');
 const suscripcionModel = require('../models/suscripcionModel');
 const planModel = require('../models/planModel');
 const resellerModel = require('../models/resellerModel');
+const servidorModel = require('../models/servidorModel');
 const biblioteca = require('../services/biblioteca');
 const provisioning = require('../services/provisioning');
+const { agregarOyentes } = require('../services/stats');
 const { generateToken } = require('../services/auth');
 // generateToken se usa también para emitir tokens de cliente al impersonar
 const azuracast = require('../services/azuracast');
@@ -29,6 +31,9 @@ const requireAdmin = [authFactory('admin'), isAdmin];
 
 /** Envuelve un handler async para que los errores caigan en el manejador global. */
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+/** Cliente AzuraCast del servidor de esa radio. */
+const azDe = (cliente) => azuracast.paraServidorId(cliente?.servidor_id);
 
 /** Formatea bytes a algo legible (B/KB/MB/GB/TB). */
 function humanBytes(n) {
@@ -108,7 +113,8 @@ router.delete('/clientes/:id', requireAdmin, wrap(async (req, res) => {
   // Eliminar la estación en AzuraCast (si falla, seguimos borrando en la BD igual)
   if (cliente.azuracast_station_id) {
     try {
-      await azuracast.deleteStation(cliente.azuracast_station_id);
+      const az = await azDe(cliente);
+      await az.deleteStation(cliente.azuracast_station_id);
     } catch (err) {
       console.error('[DELETE cliente] no se pudo borrar estación:', err.message);
     }
@@ -152,7 +158,8 @@ router.get('/clientes/estados', requireAdmin, wrap(async (req, res) => {
     if (!c.activo) { estados[c.id] = 'suspendido'; return; }
     if (!c.azuracast_station_id) { estados[c.id] = 'sin-estacion'; return; }
     try {
-      const st = await azuracast.getStationStatus(c.azuracast_station_id);
+      const az = await azDe(c);
+      const st = await az.getStationStatus(c.azuracast_station_id);
       estados[c.id] = st.backendRunning ? 'online' : 'offline';
     } catch {
       estados[c.id] = 'error';
@@ -168,7 +175,8 @@ router.post('/clientes/:id/reaplicar-plan', requireAdmin, wrap(async (req, res) 
   if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
   const plan = await planModel.findByNombre(cliente.plan);
   if (!plan) return res.status(400).json({ error: `El plan "${cliente.plan}" ya no existe` });
-  await provisioning.aplicarLimitesPlan(cliente.azuracast_station_id, plan);
+  const az = await azDe(cliente);
+  await provisioning.aplicarLimitesPlan(cliente.azuracast_station_id, plan, az);
   res.json({ message: 'Límites del plan re-aplicados ✅' });
 }));
 
@@ -177,7 +185,8 @@ router.post('/clientes/:id/iniciar', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
-  await azuracast.restartStation(cliente.azuracast_station_id);
+  const az = await azDe(cliente);
+  await az.restartStation(cliente.azuracast_station_id);
   res.json({ message: 'Estación al aire ✅' });
 }));
 
@@ -186,7 +195,8 @@ router.post('/clientes/:id/biblioteca', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
-  const r = await biblioteca.copiarAEstacion(cliente.azuracast_station_id);
+  const az = await azDe(cliente);
+  const r = await biblioteca.copiarAEstacion(cliente.azuracast_station_id, az);
   if (!r.total) return res.json({ message: 'No hay música en la biblioteca del servidor todavía.', ...r });
   res.json({ message: `Música de cortesía agregada: ${r.copiados}/${r.total} tracks ✅`, ...r });
 }));
@@ -196,7 +206,8 @@ router.post('/clientes/:id/parar', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
-  await azuracast.stopStation(cliente.azuracast_station_id);
+  const az = await azDe(cliente);
+  await az.stopStation(cliente.azuracast_station_id);
   res.json({ message: 'Transmisión detenida ✅' });
 }));
 
@@ -206,8 +217,9 @@ router.post('/clientes/:id/suspender', requireAdmin, wrap(async (req, res) => {
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   await clienteModel.update(cliente.id, { activo: false });
   if (cliente.azuracast_station_id) {
-    try { await azuracast.updateStation(cliente.azuracast_station_id, { is_enabled: false }); } catch (_) {}
-    try { await azuracast.stopStation(cliente.azuracast_station_id); } catch (_) {}
+    const az = await azDe(cliente);
+    try { await az.updateStation(cliente.azuracast_station_id, { is_enabled: false }); } catch (_) {}
+    try { await az.stopStation(cliente.azuracast_station_id); } catch (_) {}
   }
   res.json({ message: 'Cliente suspendido ✅' });
 }));
@@ -218,8 +230,9 @@ router.post('/clientes/:id/reactivar', requireAdmin, wrap(async (req, res) => {
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   await clienteModel.update(cliente.id, { activo: true });
   if (cliente.azuracast_station_id) {
-    try { await azuracast.updateStation(cliente.azuracast_station_id, { is_enabled: true }); } catch (_) {}
-    try { await azuracast.restartStation(cliente.azuracast_station_id); } catch (_) {}
+    const az = await azDe(cliente);
+    try { await az.updateStation(cliente.azuracast_station_id, { is_enabled: true }); } catch (_) {}
+    try { await az.restartStation(cliente.azuracast_station_id); } catch (_) {}
   }
   res.json({ message: 'Cliente reactivado ✅' });
 }));
@@ -232,7 +245,8 @@ router.get('/clientes/:id/estacion', requireAdmin, wrap(async (req, res) => {
   }
 
   try {
-    const station = await azuracast.getStation(cliente.azuracast_station_id);
+    const az = await azDe(cliente);
+    const station = await az.getStation(cliente.azuracast_station_id);
     res.json({ station });
   } catch (err) {
     res.status(err.status || 502).json({ error: err.message });
@@ -294,30 +308,8 @@ router.get('/servidor', requireAdmin, wrap(async (req, res) => {
 router.get('/estadisticas', requireAdmin, wrap(async (req, res) => {
   const s = await clienteModel.stats();
 
-  // Oyentes reales + ranking desde el nowplaying global de AzuraCast
-  let oyentes_totales = 0;
-  let al_aire = 0;
-  let ranking = [];
-  try {
-    const clientes = await clienteModel.findAllWithEmail();
-    const porStation = {};
-    clientes.forEach((c) => { if (c.azuracast_station_id) porStation[c.azuracast_station_id] = c; });
-
-    const np = await azuracast.getNowPlayingAll();
-    (np || []).forEach((est) => {
-      const stId = est.station?.id;
-      const cli = porStation[stId];
-      if (!cli) return;
-      const oyentes = est.listeners?.current || 0;
-      oyentes_totales += oyentes;
-      if (est.is_online) al_aire += 1;
-      ranking.push({ cliente_id: cli.id, nombre: cli.nombre_empresa, oyentes, online: !!est.is_online });
-    });
-    ranking.sort((a, b) => b.oyentes - a.oyentes);
-  } catch (err) {
-    console.error('[estadisticas] nowplaying global falló:', err.message);
-  }
-
+  const clientes = await clienteModel.findAllWithEmail();
+  const { oyentes_totales, al_aire, ranking } = await agregarOyentes(clientes);
   res.json({ ...s, oyentes_totales, al_aire, ranking });
 }));
 
@@ -460,6 +452,50 @@ router.post('/resellers/:id/impersonar', requireAdmin, wrap(async (req, res) => 
   const user = await userModel.findById(reseller.user_id);
   const token = generateToken(user.id, 'reseller', { reseller_id: reseller.id, impersonated_by: req.user.sub });
   res.json({ token, reseller: { id: reseller.id, nombre_empresa: reseller.nombre_empresa, email: user.email } });
+}));
+
+// ==================================================================
+//  SERVIDORES (MULTI-SERVIDOR)
+// ==================================================================
+
+router.get('/servidores', requireAdmin, wrap(async (req, res) => {
+  res.json({ servidores: await servidorModel.findAllConUso() });
+}));
+
+/** POST /admin/servidores  body: { nombre, url, api_key, capacidad_radios } */
+router.post('/servidores', requireAdmin, wrap(async (req, res) => {
+  const { nombre, url, api_key, capacidad_radios = 100 } = req.body || {};
+  if (!nombre || !url || !api_key) return res.status(400).json({ error: 'nombre, url y api_key son requeridos' });
+  const limpio = String(url).replace(/\/+$/, ''); // sin barra final
+
+  // Verificar que responde antes de guardar
+  try {
+    await azuracast.crearCliente(limpio, api_key).getServerStats();
+  } catch (e) {
+    return res.status(400).json({ error: 'No se pudo conectar al servidor: ' + e.message });
+  }
+
+  const servidor = await servidorModel.create({ nombre, url: limpio, api_key, capacidad_radios: Number(capacidad_radios) });
+  res.status(201).json({ message: 'Servidor agregado ✅', servidor: { ...servidor, api_key: undefined } });
+}));
+
+router.put('/servidores/:id', requireAdmin, wrap(async (req, res) => {
+  const servidor = await servidorModel.findById(Number(req.params.id));
+  if (!servidor) return res.status(404).json({ error: 'Servidor no encontrado' });
+  const { nombre, url, api_key, capacidad_radios, activo } = req.body || {};
+  const num = (v) => (v === undefined ? undefined : Number(v));
+  const actualizado = await servidorModel.update(servidor.id, {
+    nombre, url: url ? String(url).replace(/\/+$/, '') : undefined, api_key,
+    capacidad_radios: num(capacidad_radios), activo: activo === undefined ? undefined : Boolean(activo),
+  });
+  res.json({ message: 'Servidor actualizado ✅', servidor: { ...actualizado, api_key: undefined } });
+}));
+
+router.delete('/servidores/:id', requireAdmin, wrap(async (req, res) => {
+  const servidor = await servidorModel.findById(Number(req.params.id));
+  if (!servidor) return res.status(404).json({ error: 'Servidor no encontrado' });
+  await servidorModel.deleteById(servidor.id);
+  res.json({ message: 'Servidor eliminado ✅ (sus radios quedan apuntando al servidor por defecto)' });
 }));
 
 module.exports = router;

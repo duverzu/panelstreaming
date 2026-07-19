@@ -6,8 +6,8 @@
  * consultando /api/public/nowplaying/:shortcode del mismo origen.
  * ------------------------------------------------------------------
  */
-function embedPage(shortcode) {
-  const base = process.env.AZURACAST_BASE_URL;
+function embedPage(shortcode, baseURL) {
+  const base = baseURL || process.env.AZURACAST_BASE_URL;
   const streamUrl = `${base}/listen/${shortcode}/radio.mp3`;
 
   return `<!DOCTYPE html>

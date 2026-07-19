@@ -31,13 +31,21 @@ async function create({
   azuracast_station_id = null,
   url_streaming = null,
   reseller_id = null,
+  servidor_id = null,
+  short_name = null,
 }) {
   const { rows } = await query(
-    `INSERT INTO clientes (user_id, nombre_empresa, plan, azuracast_station_id, url_streaming, reseller_id)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [user_id, nombre_empresa, plan, azuracast_station_id, url_streaming, reseller_id]
+    `INSERT INTO clientes (user_id, nombre_empresa, plan, azuracast_station_id, url_streaming, reseller_id, servidor_id, short_name)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [user_id, nombre_empresa, plan, azuracast_station_id, url_streaming, reseller_id, servidor_id, short_name]
   );
   return rows[0];
+}
+
+/** Busca un cliente por el shortcode de su estación (para reproductor/embed público). */
+async function findByShortName(shortName) {
+  const { rows } = await query('SELECT * FROM clientes WHERE short_name = $1 LIMIT 1', [shortName]);
+  return rows[0] || null;
 }
 
 /** Clientes de un revendedor (con email). */
@@ -90,4 +98,4 @@ async function stats() {
   return rows[0];
 }
 
-module.exports = { findAllWithEmail, findById, findByUserId, create, update, stats, findByReseller, countByReseller };
+module.exports = { findAllWithEmail, findById, findByUserId, findByShortName, create, update, stats, findByReseller, countByReseller };
