@@ -13,6 +13,7 @@ const TITULOS = {
   '/cliente/playlists': { title: 'Playlists', subtitle: 'Música, jingles/spots y programas por horario' },
   '/cliente/estadisticas': { title: 'Estadísticas', subtitle: 'Oyentes en vivo y audiencia de tu radio' },
   '/cliente/autodj': { title: 'AutoDJ', subtitle: 'Cómo suena tu radio en automático' },
+  '/cliente/reproductor': { title: 'Reproductor', subtitle: 'Pon tu radio en tu sitio web' },
   '/cliente/configuracion': { title: 'Configuración', subtitle: 'Tu radio y tu cuenta' },
 };
 

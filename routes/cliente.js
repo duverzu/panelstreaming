@@ -498,6 +498,27 @@ router.post('/dj/regenerar', requireCliente, wrap(async (req, res) => {
 }));
 
 // ==================================================================
+//  REPRODUCTOR / EMBED PARA LA WEB DEL CLIENTE
+// ==================================================================
+
+/** GET /cliente/reproductor — datos y links para poner la radio en su web */
+router.get('/reproductor', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.json({ reproductor: null });
+  const st = await azuracast.getStation(cliente.azuracast_station_id);
+  const shortcode = st.shortcode || st.short_name;
+  res.json({
+    reproductor: {
+      shortcode,
+      nombre: cliente.nombre_empresa,
+      stream_url: st.listen_url || `${process.env.AZURACAST_BASE_URL}/listen/${shortcode}/radio.mp3`,
+      pls_url: st.playlist_pls_url || null,
+      m3u_url: st.playlist_m3u_url || null,
+    },
+  });
+}));
+
+// ==================================================================
 //  AUTODJ
 // ==================================================================
 

@@ -16,6 +16,8 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const clienteRoutes = require('./routes/cliente');
+const publicRoutes = require('./routes/public');
+const embedPage = require('./services/embedPage');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,9 +48,17 @@ app.get('/api/health', (req, res) => {
   res.json({ name: 'Panel Radio Backend', status: 'ok' });
 });
 
+app.use('/api/public', publicRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/cliente', clienteRoutes);
+
+// ---- Reproductor embebible (iframe) — antes del fallback SPA ------
+app.get('/embed/:shortcode', (req, res) => {
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  res.set('X-Frame-Options', 'ALLOWALL'); // permite embeber en cualquier sitio
+  res.send(embedPage(req.params.shortcode));
+});
 
 // ---- Frontend React compilado (frontend/dist) ---------------------
 const FRONTEND_DIR = path.join(__dirname, 'frontend', 'dist');
