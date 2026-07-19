@@ -18,6 +18,7 @@ const MENUS = {
       { label: 'Servidores', icon: IconServer, to: '/admin/servidores' },
       { label: 'Estadísticas', icon: IconChart, to: '/admin/estadisticas' },
       { label: 'Documentación', icon: IconInvoice, to: '/admin/documentacion' },
+      { label: 'API / Integración', icon: IconShare, to: '/admin/api' },
     ]},
   ],
   reseller: [

@@ -11,6 +11,7 @@ const TITULOS = {
   '/admin/revendedores': { title: 'Revendedores', subtitle: 'Mayoristas y su cupo de radios' },
   '/admin/servidores': { title: 'Servidores', subtitle: 'Nodos AzuraCast y su capacidad' },
   '/admin/documentacion': { title: 'Documentación', subtitle: 'Guías del panel para tus clientes' },
+  '/admin/api': { title: 'API / Integración', subtitle: 'Conecta tu facturación (WHMCS u otro) para provisionar radios' },
   '/admin/estadisticas': { title: 'Estadísticas', subtitle: 'Audiencia y rendimiento del negocio' },
   '/reseller': { title: 'Dashboard', subtitle: 'Tu cupo y tus radios' },
   '/reseller/clientes': { title: 'Mis Radios', subtitle: 'Crea y gestiona tus estaciones' },

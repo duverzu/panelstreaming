@@ -18,6 +18,7 @@ const resellerModel = require('../models/resellerModel');
 const servidorModel = require('../models/servidorModel');
 const consumoModel = require('../models/consumoModel');
 const docModel = require('../models/docModel');
+const apiKeyModel = require('../models/apiKeyModel');
 const biblioteca = require('../services/biblioteca');
 const provisioning = require('../services/provisioning');
 const { agregarOyentes } = require('../services/stats');
@@ -563,6 +564,34 @@ router.delete('/docs/:id', requireAdmin, wrap(async (req, res) => {
   if (!existente) return res.status(404).json({ error: 'Artículo no encontrado' });
   await docModel.deleteById(existente.id);
   res.json({ message: 'Artículo eliminado ✅' });
+}));
+
+// ==================================================================
+//  LLAVES DE API (integración con facturación)
+// ==================================================================
+
+router.get('/api-keys', requireAdmin, wrap(async (req, res) => {
+  res.json({ keys: await apiKeyModel.findAll() });
+}));
+
+/** POST /admin/api-keys — genera una llave nueva (se muestra el token UNA vez). */
+router.post('/api-keys', requireAdmin, wrap(async (req, res) => {
+  const { nombre } = req.body || {};
+  if (!nombre) return res.status(400).json({ error: 'Ponle un nombre a la llave' });
+  const token = crypto.randomBytes(24).toString('hex');
+  const key = await apiKeyModel.create({ nombre, token });
+  res.status(201).json({ message: 'Llave creada ✅', key: { id: key.id, nombre: key.nombre }, token });
+}));
+
+router.put('/api-keys/:id', requireAdmin, wrap(async (req, res) => {
+  const k = await apiKeyModel.setActivo(Number(req.params.id), Boolean(req.body?.activo));
+  if (!k) return res.status(404).json({ error: 'Llave no encontrada' });
+  res.json({ message: 'Llave actualizada ✅', key: k });
+}));
+
+router.delete('/api-keys/:id', requireAdmin, wrap(async (req, res) => {
+  await apiKeyModel.deleteById(Number(req.params.id));
+  res.json({ message: 'Llave eliminada ✅' });
 }));
 
 module.exports = router;

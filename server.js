@@ -17,6 +17,7 @@ const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const resellerRoutes = require('./routes/reseller');
 const clienteRoutes = require('./routes/cliente');
+const provisionRoutes = require('./routes/provision');
 const publicRoutes = require('./routes/public');
 const embedPage = require('./services/embedPage');
 
@@ -54,6 +55,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reseller', resellerRoutes);
 app.use('/api/cliente', clienteRoutes);
+app.use('/api/provision', provisionRoutes);
 
 // ---- Reproductor embebible (iframe) — antes del fallback SPA ------
 const clienteModel = require('./models/clienteModel');

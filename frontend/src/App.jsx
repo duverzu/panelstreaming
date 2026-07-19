@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Aprende from './pages/Aprende';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminDocumentacion from './pages/admin/Documentacion';
+import AdminApiIntegracion from './pages/admin/ApiIntegracion';
 import AdminClientes from './pages/admin/Clientes';
 import AdminPlanes from './pages/admin/Planes';
 import AdminEstadisticas from './pages/admin/Estadisticas';
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="revendedores" element={<AdminRevendedores />} />
         <Route path="servidores" element={<AdminServidores />} />
         <Route path="documentacion" element={<AdminDocumentacion />} />
+        <Route path="api" element={<AdminApiIntegracion />} />
         <Route path="estadisticas" element={<AdminEstadisticas />} />
       </Route>
 

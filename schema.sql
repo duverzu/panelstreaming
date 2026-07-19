@@ -68,6 +68,16 @@ CREATE TABLE IF NOT EXISTS consumo_banda (
   PRIMARY KEY (servidor_id, fecha)
 );
 
+-- Llaves de API para integraciones externas (facturación tipo WHMCS).
+CREATE TABLE IF NOT EXISTS api_keys (
+  id         SERIAL PRIMARY KEY,
+  nombre     VARCHAR(120) NOT NULL,
+  token      VARCHAR(80)  NOT NULL UNIQUE,
+  activo     BOOLEAN      NOT NULL DEFAULT true,
+  ultimo_uso TIMESTAMPTZ,
+  created_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
 -- Documentación / centro de ayuda (artículos que edita el admin).
 CREATE TABLE IF NOT EXISTS documentacion (
   id         SERIAL PRIMARY KEY,
