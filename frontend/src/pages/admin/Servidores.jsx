@@ -8,7 +8,7 @@ export default function AdminServidores() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ nombre: '', url: '', api_key: '', capacidad_radios: 100 });
+  const [form, setForm] = useState({ nombre: '', url: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0 });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -19,14 +19,14 @@ export default function AdminServidores() {
   }
   useEffect(() => { cargar(); }, []);
 
-  function abrirCrear() { setEditId(null); setForm({ nombre: '', url: '', api_key: '', capacidad_radios: 100 }); setError(null); setOpen(true); }
-  function abrirEditar(s) { setEditId(s.id); setForm({ nombre: s.nombre, url: s.url, api_key: '', capacidad_radios: s.capacidad_radios }); setError(null); setOpen(true); }
+  function abrirCrear() { setEditId(null); setForm({ nombre: '', url: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0 }); setError(null); setOpen(true); }
+  function abrirEditar(s) { setEditId(s.id); setForm({ nombre: s.nombre, url: s.url, api_key: '', capacidad_radios: s.capacidad_radios, banda_mensual_gb: s.banda_mensual_gb || 0 }); setError(null); setOpen(true); }
 
   async function guardar(e) {
     e.preventDefault();
     setSaving(true); setError(null);
     try {
-      const payload = { nombre: form.nombre, url: form.url, capacidad_radios: Number(form.capacidad_radios) };
+      const payload = { nombre: form.nombre, url: form.url, capacidad_radios: Number(form.capacidad_radios), banda_mensual_gb: Number(form.banda_mensual_gb) };
       if (form.api_key) payload.api_key = form.api_key;
       if (editId) await apiFetch('/admin/servidores/' + editId, { method: 'PUT', body: JSON.stringify(payload) });
       else await apiFetch('/admin/servidores', { method: 'POST', body: JSON.stringify(payload) });
@@ -106,7 +106,11 @@ export default function AdminServidores() {
             <label className="label">API Key {editId && <span className="text-gray-400">(dejar vacío para no cambiar)</span>}</label>
             <input className="input" value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })} placeholder="xxxx:yyyy" required={!editId} />
           </div>
-          <div><label className="label">Capacidad (radios)</label><input className="input" type="number" min="1" value={form.capacidad_radios} onChange={(e) => setForm({ ...form, capacidad_radios: e.target.value })} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Capacidad (radios)</label><input className="input" type="number" min="1" value={form.capacidad_radios} onChange={(e) => setForm({ ...form, capacidad_radios: e.target.value })} /></div>
+            <div><label className="label">Banda mensual (GB)</label><input className="input" type="number" min="0" value={form.banda_mensual_gb} onChange={(e) => setForm({ ...form, banda_mensual_gb: e.target.value })} placeholder="Ej: 32000 = 32 TB" /></div>
+          </div>
+          <p className="text-xs text-gray-400 -mt-1">Banda mensual = el tope de tu VPS en Hostinger (para las alertas del Guardián).</p>
           {error && <div className="text-sm rounded-xl px-3 py-2 text-red-600 bg-red-50 dark:bg-red-500/10">{error}</div>}
           <p className="text-xs text-gray-400">Al guardar se verifica que el servidor responda con esa API key.</p>
           <div className="flex gap-2 pt-1">

@@ -57,6 +57,17 @@ CREATE TABLE IF NOT EXISTS servidores (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Tope de banda mensual del servidor (GB). 0 = sin tope definido.
+ALTER TABLE servidores ADD COLUMN IF NOT EXISTS banda_mensual_gb INTEGER NOT NULL DEFAULT 0;
+
+-- Consumo de banda por servidor y día (lo llena el Guardián de Banda).
+CREATE TABLE IF NOT EXISTS consumo_banda (
+  servidor_id INTEGER NOT NULL REFERENCES servidores(id) ON DELETE CASCADE,
+  fecha       DATE    NOT NULL,
+  bytes       BIGINT  NOT NULL DEFAULT 0,
+  PRIMARY KEY (servidor_id, fecha)
+);
+
 -- Dueño del plan: NULL = plan global (del admin); si no, es de un revendedor.
 ALTER TABLE planes ADD COLUMN IF NOT EXISTS reseller_id INTEGER REFERENCES resellers(id) ON DELETE CASCADE;
 

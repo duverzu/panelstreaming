@@ -3,6 +3,7 @@ import { apiFetch } from '../../api';
 import StatCard from '../../components/StatCard';
 import ServerStats from '../../components/ServerStats';
 import OverviewBar from '../../components/OverviewBar';
+import GuardianBanda from '../../components/GuardianBanda';
 import Player from '../../components/Player';
 import { IconUsers, IconRadio, IconChart } from '../../icons';
 
@@ -31,6 +32,9 @@ export default function AdminDashboard() {
         <StatCard label="Estaciones" value={stats?.estaciones ?? '–'} icon={IconRadio} color="blue" hint="en AzuraCast" />
         <StatCard label="Oyentes" value={stats?.oyentes_totales ?? 0} icon={IconChart} color="violet" hint="en vivo" />
       </div>
+
+      {/* Guardián de banda */}
+      <GuardianBanda />
 
       {/* Monitoreo: VPS + player */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

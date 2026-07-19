@@ -16,6 +16,7 @@ const suscripcionModel = require('../models/suscripcionModel');
 const planModel = require('../models/planModel');
 const resellerModel = require('../models/resellerModel');
 const servidorModel = require('../models/servidorModel');
+const consumoModel = require('../models/consumoModel');
 const biblioteca = require('../services/biblioteca');
 const provisioning = require('../services/provisioning');
 const { agregarOyentes } = require('../services/stats');
@@ -455,6 +456,36 @@ router.post('/resellers/:id/impersonar', requireAdmin, wrap(async (req, res) => 
 }));
 
 // ==================================================================
+//  GUARDIÁN DE BANDA
+// ==================================================================
+
+/** GET /admin/banda — consumo del mes por servidor + gráfica diaria. */
+router.get('/banda', requireAdmin, wrap(async (req, res) => {
+  const servidores = await servidorModel.findAllConUso();
+  const GB = 1024 ** 3;
+  const out = [];
+  for (const s of servidores) {
+    const dias = await consumoModel.mesActual(s.id);
+    const bytes = dias.reduce((a, d) => a + Number(d.bytes), 0);
+    const gb = bytes / GB;
+    const tope = s.banda_mensual_gb || 0;
+    out.push({
+      id: s.id,
+      nombre: s.nombre,
+      activo: s.activo,
+      consumido_gb: Math.round(gb * 100) / 100,
+      tope_gb: tope,
+      pct: tope ? Math.min(100, Math.round((gb / tope) * 100)) : null,
+      por_dia: dias.map((d) => ({
+        dia: new Date(d.fecha).getUTCDate(),
+        gb: Math.round((Number(d.bytes) / GB) * 100) / 100,
+      })),
+    });
+  }
+  res.json({ servidores: out });
+}));
+
+// ==================================================================
 //  SERVIDORES (MULTI-SERVIDOR)
 // ==================================================================
 
@@ -464,7 +495,7 @@ router.get('/servidores', requireAdmin, wrap(async (req, res) => {
 
 /** POST /admin/servidores  body: { nombre, url, api_key, capacidad_radios } */
 router.post('/servidores', requireAdmin, wrap(async (req, res) => {
-  const { nombre, url, api_key, capacidad_radios = 100 } = req.body || {};
+  const { nombre, url, api_key, capacidad_radios = 100, banda_mensual_gb = 0 } = req.body || {};
   if (!nombre || !url || !api_key) return res.status(400).json({ error: 'nombre, url y api_key son requeridos' });
   const limpio = String(url).replace(/\/+$/, ''); // sin barra final
 
@@ -475,18 +506,19 @@ router.post('/servidores', requireAdmin, wrap(async (req, res) => {
     return res.status(400).json({ error: 'No se pudo conectar al servidor: ' + e.message });
   }
 
-  const servidor = await servidorModel.create({ nombre, url: limpio, api_key, capacidad_radios: Number(capacidad_radios) });
+  const servidor = await servidorModel.create({ nombre, url: limpio, api_key, capacidad_radios: Number(capacidad_radios), banda_mensual_gb: Number(banda_mensual_gb) });
   res.status(201).json({ message: 'Servidor agregado ✅', servidor: { ...servidor, api_key: undefined } });
 }));
 
 router.put('/servidores/:id', requireAdmin, wrap(async (req, res) => {
   const servidor = await servidorModel.findById(Number(req.params.id));
   if (!servidor) return res.status(404).json({ error: 'Servidor no encontrado' });
-  const { nombre, url, api_key, capacidad_radios, activo } = req.body || {};
+  const { nombre, url, api_key, capacidad_radios, banda_mensual_gb, activo } = req.body || {};
   const num = (v) => (v === undefined ? undefined : Number(v));
   const actualizado = await servidorModel.update(servidor.id, {
     nombre, url: url ? String(url).replace(/\/+$/, '') : undefined, api_key,
-    capacidad_radios: num(capacidad_radios), activo: activo === undefined ? undefined : Boolean(activo),
+    capacidad_radios: num(capacidad_radios), banda_mensual_gb: num(banda_mensual_gb),
+    activo: activo === undefined ? undefined : Boolean(activo),
   });
   res.json({ message: 'Servidor actualizado ✅', servidor: { ...actualizado, api_key: undefined } });
 }));

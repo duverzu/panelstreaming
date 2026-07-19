@@ -95,6 +95,13 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: err.message || 'Error interno del servidor' });
 });
 
+// ---- Guardián de banda (muestreo periódico) ----------------------
+try {
+  require('./services/guardian').iniciar();
+} catch (e) {
+  console.error('[guardian] no se pudo iniciar:', e.message);
+}
+
 // ---- Arranque -----------------------------------------------------
 app.listen(PORT, () => {
   console.log(`\n🎙️  Panel Radio Backend en http://localhost:${PORT}`);

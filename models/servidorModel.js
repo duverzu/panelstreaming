@@ -11,7 +11,7 @@ async function findById(id) {
 /** Todos los servidores con su nº de radios asignadas (oculta la api_key). */
 async function findAllConUso() {
   const { rows } = await query(
-    `SELECT s.id, s.nombre, s.url, s.capacidad_radios, s.activo, s.created_at,
+    `SELECT s.id, s.nombre, s.url, s.capacidad_radios, s.banda_mensual_gb, s.activo, s.created_at,
             (SELECT COUNT(*)::int FROM clientes c WHERE c.servidor_id = s.id) AS radios
        FROM servidores s ORDER BY s.id`
   );
@@ -33,16 +33,16 @@ async function elegirServidor() {
   return s;
 }
 
-async function create({ nombre, url, api_key, capacidad_radios = 100 }) {
+async function create({ nombre, url, api_key, capacidad_radios = 100, banda_mensual_gb = 0 }) {
   const { rows } = await query(
-    `INSERT INTO servidores (nombre, url, api_key, capacidad_radios) VALUES ($1,$2,$3,$4) RETURNING *`,
-    [nombre, url, api_key, capacidad_radios]
+    `INSERT INTO servidores (nombre, url, api_key, capacidad_radios, banda_mensual_gb) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+    [nombre, url, api_key, capacidad_radios, banda_mensual_gb]
   );
   return rows[0];
 }
 
 async function update(id, fields) {
-  const allowed = ['nombre', 'url', 'api_key', 'capacidad_radios', 'activo'];
+  const allowed = ['nombre', 'url', 'api_key', 'capacidad_radios', 'banda_mensual_gb', 'activo'];
   const sets = [];
   const values = [];
   let i = 1;
