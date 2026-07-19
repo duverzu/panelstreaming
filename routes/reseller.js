@@ -51,9 +51,9 @@ router.get('/perfil', requireReseller, wrap(async (req, res) => {
   });
 }));
 
-// ---- Planes: globales (del admin) + los propios del revendedor ----
+// ---- Planes: SOLO los del revendedor (crea su propio catálogo) ----
 router.get('/planes', requireReseller, wrap(async (req, res) => {
-  res.json({ planes: await planModel.findParaReseller(req.user.reseller_id) });
+  res.json({ planes: await planModel.findDeReseller(req.user.reseller_id) });
 }));
 
 router.post('/planes', requireReseller, wrap(async (req, res) => {
@@ -139,9 +139,11 @@ router.post('/clientes/crear', requireReseller, wrap(async (req, res) => {
 
   const { email, password, nombre_empresa, plan_id } = req.body || {};
 
-  // Verificar límites agregados de la cuenta (oyentes y espacio totales)
+  // El plan debe ser uno propio del revendedor
   const plan = await planModel.findById(Number(plan_id));
-  if (!plan) return res.status(400).json({ error: 'Plan no encontrado' });
+  if (!plan || plan.reseller_id !== reseller.id) {
+    return res.status(400).json({ error: 'Debes usar uno de tus propios planes. Crea uno en "Mis Planes".' });
+  }
   const uso = await resellerModel.usoRecursos(reseller.id);
   if (uso.oyentes + plan.max_oyentes > reseller.max_oyentes_total) {
     return res.status(403).json({ error: `Sin oyentes disponibles: usarías ${uso.oyentes + plan.max_oyentes}/${reseller.max_oyentes_total}. Elige un plan menor o pide más al administrador.` });

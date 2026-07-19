@@ -19,12 +19,9 @@ async function findGlobales() {
   return rows.map(normaliza);
 }
 
-/** Planes disponibles para un revendedor: globales + los suyos. */
-async function findParaReseller(resellerId) {
-  const { rows } = await query(
-    'SELECT * FROM planes WHERE reseller_id IS NULL OR reseller_id = $1 ORDER BY reseller_id NULLS FIRST, id',
-    [resellerId]
-  );
+/** Solo los planes propios de un revendedor. */
+async function findDeReseller(resellerId) {
+  const { rows } = await query('SELECT * FROM planes WHERE reseller_id = $1 ORDER BY id', [resellerId]);
   return rows.map(normaliza);
 }
 
@@ -69,4 +66,4 @@ async function deleteById(id) {
   await query('DELETE FROM planes WHERE id = $1', [id]);
 }
 
-module.exports = { findAll, findGlobales, findParaReseller, findById, findByNombre, create, update, deleteById };
+module.exports = { findAll, findGlobales, findDeReseller, findById, findByNombre, create, update, deleteById };

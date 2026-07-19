@@ -60,6 +60,12 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
 
       {loading ? (
         <div className="card p-8 text-center text-gray-400">Cargando…</div>
+      ) : planes.length === 0 ? (
+        <div className="card p-10 text-center">
+          <div className="text-3xl mb-2">📋</div>
+          <p className="text-gray-500">{esRevendedor ? 'Aún no tienes planes. Crea tu primer plan para poder crear radios.' : 'Sin planes todavía'}</p>
+          <button onClick={abrirCrear} className="btn-primary mt-4 inline-flex"><IconPlus width={16} height={16} /> Crear plan</button>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {planes.map((p) => (
