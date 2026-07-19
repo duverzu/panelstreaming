@@ -320,6 +320,46 @@ async function deletePlaylist(stationId, plId) {
   }
 }
 
+/** Lista los webhooks (auto-post a redes). GET /api/station/{id}/webhooks */
+async function getWebhooks(stationId) {
+  try {
+    const { data } = await api.get(`/station/${stationId}/webhooks`);
+    return data;
+  } catch (err) {
+    handleError(`getWebhooks(${stationId})`, err);
+  }
+}
+
+/** Crea un webhook. POST /api/station/{id}/webhooks */
+async function createWebhook(stationId, data) {
+  try {
+    const res = await api.post(`/station/${stationId}/webhooks`, data);
+    return res.data;
+  } catch (err) {
+    handleError(`createWebhook(${stationId})`, err);
+  }
+}
+
+/** Activa/desactiva un webhook. PUT /api/station/{id}/webhook/{wid} */
+async function updateWebhook(stationId, wid, data) {
+  try {
+    const res = await api.put(`/station/${stationId}/webhook/${wid}`, data);
+    return res.data;
+  } catch (err) {
+    handleError(`updateWebhook(${stationId}/${wid})`, err);
+  }
+}
+
+/** Elimina un webhook. DELETE /api/station/{id}/webhook/{wid} */
+async function deleteWebhook(stationId, wid) {
+  try {
+    const res = await api.delete(`/station/${stationId}/webhook/${wid}`);
+    return res.data;
+  } catch (err) {
+    handleError(`deleteWebhook(${stationId}/${wid})`, err);
+  }
+}
+
 /** Oyentes en vivo de una estación. GET /api/station/{id}/listeners */
 async function getListeners(stationId) {
   try {
@@ -417,4 +457,8 @@ module.exports = {
   getCharts,
   getBestWorst,
   getNowPlayingAll,
+  getWebhooks,
+  createWebhook,
+  updateWebhook,
+  deleteWebhook,
 };

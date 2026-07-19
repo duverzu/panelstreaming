@@ -14,6 +14,7 @@ const TITULOS = {
   '/cliente/estadisticas': { title: 'Estadísticas', subtitle: 'Oyentes en vivo y audiencia de tu radio' },
   '/cliente/autodj': { title: 'AutoDJ', subtitle: 'Cómo suena tu radio en automático' },
   '/cliente/reproductor': { title: 'Reproductor', subtitle: 'Pon tu radio en tu sitio web' },
+  '/cliente/redes': { title: 'Redes Sociales', subtitle: 'Publica automáticamente lo que suena' },
   '/cliente/configuracion': { title: 'Configuración', subtitle: 'Tu radio y tu cuenta' },
 };
 

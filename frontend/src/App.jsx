@@ -12,6 +12,7 @@ import ClientePlaylists from './pages/cliente/Playlists';
 import ClienteEstadisticas from './pages/cliente/Estadisticas';
 import ClienteAutoDJ from './pages/cliente/AutoDJ';
 import ClienteReproductor from './pages/cliente/Reproductor';
+import ClienteRedes from './pages/cliente/Redes';
 import ClienteConfiguracion from './pages/cliente/Configuracion';
 
 /** Ruta protegida por rol. */
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="playlists" element={<ClientePlaylists />} />
         <Route path="autodj" element={<ClienteAutoDJ />} />
         <Route path="reproductor" element={<ClienteReproductor />} />
+        <Route path="redes" element={<ClienteRedes />} />
         <Route path="estadisticas" element={<ClienteEstadisticas />} />
         <Route path="configuracion" element={<ClienteConfiguracion />} />
       </Route>

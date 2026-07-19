@@ -498,6 +498,62 @@ router.post('/dj/regenerar', requireCliente, wrap(async (req, res) => {
 }));
 
 // ==================================================================
+//  REDES SOCIALES (auto-post "ahora suena" vía webhooks de AzuraCast)
+// ==================================================================
+
+const REDES_VALIDAS = ['discord', 'telegram', 'twitter', 'mastodon'];
+
+/** GET /cliente/redes */
+router.get('/redes', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.json({ redes: [] });
+  const whs = await azuracast.getWebhooks(cliente.azuracast_station_id);
+  const redes = (whs || [])
+    .filter((w) => REDES_VALIDAS.includes(w.type))
+    .map((w) => ({ id: w.id, nombre: w.name, tipo: w.type, activa: w.is_enabled }));
+  res.json({ redes });
+}));
+
+/**
+ * POST /cliente/redes
+ * body: { tipo: 'discord'|'telegram', config: {...} }
+ *  - discord: { webhook_url }
+ *  - telegram: { bot_token, chat_id }
+ */
+router.post('/redes', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
+  const { tipo, config } = req.body || {};
+  if (!REDES_VALIDAS.includes(tipo)) return res.status(400).json({ error: 'Red no soportada' });
+
+  const nombres = { discord: 'Discord', telegram: 'Telegram', twitter: 'Twitter/X', mastodon: 'Mastodon' };
+  const wh = await azuracast.createWebhook(cliente.azuracast_station_id, {
+    name: nombres[tipo],
+    type: tipo,
+    triggers: ['song_changed'],
+    config: config || {},
+    is_enabled: true,
+  });
+  res.status(201).json({ message: 'Red conectada ✅', red: { id: wh.id, tipo } });
+}));
+
+/** PUT /cliente/redes/:id — activar/pausar (body: { activa }) */
+router.put('/redes/:id', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
+  await azuracast.updateWebhook(cliente.azuracast_station_id, req.params.id, { is_enabled: Boolean(req.body?.activa) });
+  res.json({ message: 'Red actualizada ✅' });
+}));
+
+/** DELETE /cliente/redes/:id */
+router.delete('/redes/:id', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
+  await azuracast.deleteWebhook(cliente.azuracast_station_id, req.params.id);
+  res.json({ message: 'Red desconectada ✅' });
+}));
+
+// ==================================================================
 //  REPRODUCTOR / EMBED PARA LA WEB DEL CLIENTE
 // ==================================================================
 
