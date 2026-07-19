@@ -51,9 +51,61 @@ router.get('/perfil', requireReseller, wrap(async (req, res) => {
   });
 }));
 
-// ---- Planes disponibles (para crear) -----------------------------
+// ---- Planes: globales (del admin) + los propios del revendedor ----
 router.get('/planes', requireReseller, wrap(async (req, res) => {
-  res.json({ planes: await planModel.findAll() });
+  res.json({ planes: await planModel.findParaReseller(req.user.reseller_id) });
+}));
+
+router.post('/planes', requireReseller, wrap(async (req, res) => {
+  if (!req.body?.nombre) return res.status(400).json({ error: 'nombre es requerido' });
+  const plan = await planModel.create({ ...req.body, reseller_id: req.user.reseller_id });
+  res.status(201).json({ message: 'Plan creado ✅', plan });
+}));
+
+router.put('/planes/:id', requireReseller, wrap(async (req, res) => {
+  const plan = await planModel.findById(Number(req.params.id));
+  if (!plan) return res.status(404).json({ error: 'Plan no encontrado' });
+  if (plan.reseller_id !== req.user.reseller_id) return res.status(403).json({ error: 'Solo puedes editar tus propios planes' });
+  const actualizado = await planModel.update(plan.id, req.body || {});
+  res.json({ message: 'Plan actualizado ✅', plan: actualizado });
+}));
+
+router.delete('/planes/:id', requireReseller, wrap(async (req, res) => {
+  const plan = await planModel.findById(Number(req.params.id));
+  if (!plan) return res.status(404).json({ error: 'Plan no encontrado' });
+  if (plan.reseller_id !== req.user.reseller_id) return res.status(403).json({ error: 'Solo puedes eliminar tus propios planes' });
+  await planModel.deleteById(plan.id);
+  res.json({ message: 'Plan eliminado ✅' });
+}));
+
+// ---- Estadísticas del revendedor (sus radios) --------------------
+router.get('/estadisticas', requireReseller, wrap(async (req, res) => {
+  const clientes = await clienteModel.findByReseller(req.user.reseller_id);
+  const porStation = {};
+  clientes.forEach((c) => { if (c.azuracast_station_id) porStation[c.azuracast_station_id] = c; });
+
+  let oyentes_totales = 0;
+  let al_aire = 0;
+  const ranking = [];
+  try {
+    const np = await azuracast.getNowPlayingAll();
+    (np || []).forEach((est) => {
+      const cli = porStation[est.station?.id];
+      if (!cli) return;
+      const oy = est.listeners?.current || 0;
+      oyentes_totales += oy;
+      if (est.is_online) al_aire += 1;
+      ranking.push({ cliente_id: cli.id, nombre: cli.nombre_empresa, oyentes: oy, online: !!est.is_online });
+    });
+    ranking.sort((a, b) => b.oyentes - a.oyentes);
+  } catch (e) { console.error('[reseller stats]', e.message); }
+
+  res.json({
+    total_radios: clientes.length,
+    activas: clientes.filter((c) => c.activo).length,
+    estaciones: Object.keys(porStation).length,
+    oyentes_totales, al_aire, ranking,
+  });
 }));
 
 // ---- Sus clientes ------------------------------------------------

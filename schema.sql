@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS planes (
   created_at      TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 
+-- Dueño del plan: NULL = plan global (del admin); si no, es de un revendedor.
+ALTER TABLE planes ADD COLUMN IF NOT EXISTS reseller_id INTEGER REFERENCES resellers(id) ON DELETE CASCADE;
+
 -- Clientes (dueños de radio). Cada uno pertenece a un user.
 CREATE TABLE IF NOT EXISTS clientes (
   id                    SERIAL PRIMARY KEY,

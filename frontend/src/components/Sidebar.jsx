@@ -22,6 +22,8 @@ const MENUS = {
     { seccion: 'Gestión', items: [
       { label: 'Dashboard', icon: IconDashboard, to: '/reseller' },
       { label: 'Mis Radios', icon: IconUsers, to: '/reseller/clientes' },
+      { label: 'Mis Planes', icon: IconInvoice, to: '/reseller/planes' },
+      { label: 'Estadísticas', icon: IconChart, to: '/reseller/estadisticas' },
     ]},
   ],
   cliente: [

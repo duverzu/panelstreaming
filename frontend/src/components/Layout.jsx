@@ -12,6 +12,8 @@ const TITULOS = {
   '/admin/estadisticas': { title: 'Estadísticas', subtitle: 'Audiencia y rendimiento del negocio' },
   '/reseller': { title: 'Dashboard', subtitle: 'Tu cupo y tus radios' },
   '/reseller/clientes': { title: 'Mis Radios', subtitle: 'Crea y gestiona tus estaciones' },
+  '/reseller/planes': { title: 'Mis Planes', subtitle: 'Tus plantillas + las globales del sistema' },
+  '/reseller/estadisticas': { title: 'Estadísticas', subtitle: 'Audiencia de tus radios' },
   '/cliente/musica': { title: 'Música', subtitle: 'Tu biblioteca para el AutoDJ' },
   '/cliente/playlists': { title: 'Playlists', subtitle: 'Música, jingles/spots y programas por horario' },
   '/cliente/estadisticas': { title: 'Estadísticas', subtitle: 'Oyentes en vivo y audiencia de tu radio' },

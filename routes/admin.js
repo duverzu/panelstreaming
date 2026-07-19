@@ -371,7 +371,7 @@ router.put('/suscripciones/:id', requireAdmin, wrap(async (req, res) => {
 // ==================================================================
 
 router.get('/planes', requireAdmin, wrap(async (req, res) => {
-  const planes = await planModel.findAll();
+  const planes = await planModel.findGlobales();
   res.json({ planes });
 }));
 

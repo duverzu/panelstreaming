@@ -9,6 +9,8 @@ import AdminEstadisticas from './pages/admin/Estadisticas';
 import AdminRevendedores from './pages/admin/Revendedores';
 import ResellerDashboard from './pages/reseller/Dashboard';
 import ResellerClientes from './pages/reseller/Clientes';
+import ResellerPlanes from './pages/reseller/Planes';
+import ResellerEstadisticas from './pages/reseller/Estadisticas';
 import ClienteDashboard from './pages/cliente/Dashboard';
 import ClienteMusica from './pages/cliente/Musica';
 import ClientePlaylists from './pages/cliente/Playlists';
@@ -54,6 +56,8 @@ export default function App() {
       <Route path="/reseller" element={<Protected role="reseller"><Layout /></Protected>}>
         <Route index element={<ResellerDashboard />} />
         <Route path="clientes" element={<ResellerClientes />} />
+        <Route path="planes" element={<ResellerPlanes />} />
+        <Route path="estadisticas" element={<ResellerEstadisticas />} />
       </Route>
 
       {/* Panel Cliente */}

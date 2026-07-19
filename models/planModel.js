@@ -13,6 +13,21 @@ async function findAll() {
   return rows.map(normaliza);
 }
 
+/** Planes globales (del admin, reseller_id NULL). */
+async function findGlobales() {
+  const { rows } = await query('SELECT * FROM planes WHERE reseller_id IS NULL ORDER BY id');
+  return rows.map(normaliza);
+}
+
+/** Planes disponibles para un revendedor: globales + los suyos. */
+async function findParaReseller(resellerId) {
+  const { rows } = await query(
+    'SELECT * FROM planes WHERE reseller_id IS NULL OR reseller_id = $1 ORDER BY reseller_id NULLS FIRST, id',
+    [resellerId]
+  );
+  return rows.map(normaliza);
+}
+
 async function findById(id) {
   const { rows } = await query('SELECT * FROM planes WHERE id = $1 LIMIT 1', [id]);
   return normaliza(rows[0]) || null;
@@ -25,10 +40,10 @@ async function findByNombre(nombre) {
 
 async function create(p) {
   const { rows } = await query(
-    `INSERT INTO planes (nombre, precio_mensual, max_bitrate, max_oyentes, espacio_mb, max_mounts, permite_dj)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    `INSERT INTO planes (nombre, precio_mensual, max_bitrate, max_oyentes, espacio_mb, max_mounts, permite_dj, reseller_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
     [p.nombre, p.precio_mensual || 0, p.max_bitrate ?? 128, p.max_oyentes ?? 100,
-     p.espacio_mb ?? 1024, p.max_mounts ?? 1, p.permite_dj ?? true]
+     p.espacio_mb ?? 1024, p.max_mounts ?? 1, p.permite_dj ?? true, p.reseller_id ?? null]
   );
   return normaliza(rows[0]);
 }
@@ -54,4 +69,4 @@ async function deleteById(id) {
   await query('DELETE FROM planes WHERE id = $1', [id]);
 }
 
-module.exports = { findAll, findById, findByNombre, create, update, deleteById };
+module.exports = { findAll, findGlobales, findParaReseller, findById, findByNombre, create, update, deleteById };
