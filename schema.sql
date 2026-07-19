@@ -4,13 +4,27 @@
 --  Es idempotente: se puede correr varias veces sin romper nada.
 -- ==================================================================
 
--- Usuarios (admin y clientes comparten esta tabla, se distinguen por role)
+-- Usuarios (admin, revendedores y clientes comparten esta tabla, se distinguen por role)
 CREATE TABLE IF NOT EXISTS users (
   id            SERIAL PRIMARY KEY,
   email         VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  role          VARCHAR(20)  NOT NULL CHECK (role IN ('admin', 'cliente')),
+  role          VARCHAR(20)  NOT NULL,
   created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+-- Permitir el rol 'reseller' (actualiza el CHECK en BD existentes)
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'cliente', 'reseller'));
+
+-- Revendedores (mayoristas): crean sus propias radios hasta un cupo.
+CREATE TABLE IF NOT EXISTS resellers (
+  id             SERIAL PRIMARY KEY,
+  user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  nombre_empresa VARCHAR(255) NOT NULL,
+  cupo_radios    INTEGER NOT NULL DEFAULT 5,
+  activo         BOOLEAN NOT NULL DEFAULT true,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Planes / plantillas de radio (definidos por el super admin).
@@ -67,6 +81,9 @@ CREATE TABLE IF NOT EXISTS media (
 ALTER TABLE clientes ADD COLUMN IF NOT EXISTS dj_puerto   INTEGER;
 ALTER TABLE clientes ADD COLUMN IF NOT EXISTS dj_usuario  VARCHAR(100);
 ALTER TABLE clientes ADD COLUMN IF NOT EXISTS dj_password VARCHAR(100);
+
+-- Revendedor dueño del cliente (NULL = creado directo por el super admin)
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS reseller_id INTEGER REFERENCES resellers(id) ON DELETE SET NULL;
 
 -- Índices para búsquedas frecuentes
 CREATE INDEX IF NOT EXISTS idx_clientes_user_id     ON clientes(user_id);

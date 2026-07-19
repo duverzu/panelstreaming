@@ -34,8 +34,10 @@ export function clearSession() {
   Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
 }
 
-// --- Impersonación: respaldar/restaurar la sesión de admin ---
+// --- Impersonación: respaldar/restaurar la sesión original ---
+// No sobrescribe si ya hay un respaldo: así "Volver" regresa siempre al origen.
 export function backupAdmin() {
+  if (localStorage.getItem(KEYS.backup)) return;
   const backup = { token: getToken(), role: getRole(), user: getUser() };
   localStorage.setItem(KEYS.backup, JSON.stringify(backup));
 }

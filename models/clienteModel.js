@@ -30,13 +30,30 @@ async function create({
   plan = 'basico',
   azuracast_station_id = null,
   url_streaming = null,
+  reseller_id = null,
 }) {
   const { rows } = await query(
-    `INSERT INTO clientes (user_id, nombre_empresa, plan, azuracast_station_id, url_streaming)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [user_id, nombre_empresa, plan, azuracast_station_id, url_streaming]
+    `INSERT INTO clientes (user_id, nombre_empresa, plan, azuracast_station_id, url_streaming, reseller_id)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [user_id, nombre_empresa, plan, azuracast_station_id, url_streaming, reseller_id]
   );
   return rows[0];
+}
+
+/** Clientes de un revendedor (con email). */
+async function findByReseller(resellerId) {
+  const { rows } = await query(
+    `SELECT c.*, u.email FROM clientes c JOIN users u ON u.id = c.user_id
+     WHERE c.reseller_id = $1 ORDER BY c.id`,
+    [resellerId]
+  );
+  return rows;
+}
+
+/** Cuenta cuántas radios tiene un revendedor. */
+async function countByReseller(resellerId) {
+  const { rows } = await query('SELECT COUNT(*)::int AS n FROM clientes WHERE reseller_id = $1', [resellerId]);
+  return rows[0].n;
 }
 
 /** Actualiza solo los campos permitidos que vengan definidos. */
@@ -73,4 +90,4 @@ async function stats() {
   return rows[0];
 }
 
-module.exports = { findAllWithEmail, findById, findByUserId, create, update, stats };
+module.exports = { findAllWithEmail, findById, findByUserId, create, update, stats, findByReseller, countByReseller };

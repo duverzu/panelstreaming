@@ -15,6 +15,9 @@ const EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 function getSecret(role) {
   if (role === 'admin') return process.env.JWT_ADMIN_SECRET;
   if (role === 'cliente') return process.env.JWT_CLIENTE_SECRET;
+  // El secret de revendedor cae a uno derivado del de admin si no está definido
+  // (evita tener que editar el .env en servidores ya desplegados).
+  if (role === 'reseller') return process.env.JWT_RESELLER_SECRET || `${process.env.JWT_ADMIN_SECRET}_reseller`;
   throw new Error(`Rol desconocido para JWT: ${role}`);
 }
 

@@ -20,7 +20,7 @@ export default function Login() {
     setLoading(true);
     try {
       const role = await login(email.trim(), password);
-      navigate(role === 'admin' ? '/admin' : '/cliente', { replace: true });
+      navigate(role === 'admin' ? '/admin' : role === 'reseller' ? '/reseller' : '/cliente', { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {

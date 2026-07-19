@@ -14,7 +14,9 @@ const userModel = require('../models/userModel');
 const clienteModel = require('../models/clienteModel');
 const suscripcionModel = require('../models/suscripcionModel');
 const planModel = require('../models/planModel');
+const resellerModel = require('../models/resellerModel');
 const biblioteca = require('../services/biblioteca');
+const provisioning = require('../services/provisioning');
 const { generateToken } = require('../services/auth');
 // generateToken se usa también para emitir tokens de cliente al impersonar
 const azuracast = require('../services/azuracast');
@@ -77,103 +79,8 @@ router.get('/clientes', requireAdmin, wrap(async (req, res) => {
  */
 router.post('/clientes/crear', requireAdmin, wrap(async (req, res) => {
   const { email, password, nombre_empresa, plan_id } = req.body || {};
-  if (!email || !password || !nombre_empresa || !plan_id) {
-    return res.status(400).json({ error: 'email, password, nombre_empresa y plan_id son requeridos' });
-  }
-
-  const plan = await planModel.findById(Number(plan_id));
-  if (!plan) return res.status(400).json({ error: 'Plan no encontrado' });
-
-  const existente = await userModel.findByEmail(email);
-  if (existente) return res.status(409).json({ error: 'Ya existe un usuario con ese email' });
-
-  // 1) Crear usuario
-  const password_hash = await bcrypt.hash(password, 10);
-  const user = await userModel.create({ email, password_hash, role: 'cliente' });
-
-  // 2) Aprovisionar estación en AzuraCast aplicando los límites del plan
-  let station;
-  const dj = {}; // datos de conexión DJ que guardaremos
-  try {
-    station = await azuracast.createStation(nombre_empresa, `Radio de ${nombre_empresa}`);
-    await azuracast.updateStation(station.id, {
-      max_bitrate: plan.max_bitrate,
-      max_mounts: plan.max_mounts,
-      enable_streamers: plan.permite_dj,
-      enable_public_page: true,
-    });
-  } catch (err) {
-    await userModel.deleteById(user.id); // rollback del usuario si falla AzuraCast
-    if (station?.id) { try { await azuracast.deleteStation(station.id); } catch (_) {} }
-    return res.status(err.status || 502).json({ error: 'No se pudo crear la estación: ' + err.message });
-  }
-
-  // La estación ya trae un mount /radio.mp3 por defecto: ajustamos su bitrate al plan (no fatal)
-  try {
-    const mounts = await azuracast.getMounts(station.id);
-    const principal = mounts.find((m) => m.is_default) || mounts[0];
-    if (principal) {
-      const autodjBitrate = plan.max_bitrate > 0 ? Math.min(plan.max_bitrate, 320) : 128;
-      await azuracast.updateMount(station.id, principal.id, {
-        enable_autodj: true,
-        autodj_format: 'mp3',
-        autodj_bitrate: autodjBitrate,
-      });
-    }
-  } catch (err) {
-    console.error('[provision] ajuste de mount falló:', err.message);
-  }
-
-  // 3) Cuenta DJ (si el plan lo permite) — pasos no fatales: si fallan, la estación igual queda creada
-  if (plan.permite_dj) {
-    try {
-      dj.dj_usuario = station.short_name;
-      dj.dj_password = crypto.randomBytes(6).toString('hex');
-      await azuracast.createStreamer(station.id, {
-        streamer_username: dj.dj_usuario,
-        streamer_password: dj.dj_password,
-        display_name: nombre_empresa,
-        is_active: true,
-      });
-      const admin = await azuracast.getStationAdmin(station.id);
-      dj.dj_puerto = admin?.backend_config?.dj_port || null;
-    } catch (err) {
-      console.error('[provision] cuenta DJ falló:', err.message);
-    }
-  }
-
-  // 4) Poner la estación al aire (registra servicios en Supervisor)
-  try {
-    await azuracast.restartStation(station.id);
-  } catch (err) {
-    console.error('[provision] restart falló:', err.message);
-  }
-
-  // 4b) Copiar la biblioteca de cortesía en segundo plano (no bloquea la respuesta)
-  biblioteca.copiarAEstacion(station.id)
-    .then((r) => r.copiados && console.log(`[biblioteca] estación ${station.id}: ${r.copiados}/${r.total} tracks`))
-    .catch((err) => console.error('[biblioteca]', err.message));
-
-  const url_streaming = `${process.env.AZURACAST_BASE_URL}/listen/${station.short_name}/radio.mp3`;
-
-  // 5) Crear cliente ya vinculado a su estación + datos DJ
-  const cliente = await clienteModel.create({
-    user_id: user.id,
-    nombre_empresa,
-    plan: plan.nombre,
-    azuracast_station_id: station.id,
-    url_streaming,
-  });
-  if (dj.dj_usuario) {
-    await clienteModel.update(cliente.id, dj);
-    Object.assign(cliente, dj);
-  }
-
-  res.status(201).json({
-    message: 'Cliente y estación creados ✅',
-    cliente: { ...cliente, email },
-    credenciales: { email, password },
-  });
+  const resultado = await provisioning.crearClienteConEstacion({ email, password, nombre_empresa, plan_id });
+  res.status(201).json({ message: 'Cliente y estación creados ✅', ...resultado });
 }));
 
 router.put('/clientes/:id', requireAdmin, wrap(async (req, res) => {
@@ -476,6 +383,64 @@ router.delete('/planes/:id', requireAdmin, wrap(async (req, res) => {
   if (!existente) return res.status(404).json({ error: 'Plan no encontrado' });
   await planModel.deleteById(existente.id);
   res.json({ message: 'Plan eliminado ✅' });
+}));
+
+// ==================================================================
+//  REVENDEDORES (RESELLERS)
+// ==================================================================
+
+router.get('/resellers', requireAdmin, wrap(async (req, res) => {
+  const resellers = await resellerModel.findAllWithEmail();
+  res.json({ resellers });
+}));
+
+/** POST /admin/resellers/crear  body: { email, password, nombre_empresa, cupo_radios } */
+router.post('/resellers/crear', requireAdmin, wrap(async (req, res) => {
+  const { email, password, nombre_empresa, cupo_radios = 5 } = req.body || {};
+  if (!email || !password || !nombre_empresa) {
+    return res.status(400).json({ error: 'email, password y nombre_empresa son requeridos' });
+  }
+  if (await userModel.findByEmail(email)) {
+    return res.status(409).json({ error: 'Ya existe un usuario con ese email' });
+  }
+  const password_hash = await bcrypt.hash(password, 10);
+  const user = await userModel.create({ email, password_hash, role: 'reseller' });
+  const reseller = await resellerModel.create({ user_id: user.id, nombre_empresa, cupo_radios: Number(cupo_radios) });
+  res.status(201).json({
+    message: 'Revendedor creado ✅',
+    reseller: { ...reseller, email },
+    credenciales: { email, password },
+  });
+}));
+
+/** PUT /admin/resellers/:id  body: { cupo_radios, activo, nombre_empresa } */
+router.put('/resellers/:id', requireAdmin, wrap(async (req, res) => {
+  const reseller = await resellerModel.findById(Number(req.params.id));
+  if (!reseller) return res.status(404).json({ error: 'Revendedor no encontrado' });
+  const { cupo_radios, activo, nombre_empresa } = req.body || {};
+  const actualizado = await resellerModel.update(reseller.id, {
+    cupo_radios: cupo_radios === undefined ? undefined : Number(cupo_radios),
+    activo: activo === undefined ? undefined : Boolean(activo),
+    nombre_empresa,
+  });
+  res.json({ message: 'Revendedor actualizado ✅', reseller: actualizado });
+}));
+
+/** DELETE /admin/resellers/:id — elimina el revendedor (sus clientes quedan sin revendedor). */
+router.delete('/resellers/:id', requireAdmin, wrap(async (req, res) => {
+  const reseller = await resellerModel.findById(Number(req.params.id));
+  if (!reseller) return res.status(404).json({ error: 'Revendedor no encontrado' });
+  await userModel.deleteById(reseller.user_id); // cascade borra el reseller; clientes quedan con reseller_id NULL
+  res.json({ message: 'Revendedor eliminado ✅' });
+}));
+
+/** POST /admin/resellers/:id/impersonar — el admin entra al panel del revendedor. */
+router.post('/resellers/:id/impersonar', requireAdmin, wrap(async (req, res) => {
+  const reseller = await resellerModel.findById(Number(req.params.id));
+  if (!reseller) return res.status(404).json({ error: 'Revendedor no encontrado' });
+  const user = await userModel.findById(reseller.user_id);
+  const token = generateToken(user.id, 'reseller', { reseller_id: reseller.id, impersonated_by: req.user.sub });
+  res.json({ token, reseller: { id: reseller.id, nombre_empresa: reseller.nombre_empresa, email: user.email } });
 }));
 
 module.exports = router;

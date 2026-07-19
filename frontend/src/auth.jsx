@@ -34,13 +34,23 @@ export function AuthProvider({ children }) {
     setSession({ token: null, role: null, user: null, impersonating: false });
   }
 
-  /** El admin entra al panel de un cliente para revisar. */
+  /** Admin o revendedor entra al panel de un cliente para revisar. */
   async function impersonate(clienteId) {
-    const data = await apiFetch(`/admin/clientes/${clienteId}/impersonar`, { method: 'POST' });
-    store.backupAdmin(); // guarda la sesión de admin
+    const base = store.getRole() === 'reseller' ? '/reseller' : '/admin';
+    const data = await apiFetch(`${base}/clientes/${clienteId}/impersonar`, { method: 'POST' });
+    store.backupAdmin();
     const user = { ...data.cliente, role: 'cliente', cliente_id: data.cliente.id };
     store.setSession({ token: data.token, role: 'cliente', user });
     setSession({ token: data.token, role: 'cliente', user, impersonating: true });
+  }
+
+  /** El admin entra al panel de un revendedor. */
+  async function impersonateReseller(resellerId) {
+    const data = await apiFetch(`/admin/resellers/${resellerId}/impersonar`, { method: 'POST' });
+    store.backupAdmin();
+    const user = { ...data.reseller, role: 'reseller', reseller_id: data.reseller.id };
+    store.setSession({ token: data.token, role: 'reseller', user });
+    setSession({ token: data.token, role: 'reseller', user, impersonating: true });
   }
 
   /** Vuelve de la impersonación a la sesión de admin. */
@@ -53,7 +63,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthCtx.Provider value={{ ...session, login, logout, impersonate, stopImpersonating }}>
+    <AuthCtx.Provider value={{ ...session, login, logout, impersonate, impersonateReseller, stopImpersonating }}>
       {children}
     </AuthCtx.Provider>
   );

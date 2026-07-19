@@ -15,6 +15,7 @@ const cors = require('cors');
 
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
+const resellerRoutes = require('./routes/reseller');
 const clienteRoutes = require('./routes/cliente');
 const publicRoutes = require('./routes/public');
 const embedPage = require('./services/embedPage');
@@ -51,6 +52,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/public', publicRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/reseller', resellerRoutes);
 app.use('/api/cliente', clienteRoutes);
 
 // ---- Reproductor embebible (iframe) — antes del fallback SPA ------

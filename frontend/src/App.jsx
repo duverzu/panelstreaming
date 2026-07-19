@@ -6,6 +6,9 @@ import AdminDashboard from './pages/admin/Dashboard';
 import AdminClientes from './pages/admin/Clientes';
 import AdminPlanes from './pages/admin/Planes';
 import AdminEstadisticas from './pages/admin/Estadisticas';
+import AdminRevendedores from './pages/admin/Revendedores';
+import ResellerDashboard from './pages/reseller/Dashboard';
+import ResellerClientes from './pages/reseller/Clientes';
 import ClienteDashboard from './pages/cliente/Dashboard';
 import ClienteMusica from './pages/cliente/Musica';
 import ClientePlaylists from './pages/cliente/Playlists';
@@ -19,15 +22,17 @@ import ClienteConfiguracion from './pages/cliente/Configuracion';
 function Protected({ role, children }) {
   const { token, role: userRole } = useAuth();
   if (!token) return <Navigate to="/login" replace />;
-  if (role && userRole !== role) {
-    return <Navigate to={userRole === 'admin' ? '/admin' : '/cliente'} replace />;
-  }
+  if (role && userRole !== role) return <Navigate to={homeDe(userRole)} replace />;
   return children;
+}
+
+function homeDe(role) {
+  return role === 'admin' ? '/admin' : role === 'reseller' ? '/reseller' : '/cliente';
 }
 
 export default function App() {
   const { token, role } = useAuth();
-  const home = role === 'admin' ? '/admin' : '/cliente';
+  const home = homeDe(role);
 
   return (
     <Routes>
@@ -41,7 +46,14 @@ export default function App() {
         <Route index element={<AdminDashboard />} />
         <Route path="clientes" element={<AdminClientes />} />
         <Route path="planes" element={<AdminPlanes />} />
+        <Route path="revendedores" element={<AdminRevendedores />} />
         <Route path="estadisticas" element={<AdminEstadisticas />} />
+      </Route>
+
+      {/* Panel Revendedor */}
+      <Route path="/reseller" element={<Protected role="reseller"><Layout /></Protected>}>
+        <Route index element={<ResellerDashboard />} />
+        <Route path="clientes" element={<ResellerClientes />} />
       </Route>
 
       {/* Panel Cliente */}

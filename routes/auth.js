@@ -13,6 +13,7 @@ const bcrypt = require('bcryptjs');
 
 const userModel = require('../models/userModel');
 const clienteModel = require('../models/clienteModel');
+const resellerModel = require('../models/resellerModel');
 const { generateToken } = require('../services/auth');
 
 const router = express.Router();
@@ -37,6 +38,19 @@ router.post('/login', wrap(async (req, res) => {
       token,
       role: 'admin',
       user: { id: user.id, email: user.email, role: 'admin' },
+    });
+  }
+
+  // --- Revendedor ---
+  if (user.role === 'reseller') {
+    const reseller = await resellerModel.findByUserId(user.id);
+    if (!reseller) return res.status(403).json({ error: 'El usuario no tiene un revendedor asociado' });
+    if (!reseller.activo) return res.status(403).json({ error: 'Cuenta de revendedor desactivada.' });
+    const token = generateToken(user.id, 'reseller', { reseller_id: reseller.id });
+    return res.json({
+      token,
+      role: 'reseller',
+      user: { id: user.id, email: user.email, role: 'reseller', reseller_id: reseller.id, nombre_empresa: reseller.nombre_empresa },
     });
   }
 

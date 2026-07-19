@@ -11,11 +11,17 @@ const MENUS = {
     { seccion: 'Gestión', items: [
       { label: 'Dashboard', icon: IconDashboard, to: '/admin' },
       { label: 'Clientes', icon: IconUsers, to: '/admin/clientes' },
+      { label: 'Revendedores', icon: IconShare, to: '/admin/revendedores' },
       { label: 'Planes', icon: IconInvoice, to: '/admin/planes' },
-      { label: 'Estaciones', icon: IconRadio, soon: true },
     ]},
     { seccion: 'Negocio', items: [
       { label: 'Estadísticas', icon: IconChart, to: '/admin/estadisticas' },
+    ]},
+  ],
+  reseller: [
+    { seccion: 'Gestión', items: [
+      { label: 'Dashboard', icon: IconDashboard, to: '/reseller' },
+      { label: 'Mis Radios', icon: IconUsers, to: '/reseller/clientes' },
     ]},
   ],
   cliente: [
@@ -54,7 +60,7 @@ export default function Sidebar() {
         <div>
           <div className="font-bold leading-tight">Panel Radio</div>
           <div className="text-[11px] text-gray-400 leading-tight">
-            {role === 'admin' ? 'Super Admin' : 'Portal Cliente'}
+            {role === 'admin' ? 'Super Admin' : role === 'reseller' ? 'Revendedor' : 'Portal Cliente'}
           </div>
         </div>
       </div>
