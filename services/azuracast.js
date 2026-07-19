@@ -400,6 +400,16 @@ async function getNowPlayingAll() {
   }
 }
 
+/** Actualiza una ubicación de almacenamiento (ej. cuota). PUT /api/admin/storage_location/{id} */
+async function updateStorageLocation(id, data) {
+  try {
+    const res = await api.put(`/admin/storage_location/${id}`, data);
+    return res.data;
+  } catch (err) {
+    handleError(`updateStorageLocation(${id})`, err);
+  }
+}
+
 /**
  * Métricas del servidor (VPS): CPU, memoria, disco, red.
  * GET /api/admin/server/stats
@@ -451,6 +461,7 @@ module.exports = {
   createPlaylist,
   updatePlaylist,
   deletePlaylist,
+  updateStorageLocation,
   getServerStats,
   getStationStatus,
   getListeners,

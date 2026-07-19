@@ -36,7 +36,7 @@ async function crearClienteConEstacion({ email, password, nombre_empresa, plan_i
   const password_hash = await bcrypt.hash(password, 10);
   const user = await userModel.create({ email, password_hash, role: 'cliente' });
 
-  // 2) Estación + límites del plan
+  // 2) Estación + límites del plan (bitrate, mounts, DJ, MÁX OYENTES)
   let station;
   try {
     station = await azuracast.createStation(nombre_empresa, `Radio de ${nombre_empresa}`);
@@ -45,12 +45,21 @@ async function crearClienteConEstacion({ email, password, nombre_empresa, plan_i
       max_mounts: plan.max_mounts,
       enable_streamers: plan.permite_dj,
       enable_public_page: true,
+      frontend_config: { max_listeners: plan.max_oyentes || null },
     });
   } catch (e) {
     await userModel.deleteById(user.id);
     if (station?.id) { try { await azuracast.deleteStation(station.id); } catch (_) {} }
     throw err('No se pudo crear la estación: ' + e.message, e.status || 502);
   }
+
+  // 2b) Cuota de espacio del AutoDJ (storage location propia de la estación) — no fatal
+  try {
+    const info = await azuracast.getStationAdmin(station.id);
+    if (info?.media_storage_location && plan.espacio_mb) {
+      await azuracast.updateStorageLocation(info.media_storage_location, { storageQuota: `${plan.espacio_mb} MB` });
+    }
+  } catch (e) { console.error('[provision] cuota de espacio:', e.message); }
 
   // 3) Ajustar bitrate del mount por defecto (no fatal)
   try {
