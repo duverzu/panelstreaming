@@ -237,6 +237,25 @@ router.delete('/resellers/:id', wrap(async (req, res) => {
   res.json({ ok: true, message: 'Revendedor terminado', radios_liberadas: usadas });
 }));
 
+/** GET /api/provision/resellers/:id — estado y uso del revendedor. */
+router.get('/resellers/:id', wrap(async (req, res) => {
+  const r = await resellerModel.findById(Number(req.params.id));
+  if (!r) return res.status(404).json({ error: 'Servicio no encontrado' });
+  const user = await userModel.findById(r.user_id);
+  const usadas = await clienteModel.countByReseller(r.id);
+  const uso = await resellerModel.usoRecursos(r.id);
+  res.json({
+    ok: true, servicio_id: r.id, tipo: 'reseller',
+    nombre_empresa: r.nombre_empresa, usuario: user?.username, email: user?.email,
+    plan: r.plan, activo: r.activo,
+    uso: {
+      radios: usadas, cupo_radios: r.cupo_radios,
+      oyentes: uso.oyentes, max_oyentes_total: r.max_oyentes_total,
+      espacio_mb: uso.espacio, espacio_total_mb: r.espacio_total_mb,
+    },
+  });
+}));
+
 /** POST /api/provision/servicios/:id/suspender (SuspendAccount). */
 router.post('/servicios/:id/suspender', wrap(async (req, res) => {
   const c = await clienteModel.findById(Number(req.params.id));

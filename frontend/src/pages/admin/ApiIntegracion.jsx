@@ -101,6 +101,7 @@ export default function AdminApiIntegracion() {
             <div><span className="text-blue-600">POST</span>   /resellers/:id/reactivar      → reactivar (pagó)</div>
             <div><span className="text-blue-600">POST</span>   /resellers/:id/plan           → cambiar paquete</div>
             <div><span className="text-red-600">DELETE</span> /resellers/:id                → terminar (baja)</div>
+            <div><span className="text-brand-600">GET</span>    /resellers/:id                → estado/uso del revendedor</div>
           </div>
           <div>
             <div className="text-gray-500 mb-1">Ejemplo — vender una cuenta de revendedor:</div>
