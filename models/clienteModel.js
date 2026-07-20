@@ -6,7 +6,7 @@ const { query } = require('../config/database');
 /** Todos los clientes, incluyendo el email de su usuario. */
 async function findAllWithEmail() {
   const { rows } = await query(
-    `SELECT c.*, u.email
+    `SELECT c.*, u.email, u.username
        FROM clientes c
        JOIN users u ON u.id = c.user_id
        ORDER BY c.id`
@@ -51,7 +51,7 @@ async function findByShortName(shortName) {
 /** Clientes de un revendedor (con email). */
 async function findByReseller(resellerId) {
   const { rows } = await query(
-    `SELECT c.*, u.email FROM clientes c JOIN users u ON u.id = c.user_id
+    `SELECT c.*, u.email, u.username FROM clientes c JOIN users u ON u.id = c.user_id
      WHERE c.reseller_id = $1 ORDER BY c.id`,
     [resellerId]
   );

@@ -23,7 +23,8 @@ export default function AdminClientes() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null); // id en proceso
 
-  const [form, setForm] = useState({ nombre_empresa: '', email: '', password: '', plan_id: '' });
+  const [form, setForm] = useState({ nombre_empresa: '', username: '', email: '', password: '', plan_id: '' });
+  const [userTocado, setUserTocado] = useState(false); // si el admin escribió el usuario a mano
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -44,13 +45,24 @@ export default function AdminClientes() {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // "Rock FM 88.5" → "rockfm885" (mismo criterio que el backend)
+  const slug = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 40);
+
+  // El usuario se sugiere del nombre de la radio, pero el admin puede cambiarlo.
+  const setNombre = (e) => {
+    const nombre_empresa = e.target.value;
+    setForm((f) => ({ ...f, nombre_empresa, username: userTocado ? f.username : slug(nombre_empresa) }));
+  };
+  const setUsername = (e) => { setUserTocado(true); setForm((f) => ({ ...f, username: slug(e.target.value) })); };
+
   async function crear(e) {
     e.preventDefault();
     setSaving(true); setMsg(null);
     try {
-      await apiFetch('/admin/clientes/crear', { method: 'POST', body: JSON.stringify(form) });
-      setMsg({ type: 'ok', text: '✅ Cliente y estación creados' });
-      setForm({ nombre_empresa: '', email: '', password: '', plan_id: planes[0]?.id || '' });
+      const r = await apiFetch('/admin/clientes/crear', { method: 'POST', body: JSON.stringify(form) });
+      setMsg({ type: 'ok', text: `✅ Radio creada. Acceso → usuario: ${r.credenciales?.usuario} · contraseña: ${r.credenciales?.password}` });
+      setForm({ nombre_empresa: '', username: '', email: '', password: '', plan_id: planes[0]?.id || '' });
+      setUserTocado(false);
       setModalOpen(false);
       cargar();
     } catch (e) {
@@ -153,7 +165,9 @@ export default function AdminClientes() {
                     <tr key={c.id} className="border-b border-gray-50 dark:border-gray-800/60 last:border-0">
                       <td className="py-3 pr-3">
                         <div className="font-medium">{c.nombre_empresa}</div>
-                        <div className="text-xs text-gray-400">{c.email}</div>
+                        <div className="text-xs text-gray-400">
+                          <span className="font-mono">{c.username}</span>{c.email ? ` · ${c.email}` : ''}
+                        </div>
                       </td>
                       <td className="py-3 px-3 capitalize">{c.plan}</td>
                       <td className="py-3 px-3">
@@ -196,10 +210,15 @@ export default function AdminClientes() {
         <form onSubmit={crear} className="space-y-3">
           <div>
             <label className="label">Nombre de la radio</label>
-            <input className="input" value={form.nombre_empresa} onChange={set('nombre_empresa')} placeholder="Rock FM" required />
+            <input className="input" value={form.nombre_empresa} onChange={setNombre} placeholder="Rock FM" required />
           </div>
           <div>
-            <label className="label">Email de acceso del cliente</label>
+            <label className="label">Usuario de acceso</label>
+            <input className="input font-mono" value={form.username} onChange={setUsername} placeholder="rockfm" required />
+            <p className="text-xs text-gray-400 mt-1">Con esto entra al panel. Debe ser único; el email puede repetirse (un mismo cliente puede tener varias radios).</p>
+          </div>
+          <div>
+            <label className="label">Email de contacto del cliente</label>
             <input className="input" type="email" value={form.email} onChange={set('email')} placeholder="dueno@radio.com" required />
           </div>
           <div>

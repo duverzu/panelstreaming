@@ -49,13 +49,27 @@ async function aplicarLimitesPlan(stationId, plan, az = azuracast) {
   } catch (e) { console.error('[limites] storage:', e.message); }
 }
 
-async function crearClienteConEstacion({ email, password, nombre_empresa, plan_id, reseller_id = null }) {
+/**
+ * Crea cliente + estación. El identificador de acceso es `username` (NO el email):
+ * así un mismo correo puede tener varias radios, cada una con su propia cuenta.
+ * Si no se envía username se genera desde el nombre de la radio (rockfm, rockfm2...).
+ */
+async function crearClienteConEstacion({ email, username, password, nombre_empresa, plan_id, reseller_id = null }) {
   if (!email || !password || !nombre_empresa || !plan_id) {
     throw err('email, password, nombre_empresa y plan_id son requeridos', 400);
   }
   const plan = await planModel.findById(Number(plan_id));
   if (!plan) throw err('Plan no encontrado', 400);
-  if (await userModel.findByEmail(email)) throw err('Ya existe un usuario con ese email', 409);
+
+  // Usuario de acceso: el que pidan (si está libre) o uno generado del nombre de la radio.
+  let usuario;
+  if (username) {
+    usuario = userModel.slugUsuario(username);
+    if (usuario.length < 3) throw err('El usuario debe tener al menos 3 letras o números', 400);
+    if (await userModel.findByUsername(usuario)) throw err(`El usuario "${usuario}" ya está en uso`, 409);
+  } else {
+    usuario = await userModel.generarUsername(nombre_empresa || email);
+  }
 
   // 0) Elegir servidor con espacio (o el por defecto del .env si no hay tabla)
   const servidor = await servidorModel.elegirServidor();
@@ -65,7 +79,7 @@ async function crearClienteConEstacion({ email, password, nombre_empresa, plan_i
 
   // 1) Usuario
   const password_hash = await bcrypt.hash(password, 10);
-  const user = await userModel.create({ email, password_hash, role: 'cliente' });
+  const user = await userModel.create({ username: usuario, email, password_hash, role: 'cliente' });
 
   // 2) Estación (en el servidor elegido)
   let station;
@@ -108,7 +122,10 @@ async function crearClienteConEstacion({ email, password, nombre_empresa, plan_i
   });
   if (dj.dj_usuario) { await clienteModel.update(cliente.id, dj); Object.assign(cliente, dj); }
 
-  return { cliente: { ...cliente, email }, credenciales: { email, password } };
+  return {
+    cliente: { ...cliente, email, username: usuario },
+    credenciales: { usuario, email, password },
+  };
 }
 
 module.exports = { crearClienteConEstacion, aplicarLimitesPlan };

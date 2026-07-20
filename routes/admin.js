@@ -52,13 +52,14 @@ function humanBytes(n) {
 // ==================================================================
 
 router.post('/login', wrap(async (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) {
-    return res.status(400).json({ error: 'email y password son requeridos' });
+  const { usuario, email, password } = req.body || {};
+  const identificador = (usuario || email || '').trim();
+  if (!identificador || !password) {
+    return res.status(400).json({ error: 'usuario y password son requeridos' });
   }
 
-  const user = await userModel.findByEmailAndRole(email, 'admin');
-  if (!user) return res.status(401).json({ error: 'Credenciales inválidas' });
+  const user = await userModel.findByLogin(identificador);
+  if (!user || user.role !== 'admin') return res.status(401).json({ error: 'Credenciales inválidas' });
 
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: 'Credenciales inválidas' });
@@ -82,12 +83,14 @@ router.get('/clientes', requireAdmin, wrap(async (req, res) => {
 
 /**
  * POST /admin/clientes/crear
- * body: { email, password, nombre_empresa, plan_id }
+ * body: { email, password, nombre_empresa, plan_id, username? }
  * Crea el usuario + APROVISIONA la estación real en AzuraCast (aplicando el plan).
+ * El acceso es por `username` (si no se envía se genera): así un mismo email
+ * puede tener varias radios.
  */
 router.post('/clientes/crear', requireAdmin, wrap(async (req, res) => {
-  const { email, password, nombre_empresa, plan_id } = req.body || {};
-  const resultado = await provisioning.crearClienteConEstacion({ email, password, nombre_empresa, plan_id });
+  const { email, username, password, nombre_empresa, plan_id } = req.body || {};
+  const resultado = await provisioning.crearClienteConEstacion({ email, username, password, nombre_empresa, plan_id });
   res.status(201).json({ message: 'Cliente y estación creados ✅', ...resultado });
 }));
 
@@ -146,7 +149,7 @@ router.post('/clientes/:id/impersonar', requireAdmin, wrap(async (req, res) => {
 
   res.json({
     token,
-    cliente: { id: cliente.id, nombre_empresa: cliente.nombre_empresa, email: user.email },
+    cliente: { id: cliente.id, nombre_empresa: cliente.nombre_empresa, username: user.username, email: user.email },
   });
 }));
 
@@ -400,17 +403,23 @@ router.get('/resellers', requireAdmin, wrap(async (req, res) => {
   res.json({ resellers });
 }));
 
-/** POST /admin/resellers/crear  body: { email, password, nombre_empresa, cupo_radios, max_oyentes_total, espacio_total_mb } */
+/** POST /admin/resellers/crear  body: { email, username?, password, nombre_empresa, cupo_radios, max_oyentes_total, espacio_total_mb } */
 router.post('/resellers/crear', requireAdmin, wrap(async (req, res) => {
-  const { email, password, nombre_empresa, cupo_radios = 5, max_oyentes_total = 500, espacio_total_mb = 10240 } = req.body || {};
+  const { email, username, password, nombre_empresa, cupo_radios = 5, max_oyentes_total = 500, espacio_total_mb = 10240 } = req.body || {};
   if (!email || !password || !nombre_empresa) {
     return res.status(400).json({ error: 'email, password y nombre_empresa son requeridos' });
   }
-  if (await userModel.findByEmail(email)) {
-    return res.status(409).json({ error: 'Ya existe un usuario con ese email' });
+  // El identificador de acceso es el usuario, no el email (el email puede repetirse).
+  let usuario;
+  if (username) {
+    usuario = userModel.slugUsuario(username);
+    if (usuario.length < 3) return res.status(400).json({ error: 'El usuario debe tener al menos 3 letras o números' });
+    if (await userModel.findByUsername(usuario)) return res.status(409).json({ error: `El usuario "${usuario}" ya está en uso` });
+  } else {
+    usuario = await userModel.generarUsername(nombre_empresa || email);
   }
   const password_hash = await bcrypt.hash(password, 10);
-  const user = await userModel.create({ email, password_hash, role: 'reseller' });
+  const user = await userModel.create({ username: usuario, email, password_hash, role: 'reseller' });
   const reseller = await resellerModel.create({
     user_id: user.id, nombre_empresa,
     cupo_radios: Number(cupo_radios),
@@ -419,8 +428,8 @@ router.post('/resellers/crear', requireAdmin, wrap(async (req, res) => {
   });
   res.status(201).json({
     message: 'Revendedor creado ✅',
-    reseller: { ...reseller, email },
-    credenciales: { email, password },
+    reseller: { ...reseller, email, username: usuario },
+    credenciales: { usuario, email, password },
   });
 }));
 
@@ -454,7 +463,7 @@ router.post('/resellers/:id/impersonar', requireAdmin, wrap(async (req, res) => 
   if (!reseller) return res.status(404).json({ error: 'Revendedor no encontrado' });
   const user = await userModel.findById(reseller.user_id);
   const token = generateToken(user.id, 'reseller', { reseller_id: reseller.id, impersonated_by: req.user.sub });
-  res.json({ token, reseller: { id: reseller.id, nombre_empresa: reseller.nombre_empresa, email: user.email } });
+  res.json({ token, reseller: { id: reseller.id, nombre_empresa: reseller.nombre_empresa, username: user.username, email: user.email } });
 }));
 
 // ==================================================================

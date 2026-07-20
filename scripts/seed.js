@@ -39,24 +39,25 @@ async function seed() {
     }
   }
 
-  // Admin
+  // Admin (el login es por USUARIO; se deja "admin@panel.com" como usuario
+  // para no romper el acceso de las instalaciones que ya existían)
   await query(
-    `INSERT INTO users (email, password_hash, role)
-     VALUES ($1, $2, 'admin')
-     ON CONFLICT (email) DO NOTHING`,
+    `INSERT INTO users (username, email, password_hash, role)
+     VALUES ($1, $1, $2, 'admin')
+     ON CONFLICT (username) DO NOTHING`,
     ['admin@panel.com', hash]
   );
 
   // Usuario del cliente demo
   await query(
-    `INSERT INTO users (email, password_hash, role)
-     VALUES ($1, $2, 'cliente')
-     ON CONFLICT (email) DO NOTHING`,
+    `INSERT INTO users (username, email, password_hash, role)
+     VALUES ($1, $1, $2, 'cliente')
+     ON CONFLICT (username) DO NOTHING`,
     ['cliente@radio.com', hash]
   );
 
   // Fila de cliente ligada a ese usuario (solo si aún no existe)
-  const { rows: uRows } = await query('SELECT id FROM users WHERE email = $1', ['cliente@radio.com']);
+  const { rows: uRows } = await query('SELECT id FROM users WHERE username = $1', ['cliente@radio.com']);
   const userId = uRows[0].id;
 
   const { rows: cRows } = await query('SELECT id FROM clientes WHERE user_id = $1', [userId]);

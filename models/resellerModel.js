@@ -16,7 +16,7 @@ async function findById(id) {
 /** Todos los revendedores con email + nº de radios usadas. */
 async function findAllWithEmail() {
   const { rows } = await query(
-    `SELECT r.*, u.email,
+    `SELECT r.*, u.email, u.username,
             (SELECT COUNT(*)::int FROM clientes c WHERE c.reseller_id = r.id) AS radios_usadas
        FROM resellers r JOIN users u ON u.id = r.user_id
        ORDER BY r.id`

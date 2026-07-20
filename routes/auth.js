@@ -20,12 +20,16 @@ const router = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 router.post('/login', wrap(async (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) {
-    return res.status(400).json({ error: 'email y password son requeridos' });
+  // Se entra con USUARIO. Se acepta `email` por compatibilidad con cuentas viejas
+  // (solo funciona si ese correo tiene una única cuenta; si tiene varias radios
+  // el correo es ambiguo y debe usar su usuario).
+  const { usuario, email, password } = req.body || {};
+  const identificador = (usuario || email || '').trim();
+  if (!identificador || !password) {
+    return res.status(400).json({ error: 'usuario y password son requeridos' });
   }
 
-  const user = await userModel.findByEmail(email);
+  const user = await userModel.findByLogin(identificador);
   if (!user) return res.status(401).json({ error: 'Credenciales inválidas' });
 
   const ok = await bcrypt.compare(password, user.password_hash);
@@ -37,7 +41,7 @@ router.post('/login', wrap(async (req, res) => {
     return res.json({
       token,
       role: 'admin',
-      user: { id: user.id, email: user.email, role: 'admin' },
+      user: { id: user.id, username: user.username, email: user.email, role: 'admin' },
     });
   }
 
@@ -50,7 +54,7 @@ router.post('/login', wrap(async (req, res) => {
     return res.json({
       token,
       role: 'reseller',
-      user: { id: user.id, email: user.email, role: 'reseller', reseller_id: reseller.id, nombre_empresa: reseller.nombre_empresa },
+      user: { id: user.id, username: user.username, email: user.email, role: 'reseller', reseller_id: reseller.id, nombre_empresa: reseller.nombre_empresa },
     });
   }
 
@@ -65,6 +69,7 @@ router.post('/login', wrap(async (req, res) => {
     role: 'cliente',
     user: {
       id: user.id,
+      username: user.username,
       email: user.email,
       role: 'cliente',
       cliente_id: cliente.id,

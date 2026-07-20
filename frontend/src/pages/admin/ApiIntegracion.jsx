@@ -96,9 +96,15 @@ export default function AdminApiIntegracion() {
             <pre className="rounded-xl bg-gray-50 dark:bg-gray-950 p-3 text-xs overflow-x-auto">{`curl -X POST ${base}/servicios \\
   -H "Authorization: Bearer TU_LLAVE" \\
   -H "Content-Type: application/json" \\
-  -d '{"email":"cliente@correo.com","nombre_empresa":"Rock FM","plan":"Profesional"}'`}</pre>
+  -d '{"email":"cliente@correo.com","username":"rockfm","nombre_empresa":"Rock FM","plan":"Profesional"}'`}</pre>
           </div>
-          <p className="text-xs text-gray-400">Respuesta: datos de acceso del cliente + datos de la estación (URL de streaming y conexión DJ). El flujo es igual al de Centova/WHMCS: creas el producto apuntando a un plan, y al pagar la factura tu facturación llama a <code>/servicios</code>.</p>
+          <div className="rounded-xl border border-brand-300 dark:border-brand-500/40 bg-brand-50 dark:bg-brand-500/10 p-3 text-xs">
+            <b>Varias radios para un mismo cliente:</b> el identificador de acceso es <code>username</code>, no el email.
+            Puedes mandar el <b>mismo email</b> tantas veces como quieras — cada llamada crea un servicio nuevo con su
+            propio <code>servicio_id</code> y su propio usuario. Si omites <code>username</code> se genera del nombre de
+            la radio (<code>rockfm</code>, <code>rockfm2</code>…). Solo da 409 si el <b>usuario</b> ya existe.
+          </div>
+          <p className="text-xs text-gray-400">Respuesta: datos de acceso del cliente (<code>login.usuario</code> + <code>login.password</code>) + datos de la estación (URL de streaming y conexión DJ). El flujo es igual al de Centova/WHMCS: creas el producto apuntando a un plan, y al pagar la factura tu facturación llama a <code>/servicios</code>.</p>
         </div>
       </div>
     </div>

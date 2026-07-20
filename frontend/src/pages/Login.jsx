@@ -9,7 +9,7 @@ export default function Login() {
   const { dark, toggle } = useTheme();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('');
+  const [usuario, setUsuario] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const role = await login(email.trim(), password);
+      const role = await login(usuario.trim(), password);
       navigate(role === 'admin' ? '/admin' : role === 'reseller' ? '/reseller' : '/cliente', { replace: true });
     } catch (err) {
       setError(err.message);
@@ -49,11 +49,11 @@ export default function Login() {
 
         <form onSubmit={onSubmit} className="card p-6 space-y-4">
           <div>
-            <label className="label">Email</label>
+            <label className="label">Usuario</label>
             <input
-              className="input" type="email" value={email} autoComplete="username"
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tucorreo@ejemplo.com" required
+              className="input" type="text" value={usuario} autoComplete="username"
+              onChange={(e) => setUsuario(e.target.value)}
+              placeholder="tu usuario" required
             />
           </div>
           <div>
@@ -77,7 +77,7 @@ export default function Login() {
         </form>
 
         <p className="text-center text-xs text-gray-400 mt-5">
-          Mismo acceso para administradores y clientes.
+          Mismo acceso para administradores, revendedores y clientes.
         </p>
       </div>
     </div>

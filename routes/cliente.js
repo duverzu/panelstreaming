@@ -46,10 +46,11 @@ function azDe(cliente) {
 //  AUTENTICACIÓN
 // ==================================================================
 router.post('/login', wrap(async (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: 'email y password son requeridos' });
-  const user = await userModel.findByEmailAndRole(email, 'cliente');
-  if (!user) return res.status(401).json({ error: 'Credenciales inválidas' });
+  const { usuario, email, password } = req.body || {};
+  const identificador = (usuario || email || '').trim();
+  if (!identificador || !password) return res.status(400).json({ error: 'usuario y password son requeridos' });
+  const user = await userModel.findByLogin(identificador);
+  if (!user || user.role !== 'cliente') return res.status(401).json({ error: 'Credenciales inválidas' });
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: 'Credenciales inválidas' });
   const cliente = await clienteModel.findByUserId(user.id);
@@ -65,7 +66,7 @@ router.get('/perfil', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   const user = await userModel.findById(cliente.user_id);
-  res.json({ perfil: { email: user?.email, nombre_empresa: cliente.nombre_empresa, plan: cliente.plan, created_at: cliente.created_at, activo: cliente.activo } });
+  res.json({ perfil: { username: user?.username, email: user?.email, nombre_empresa: cliente.nombre_empresa, plan: cliente.plan, created_at: cliente.created_at, activo: cliente.activo } });
 }));
 
 // ==================================================================
@@ -287,12 +288,12 @@ router.post('/saltar', requireCliente, wrap(async (req, res) => {
 router.get('/configuracion', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   const user = await userModel.findById(req.user.sub);
-  if (!cliente?.azuracast_station_id) return res.json({ config: { email: user?.email, plan: cliente?.plan, sin_estacion: true } });
+  if (!cliente?.azuracast_station_id) return res.json({ config: { username: user?.username, email: user?.email, plan: cliente?.plan, sin_estacion: true } });
   const az = await azDe(cliente);
   const st = await az.getStationAdmin(cliente.azuracast_station_id);
   res.json({
     config: {
-      email: user?.email, plan: cliente.plan, nombre: st.name, descripcion: st.description || '',
+      username: user?.username, email: user?.email, plan: cliente.plan, nombre: st.name, descripcion: st.description || '',
       genero: st.genre || '', sitio_web: st.url || '', timezone: st.timezone || 'UTC',
       pagina_publica: st.enable_public_page, permite_solicitudes: st.enable_requests,
       url_publica: `${az.baseURL}/public/${st.short_name}`,

@@ -15,7 +15,7 @@ export default function AdminRevendedores() {
 
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ nombre_empresa: '', email: '', password: '', cupo_radios: 5, max_oyentes_total: 500, espacio_total_mb: 10240 });
+  const [form, setForm] = useState({ nombre_empresa: '', username: '', email: '', password: '', cupo_radios: 5, max_oyentes_total: 500, espacio_total_mb: 10240 });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -26,7 +26,7 @@ export default function AdminRevendedores() {
   }
   useEffect(() => { cargar(); }, []);
 
-  function abrirCrear() { setEditId(null); setForm({ nombre_empresa: '', email: '', password: '', cupo_radios: 5, max_oyentes_total: 500, espacio_total_mb: 10240 }); setError(null); setOpen(true); }
+  function abrirCrear() { setEditId(null); setForm({ nombre_empresa: '', username: '', email: '', password: '', cupo_radios: 5, max_oyentes_total: 500, espacio_total_mb: 10240 }); setError(null); setOpen(true); }
   function abrirEditar(r) { setEditId(r.id); setForm({ nombre_empresa: r.nombre_empresa, cupo_radios: r.cupo_radios, max_oyentes_total: r.max_oyentes_total, espacio_total_mb: r.espacio_total_mb }); setError(null); setOpen(true); }
 
   async function guardar(e) {
@@ -40,7 +40,7 @@ export default function AdminRevendedores() {
         espacio_total_mb: Number(form.espacio_total_mb),
       };
       if (editId) await apiFetch('/admin/resellers/' + editId, { method: 'PUT', body: JSON.stringify(payload) });
-      else await apiFetch('/admin/resellers/crear', { method: 'POST', body: JSON.stringify({ ...payload, email: form.email, password: form.password }) });
+      else await apiFetch('/admin/resellers/crear', { method: 'POST', body: JSON.stringify({ ...payload, username: form.username, email: form.email, password: form.password }) });
       setOpen(false);
       cargar();
     } catch (err) { setError(err.message); }
@@ -92,7 +92,7 @@ export default function AdminRevendedores() {
               ) : (
                 resellers.map((r) => (
                   <tr key={r.id} className="border-b border-gray-50 dark:border-gray-800/60 last:border-0">
-                    <td className="py-3 pr-3"><div className="font-medium">{r.nombre_empresa}</div><div className="text-xs text-gray-400">{r.email}</div></td>
+                    <td className="py-3 pr-3"><div className="font-medium">{r.nombre_empresa}</div><div className="text-xs text-gray-400"><span className="font-mono">{r.username}</span>{r.email ? ` · ${r.email}` : ''}</div></td>
                     <td className="py-3 px-3">
                       <span className="text-sm">{r.radios_usadas}/{r.cupo_radios}</span>
                       <div className="w-24 h-1.5 mt-1 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
@@ -129,7 +129,8 @@ export default function AdminRevendedores() {
           <div><label className="label">Nombre / empresa</label><input className="input" value={form.nombre_empresa} onChange={(e) => setForm({ ...form, nombre_empresa: e.target.value })} placeholder="RadioMax" required /></div>
           {!editId && (
             <>
-              <div><label className="label">Email de acceso</label><input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="reseller@correo.com" required /></div>
+              <div><label className="label">Usuario de acceso</label><input className="input font-mono" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '') })} placeholder="radiomax" required /></div>
+              <div><label className="label">Email de contacto</label><input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="reseller@correo.com" required /></div>
               <div><label className="label">Contraseña</label><input className="input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="temporal123" required /></div>
             </>
           )}

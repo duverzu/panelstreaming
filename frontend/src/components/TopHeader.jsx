@@ -11,7 +11,8 @@ export default function TopHeader({ title, subtitle }) {
   const aprendeUrl = role === 'reseller' ? '/reseller/aprende' : role === 'cliente' ? '/cliente/aprende' : null;
 
   const email = user?.email || '';
-  const inicial = (email[0] || '?').toUpperCase();
+  const usuario = user?.username || email;
+  const inicial = (usuario[0] || '?').toUpperCase();
 
   return (
     <header className="h-16 shrink-0 flex items-center justify-between px-5 md:px-8 border-b border-gray-200 dark:border-gray-800 bg-white/70 dark:bg-gray-950/60 backdrop-blur sticky top-0 z-20">
@@ -46,7 +47,7 @@ export default function TopHeader({ title, subtitle }) {
             <div className="w-7 h-7 rounded-lg bg-brand-600 text-white grid place-items-center text-xs font-bold">
               {inicial}
             </div>
-            <span className="hidden sm:block text-sm max-w-[140px] truncate">{email}</span>
+            <span className="hidden sm:block text-sm max-w-[140px] truncate">{usuario}</span>
             <IconChevronDown width={16} height={16} className="text-gray-400" />
           </button>
 
@@ -55,7 +56,8 @@ export default function TopHeader({ title, subtitle }) {
               <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
               <div className="absolute right-0 mt-2 w-56 card p-1.5 z-20">
                 <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800">
-                  <div className="text-sm font-medium truncate">{email}</div>
+                  <div className="text-sm font-medium truncate">{usuario}</div>
+                  {email && <div className="text-xs text-gray-400 truncate">{email}</div>}
                   <div className="text-xs text-gray-400 capitalize">{role}</div>
                 </div>
                 <button

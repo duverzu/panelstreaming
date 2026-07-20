@@ -17,6 +17,12 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'cliente', 'reseller'));
 
+-- Login por USUARIO (no por email): un mismo correo puede tener varias radios.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(100);
+UPDATE users SET username = email WHERE username IS NULL;          -- backfill de cuentas viejas
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key;       -- el email ya NO es único
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_key ON users(username);
+
 -- Revendedores (mayoristas): crean sus propias radios hasta un cupo.
 CREATE TABLE IF NOT EXISTS resellers (
   id             SERIAL PRIMARY KEY,

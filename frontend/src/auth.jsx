@@ -18,10 +18,10 @@ export function AuthProvider({ children }) {
   }));
 
   /** Login único: el backend devuelve el rol y redirigimos según él. */
-  async function login(email, password) {
+  async function login(usuario, password) {
     const data = await apiFetch('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ usuario, password }),
     });
     store.clearBackup();
     store.setSession({ token: data.token, role: data.role, user: data.user });

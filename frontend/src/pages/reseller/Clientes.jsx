@@ -24,7 +24,8 @@ export default function ResellerClientes() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
 
-  const [form, setForm] = useState({ nombre_empresa: '', email: '', password: '', plan_id: '' });
+  const [form, setForm] = useState({ nombre_empresa: '', username: '', email: '', password: '', plan_id: '' });
+  const [userTocado, setUserTocado] = useState(false);
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
@@ -46,12 +47,22 @@ export default function ResellerClientes() {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // "Rock FM 88.5" → "rockfm885" (mismo criterio que el backend)
+  const slug = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 40);
+  const setNombre = (e) => {
+    const nombre_empresa = e.target.value;
+    setForm((f) => ({ ...f, nombre_empresa, username: userTocado ? f.username : slug(nombre_empresa) }));
+  };
+  const setUsername = (e) => { setUserTocado(true); setForm((f) => ({ ...f, username: slug(e.target.value) })); };
+
   async function crear(e) {
     e.preventDefault();
     setSaving(true); setMsg(null);
     try {
-      await apiFetch('/reseller/clientes/crear', { method: 'POST', body: JSON.stringify(form) });
-      setForm({ nombre_empresa: '', email: '', password: '', plan_id: planes[0]?.id || '' });
+      const r = await apiFetch('/reseller/clientes/crear', { method: 'POST', body: JSON.stringify(form) });
+      setMsg({ type: 'ok', text: `✅ Radio creada. Acceso → usuario: ${r.credenciales?.usuario} · contraseña: ${r.credenciales?.password}` });
+      setForm({ nombre_empresa: '', username: '', email: '', password: '', plan_id: planes[0]?.id || '' });
+      setUserTocado(false);
       setOpen(false);
       cargar();
     } catch (e) { setMsg({ type: 'err', text: e.message }); }
@@ -111,7 +122,7 @@ export default function ResellerClientes() {
                   const suspendido = estados[c.id] === 'suspendido' || !c.activo;
                   return (
                     <tr key={c.id} className="border-b border-gray-50 dark:border-gray-800/60 last:border-0">
-                      <td className="py-3 pr-3"><div className="font-medium">{c.nombre_empresa}</div><div className="text-xs text-gray-400">{c.email}</div></td>
+                      <td className="py-3 pr-3"><div className="font-medium">{c.nombre_empresa}</div><div className="text-xs text-gray-400"><span className="font-mono">{c.username}</span>{c.email ? ` · ${c.email}` : ''}</div></td>
                       <td className="py-3 px-3 capitalize">{c.plan}</td>
                       <td className="py-3 px-3"><span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full ${est.cls}`}><span className={`w-1.5 h-1.5 rounded-full ${est.dot}`} /> {est.txt}</span></td>
                       <td className="py-3 pl-3">
@@ -140,8 +151,13 @@ export default function ResellerClientes() {
 
       <Modal open={open} onClose={() => setOpen(false)} title="Crear nueva radio">
         <form onSubmit={crear} className="space-y-3">
-          <div><label className="label">Nombre de la radio</label><input className="input" value={form.nombre_empresa} onChange={set('nombre_empresa')} placeholder="Rock FM" required /></div>
-          <div><label className="label">Email de acceso</label><input className="input" type="email" value={form.email} onChange={set('email')} placeholder="dueno@radio.com" required /></div>
+          <div><label className="label">Nombre de la radio</label><input className="input" value={form.nombre_empresa} onChange={setNombre} placeholder="Rock FM" required /></div>
+          <div>
+            <label className="label">Usuario de acceso</label>
+            <input className="input font-mono" value={form.username} onChange={setUsername} placeholder="rockfm" required />
+            <p className="text-xs text-gray-400 mt-1">Con esto entra al panel. Debe ser único; el email sí puede repetirse (un cliente con varias radios).</p>
+          </div>
+          <div><label className="label">Email de contacto</label><input className="input" type="email" value={form.email} onChange={set('email')} placeholder="dueno@radio.com" required /></div>
           <div><label className="label">Contraseña temporal</label><input className="input" value={form.password} onChange={set('password')} placeholder="temporal123" required /></div>
           <div><label className="label">Plan</label>
             {planes.length === 0 ? (

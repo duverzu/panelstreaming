@@ -61,6 +61,7 @@ router.get('/servicios', wrap(async (req, res) => {
   const servicios = clientes.map((c) => ({
     servicio_id: c.id,
     nombre_empresa: c.nombre_empresa,
+    usuario: c.username,
     email: c.email,
     plan: c.plan,
     activo: c.activo,
@@ -73,21 +74,25 @@ router.get('/servicios', wrap(async (req, res) => {
 
 /**
  * POST /api/provision/servicios — CREA una radio (CreateAccount).
- * body: { email, nombre_empresa, plan_id | plan, password? }
+ * body: { email, nombre_empresa, plan_id | plan, username?, password? }
+ *
+ * El identificador de acceso es `username`, NO el email: un mismo cliente
+ * (mismo correo) puede contratar VARIAS radios, cada una con su servicio_id
+ * y su propio usuario. Si no mandas `username` se genera del nombre de la radio.
  */
 router.post('/servicios', wrap(async (req, res) => {
-  const { email, nombre_empresa, plan_id, plan, password } = req.body || {};
+  const { email, nombre_empresa, plan_id, plan, password, username } = req.body || {};
   let pid = plan_id;
   if (!pid && plan) { const p = await planModel.findByNombre(plan); pid = p?.id; }
   if (!pid) return res.status(400).json({ error: 'Indica plan_id o plan (nombre) válido' });
 
   const pass = password || crypto.randomBytes(6).toString('hex');
-  const r = await provisioning.crearClienteConEstacion({ email, password: pass, nombre_empresa, plan_id: pid });
+  const r = await provisioning.crearClienteConEstacion({ email, username, password: pass, nombre_empresa, plan_id: pid });
 
   res.status(201).json({
     ok: true,
     servicio_id: r.cliente.id,
-    login: { url: panelUrl(), email: r.credenciales.email, password: r.credenciales.password },
+    login: { url: panelUrl(), usuario: r.credenciales.usuario, email: r.credenciales.email, password: r.credenciales.password },
     estacion: {
       id: r.cliente.azuracast_station_id,
       url_streaming: r.cliente.url_streaming,

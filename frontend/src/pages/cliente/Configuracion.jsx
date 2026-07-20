@@ -118,7 +118,7 @@ export default function ClienteConfiguracion() {
       {/* Cuenta */}
       <form onSubmit={cambiarPass} className="card p-5 space-y-4">
         <h2 className="font-semibold flex items-center gap-2"><IconSettings width={18} height={18} /> Cuenta</h2>
-        <div className="text-sm text-gray-400">Email: <b className="text-gray-700 dark:text-gray-200">{c.email}</b> · Plan: <b className="text-gray-700 dark:text-gray-200 capitalize">{c.plan}</b></div>
+        <div className="text-sm text-gray-400">Usuario: <b className="text-gray-700 dark:text-gray-200 font-mono">{c.username}</b> · Email: <b className="text-gray-700 dark:text-gray-200">{c.email}</b> · Plan: <b className="text-gray-700 dark:text-gray-200 capitalize">{c.plan}</b></div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="label">Contraseña actual</label>

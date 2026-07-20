@@ -123,7 +123,7 @@ router.post('/clientes/crear', requireReseller, wrap(async (req, res) => {
     return res.status(403).json({ error: `Cupo agotado (${usadas}/${reseller.cupo_radios} radios). Pide más cupo al administrador.` });
   }
 
-  const { email, password, nombre_empresa, plan_id } = req.body || {};
+  const { email, username, password, nombre_empresa, plan_id } = req.body || {};
 
   // El plan debe ser uno propio del revendedor
   const plan = await planModel.findById(Number(plan_id));
@@ -139,7 +139,7 @@ router.post('/clientes/crear', requireReseller, wrap(async (req, res) => {
   }
 
   const resultado = await provisioning.crearClienteConEstacion({
-    email, password, nombre_empresa, plan_id, reseller_id: reseller.id,
+    email, username, password, nombre_empresa, plan_id, reseller_id: reseller.id,
   });
   res.status(201).json({ message: 'Cliente y estación creados ✅', ...resultado });
 }));
@@ -195,7 +195,7 @@ router.post('/clientes/:id/impersonar', requireReseller, wrap(async (req, res) =
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   const user = await userModel.findById(cliente.user_id);
   const token = generateToken(user.id, 'cliente', { cliente_id: cliente.id, impersonated_by: req.user.sub });
-  res.json({ token, cliente: { id: cliente.id, nombre_empresa: cliente.nombre_empresa, email: user.email } });
+  res.json({ token, cliente: { id: cliente.id, nombre_empresa: cliente.nombre_empresa, username: user.username, email: user.email } });
 }));
 
 module.exports = router;
