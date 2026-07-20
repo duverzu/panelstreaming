@@ -52,6 +52,22 @@ CREATE TABLE IF NOT EXISTS planes (
   created_at      TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 
+-- Planes de REVENDEDOR (paquetes de mayorista: cuánto puede vender).
+-- Son distintos a `planes`: aquellos son plantillas de UNA radio; estos son
+-- el cupo total de la cuenta del revendedor. Se venden como un servicio más.
+CREATE TABLE IF NOT EXISTS planes_reseller (
+  id                SERIAL PRIMARY KEY,
+  nombre            VARCHAR(80) NOT NULL,
+  cupo_radios       INTEGER     NOT NULL DEFAULT 5,      -- cuántas radios puede crear
+  max_oyentes_total INTEGER     NOT NULL DEFAULT 500,    -- oyentes sumando todas sus radios
+  espacio_total_mb  INTEGER     NOT NULL DEFAULT 10240,  -- almacenamiento total
+  activo            BOOLEAN     NOT NULL DEFAULT true,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Plan contratado por el revendedor (nombre del plan; NULL = límites a medida)
+ALTER TABLE resellers ADD COLUMN IF NOT EXISTS plan VARCHAR(80);
+
 -- Servidores AzuraCast (multi-servidor). Cada radio vive en uno.
 CREATE TABLE IF NOT EXISTS servidores (
   id               SERIAL PRIMARY KEY,

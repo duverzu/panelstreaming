@@ -128,4 +128,61 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
   };
 }
 
-module.exports = { crearClienteConEstacion, aplicarLimitesPlan };
+/**
+ * Crea una cuenta de REVENDEDOR a partir de un plan de revendedor.
+ * Es el equivalente mayorista de crearClienteConEstacion: en vez de una
+ * estación, entrega un cupo (radios, oyentes y espacio) para que él venda.
+ *
+ * @param plan_reseller_id  plan de `planes_reseller` (opcional si se pasan límites a medida)
+ * @param limites           { cupo_radios, max_oyentes_total, espacio_total_mb } — solo si no hay plan
+ */
+async function crearReseller({ email, username, password, nombre_empresa, plan_reseller_id = null, limites = null }) {
+  const resellerModel = require('../models/resellerModel');
+  const planResellerModel = require('../models/planResellerModel');
+
+  if (!email || !password || !nombre_empresa) {
+    throw err('email, password y nombre_empresa son requeridos', 400);
+  }
+
+  // Los límites salen del plan; si no hay plan, se aceptan a medida.
+  let plan = null;
+  if (plan_reseller_id) {
+    plan = await planResellerModel.findById(Number(plan_reseller_id));
+    if (!plan) throw err('Plan de revendedor no encontrado', 400);
+  } else if (!limites) {
+    throw err('Indica un plan de revendedor o los límites a medida', 400);
+  }
+  const cupo = {
+    cupo_radios: Number(plan ? plan.cupo_radios : limites.cupo_radios ?? 5),
+    max_oyentes_total: Number(plan ? plan.max_oyentes_total : limites.max_oyentes_total ?? 500),
+    espacio_total_mb: Number(plan ? plan.espacio_total_mb : limites.espacio_total_mb ?? 10240),
+  };
+
+  // Acceso por usuario (el email puede repetirse: alguien con varios servicios)
+  let usuario;
+  if (username) {
+    usuario = userModel.slugUsuario(username);
+    if (usuario.length < 3) throw err('El usuario debe tener al menos 3 letras o números', 400);
+    if (await userModel.findByUsername(usuario)) throw err(`El usuario "${usuario}" ya está en uso`, 409);
+  } else {
+    usuario = await userModel.generarUsername(nombre_empresa || email);
+  }
+
+  const password_hash = await bcrypt.hash(password, 10);
+  const user = await userModel.create({ username: usuario, email, password_hash, role: 'reseller' });
+
+  let reseller;
+  try {
+    reseller = await resellerModel.create({ user_id: user.id, nombre_empresa, plan: plan?.nombre || null, ...cupo });
+  } catch (e) {
+    await userModel.deleteById(user.id); // no dejar el usuario huérfano
+    throw e;
+  }
+
+  return {
+    reseller: { ...reseller, email, username: usuario },
+    credenciales: { usuario, email, password },
+  };
+}
+
+module.exports = { crearClienteConEstacion, aplicarLimitesPlan, crearReseller };

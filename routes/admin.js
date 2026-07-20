@@ -14,6 +14,7 @@ const userModel = require('../models/userModel');
 const clienteModel = require('../models/clienteModel');
 const suscripcionModel = require('../models/suscripcionModel');
 const planModel = require('../models/planModel');
+const planResellerModel = require('../models/planResellerModel');
 const resellerModel = require('../models/resellerModel');
 const servidorModel = require('../models/servidorModel');
 const consumoModel = require('../models/consumoModel');
@@ -403,50 +404,71 @@ router.get('/resellers', requireAdmin, wrap(async (req, res) => {
   res.json({ resellers });
 }));
 
-/** POST /admin/resellers/crear  body: { email, username?, password, nombre_empresa, cupo_radios, max_oyentes_total, espacio_total_mb } */
+/**
+ * POST /admin/resellers/crear
+ * body: { email, username?, password, nombre_empresa, plan_reseller_id? }
+ *   o bien, a medida: { ..., cupo_radios, max_oyentes_total, espacio_total_mb }
+ * Con plan, los límites salen del paquete (igual que una radio de un plan).
+ */
 router.post('/resellers/crear', requireAdmin, wrap(async (req, res) => {
-  const { email, username, password, nombre_empresa, cupo_radios = 5, max_oyentes_total = 500, espacio_total_mb = 10240 } = req.body || {};
-  if (!email || !password || !nombre_empresa) {
-    return res.status(400).json({ error: 'email, password y nombre_empresa son requeridos' });
-  }
-  // El identificador de acceso es el usuario, no el email (el email puede repetirse).
-  let usuario;
-  if (username) {
-    usuario = userModel.slugUsuario(username);
-    if (usuario.length < 3) return res.status(400).json({ error: 'El usuario debe tener al menos 3 letras o números' });
-    if (await userModel.findByUsername(usuario)) return res.status(409).json({ error: `El usuario "${usuario}" ya está en uso` });
-  } else {
-    usuario = await userModel.generarUsername(nombre_empresa || email);
-  }
-  const password_hash = await bcrypt.hash(password, 10);
-  const user = await userModel.create({ username: usuario, email, password_hash, role: 'reseller' });
-  const reseller = await resellerModel.create({
-    user_id: user.id, nombre_empresa,
-    cupo_radios: Number(cupo_radios),
-    max_oyentes_total: Number(max_oyentes_total),
-    espacio_total_mb: Number(espacio_total_mb),
+  const { email, username, password, nombre_empresa, plan_reseller_id,
+    cupo_radios = 5, max_oyentes_total = 500, espacio_total_mb = 10240 } = req.body || {};
+  const resultado = await provisioning.crearReseller({
+    email, username, password, nombre_empresa,
+    plan_reseller_id: plan_reseller_id || null,
+    limites: plan_reseller_id ? null : { cupo_radios, max_oyentes_total, espacio_total_mb },
   });
-  res.status(201).json({
-    message: 'Revendedor creado ✅',
-    reseller: { ...reseller, email, username: usuario },
-    credenciales: { usuario, email, password },
-  });
+  res.status(201).json({ message: 'Revendedor creado ✅', ...resultado });
 }));
 
-/** PUT /admin/resellers/:id  body: { cupo_radios, activo, nombre_empresa, max_oyentes_total, espacio_total_mb } */
+/** PUT /admin/resellers/:id  body: { cupo_radios, activo, nombre_empresa, max_oyentes_total, espacio_total_mb, plan_reseller_id } */
 router.put('/resellers/:id', requireAdmin, wrap(async (req, res) => {
   const reseller = await resellerModel.findById(Number(req.params.id));
   if (!reseller) return res.status(404).json({ error: 'Revendedor no encontrado' });
-  const { cupo_radios, activo, nombre_empresa, max_oyentes_total, espacio_total_mb } = req.body || {};
+  const { cupo_radios, activo, nombre_empresa, max_oyentes_total, espacio_total_mb, plan_reseller_id } = req.body || {};
   const num = (v) => (v === undefined ? undefined : Number(v));
+
+  // Si mandan un plan, sus límites mandan (upgrade/downgrade del paquete).
+  let dePlan = {};
+  if (plan_reseller_id) {
+    const p = await planResellerModel.findById(Number(plan_reseller_id));
+    if (!p) return res.status(400).json({ error: 'Plan de revendedor no encontrado' });
+    dePlan = { plan: p.nombre, cupo_radios: p.cupo_radios, max_oyentes_total: p.max_oyentes_total, espacio_total_mb: p.espacio_total_mb };
+  }
+
   const actualizado = await resellerModel.update(reseller.id, {
     cupo_radios: num(cupo_radios),
     activo: activo === undefined ? undefined : Boolean(activo),
     nombre_empresa,
     max_oyentes_total: num(max_oyentes_total),
     espacio_total_mb: num(espacio_total_mb),
+    ...dePlan,
   });
   res.json({ message: 'Revendedor actualizado ✅', reseller: actualizado });
+}));
+
+// ---- Planes de REVENDEDOR (paquetes de mayorista) -----------------
+router.get('/planes-reseller', requireAdmin, wrap(async (req, res) => {
+  res.json({ planes: await planResellerModel.findAll() });
+}));
+
+router.post('/planes-reseller', requireAdmin, wrap(async (req, res) => {
+  if (!req.body?.nombre) return res.status(400).json({ error: 'nombre es requerido' });
+  const plan = await planResellerModel.create(req.body);
+  res.status(201).json({ message: 'Plan de revendedor creado ✅', plan });
+}));
+
+router.put('/planes-reseller/:id', requireAdmin, wrap(async (req, res) => {
+  const plan = await planResellerModel.findById(Number(req.params.id));
+  if (!plan) return res.status(404).json({ error: 'Plan no encontrado' });
+  res.json({ message: 'Plan actualizado ✅', plan: await planResellerModel.update(plan.id, req.body || {}) });
+}));
+
+router.delete('/planes-reseller/:id', requireAdmin, wrap(async (req, res) => {
+  const plan = await planResellerModel.findById(Number(req.params.id));
+  if (!plan) return res.status(404).json({ error: 'Plan no encontrado' });
+  await planResellerModel.deleteById(plan.id);
+  res.json({ message: 'Plan eliminado ✅' });
 }));
 
 /** DELETE /admin/resellers/:id — elimina el revendedor (sus clientes quedan sin revendedor). */

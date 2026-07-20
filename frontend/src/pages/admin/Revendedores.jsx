@@ -10,12 +10,13 @@ export default function AdminRevendedores() {
   const navigate = useNavigate();
 
   const [resellers, setResellers] = useState([]);
+  const [paquetes, setPaquetes] = useState([]);   // planes de revendedor
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
 
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ nombre_empresa: '', username: '', email: '', password: '', cupo_radios: 5, max_oyentes_total: 500, espacio_total_mb: 10240 });
+  const [form, setForm] = useState({ nombre_empresa: '', username: '', email: '', password: '', cupo_radios: 5, max_oyentes_total: 500, espacio_total_mb: 10240, plan_reseller_id: '' });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -24,10 +25,23 @@ export default function AdminRevendedores() {
     try { const { resellers } = await apiFetch('/admin/resellers'); setResellers(resellers); }
     finally { setLoading(false); }
   }
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => {
+    cargar();
+    apiFetch('/admin/planes-reseller').then(({ planes }) => setPaquetes(planes.filter((p) => p.activo))).catch(() => {});
+  }, []);
 
-  function abrirCrear() { setEditId(null); setForm({ nombre_empresa: '', username: '', email: '', password: '', cupo_radios: 5, max_oyentes_total: 500, espacio_total_mb: 10240 }); setError(null); setOpen(true); }
-  function abrirEditar(r) { setEditId(r.id); setForm({ nombre_empresa: r.nombre_empresa, cupo_radios: r.cupo_radios, max_oyentes_total: r.max_oyentes_total, espacio_total_mb: r.espacio_total_mb }); setError(null); setOpen(true); }
+  /** Al elegir un paquete, sus límites llenan el formulario (y quedan editables). */
+  function elegirPaquete(id) {
+    const p = paquetes.find((x) => String(x.id) === String(id));
+    setForm((f) => ({
+      ...f,
+      plan_reseller_id: id,
+      ...(p ? { cupo_radios: p.cupo_radios, max_oyentes_total: p.max_oyentes_total, espacio_total_mb: p.espacio_total_mb } : {}),
+    }));
+  }
+
+  function abrirCrear() { setEditId(null); setForm({ nombre_empresa: '', username: '', email: '', password: '', cupo_radios: 5, max_oyentes_total: 500, espacio_total_mb: 10240, plan_reseller_id: '' }); setError(null); setOpen(true); }
+  function abrirEditar(r) { setEditId(r.id); setForm({ nombre_empresa: r.nombre_empresa, cupo_radios: r.cupo_radios, max_oyentes_total: r.max_oyentes_total, espacio_total_mb: r.espacio_total_mb, plan_reseller_id: '' }); setError(null); setOpen(true); }
 
   async function guardar(e) {
     e.preventDefault();
@@ -38,6 +52,7 @@ export default function AdminRevendedores() {
         cupo_radios: Number(form.cupo_radios),
         max_oyentes_total: Number(form.max_oyentes_total),
         espacio_total_mb: Number(form.espacio_total_mb),
+        ...(form.plan_reseller_id ? { plan_reseller_id: Number(form.plan_reseller_id) } : {}),
       };
       if (editId) await apiFetch('/admin/resellers/' + editId, { method: 'PUT', body: JSON.stringify(payload) });
       else await apiFetch('/admin/resellers/crear', { method: 'POST', body: JSON.stringify({ ...payload, username: form.username, email: form.email, password: form.password }) });
@@ -92,7 +107,7 @@ export default function AdminRevendedores() {
               ) : (
                 resellers.map((r) => (
                   <tr key={r.id} className="border-b border-gray-50 dark:border-gray-800/60 last:border-0">
-                    <td className="py-3 pr-3"><div className="font-medium">{r.nombre_empresa}</div><div className="text-xs text-gray-400"><span className="font-mono">{r.username}</span>{r.email ? ` · ${r.email}` : ''}</div></td>
+                    <td className="py-3 pr-3"><div className="font-medium">{r.nombre_empresa}{r.plan && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400 align-middle">{r.plan}</span>}</div><div className="text-xs text-gray-400"><span className="font-mono">{r.username}</span>{r.email ? ` · ${r.email}` : ''}</div></td>
                     <td className="py-3 px-3">
                       <span className="text-sm">{r.radios_usadas}/{r.cupo_radios}</span>
                       <div className="w-24 h-1.5 mt-1 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
@@ -134,6 +149,20 @@ export default function AdminRevendedores() {
               <div><label className="label">Contraseña</label><input className="input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="temporal123" required /></div>
             </>
           )}
+          <div>
+            <label className="label">Paquete de revendedor</label>
+            <select className="input" value={form.plan_reseller_id || ''} onChange={(e) => elegirPaquete(e.target.value)}>
+              <option value="">A medida (sin paquete)</option>
+              {paquetes.map((p) => (
+                <option key={p.id} value={p.id}>{p.nombre} · {p.cupo_radios} radios · {p.max_oyentes_total} oyentes · {(p.espacio_total_mb / 1024).toFixed(1)} GB</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              {paquetes.length === 0
+                ? 'Aún no tienes paquetes. Créalos en Planes → Paquetes de revendedor para poder venderlos por API.'
+                : 'Al elegir uno se llenan los límites de abajo (los puedes ajustar a mano).'}
+            </p>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div><label className="label">Cupo de radios</label><input className="input" type="number" min="0" value={form.cupo_radios} onChange={(e) => setForm({ ...form, cupo_radios: e.target.value })} /></div>
             <div><label className="label">Oyentes totales</label><input className="input" type="number" min="0" value={form.max_oyentes_total} onChange={(e) => setForm({ ...form, max_oyentes_total: e.target.value })} /></div>

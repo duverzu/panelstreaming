@@ -39,6 +39,22 @@ async function seed() {
     }
   }
 
+  // --- Paquetes de revendedor por defecto (idempotente por nombre) ---
+  const paquetes = [
+    { nombre: 'Revendedor 5',  radios: 5,  oyentes: 500,  mb: 10240 },
+    { nombre: 'Revendedor 10', radios: 10, oyentes: 1000, mb: 20480 },
+    { nombre: 'Revendedor 25', radios: 25, oyentes: 3000, mb: 51200 },
+  ];
+  for (const p of paquetes) {
+    const { rows } = await query('SELECT id FROM planes_reseller WHERE nombre = $1', [p.nombre]);
+    if (rows.length === 0) {
+      await query(
+        `INSERT INTO planes_reseller (nombre, cupo_radios, max_oyentes_total, espacio_total_mb) VALUES ($1,$2,$3,$4)`,
+        [p.nombre, p.radios, p.oyentes, p.mb]
+      );
+    }
+  }
+
   // Admin (el login es por USUARIO; se deja "admin@panel.com" como usuario
   // para no romper el acceso de las instalaciones que ya existían)
   await query(

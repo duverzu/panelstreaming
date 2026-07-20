@@ -24,11 +24,11 @@ async function findAllWithEmail() {
   return rows;
 }
 
-async function create({ user_id, nombre_empresa, cupo_radios = 5, max_oyentes_total = 500, espacio_total_mb = 10240 }) {
+async function create({ user_id, nombre_empresa, cupo_radios = 5, max_oyentes_total = 500, espacio_total_mb = 10240, plan = null }) {
   const { rows } = await query(
-    `INSERT INTO resellers (user_id, nombre_empresa, cupo_radios, max_oyentes_total, espacio_total_mb)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [user_id, nombre_empresa, cupo_radios, max_oyentes_total, espacio_total_mb]
+    `INSERT INTO resellers (user_id, nombre_empresa, cupo_radios, max_oyentes_total, espacio_total_mb, plan)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [user_id, nombre_empresa, cupo_radios, max_oyentes_total, espacio_total_mb, plan]
   );
   return rows[0];
 }
@@ -46,7 +46,7 @@ async function usoRecursos(resellerId) {
 }
 
 async function update(id, fields) {
-  const allowed = ['nombre_empresa', 'cupo_radios', 'activo', 'max_oyentes_total', 'espacio_total_mb'];
+  const allowed = ['nombre_empresa', 'cupo_radios', 'activo', 'max_oyentes_total', 'espacio_total_mb', 'plan'];
   const sets = [];
   const values = [];
   let i = 1;

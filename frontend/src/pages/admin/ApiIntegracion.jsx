@@ -79,7 +79,7 @@ export default function AdminApiIntegracion() {
             <div className="text-gray-500 mb-1">Autenticación (header)</div>
             <Copiable texto={'Authorization: Bearer TU_LLAVE'} />
           </div>
-          <div className="text-gray-500">Endpoints (como un módulo de WHMCS):</div>
+          <div className="text-gray-500">Servicios de RADIO (como un módulo de WHMCS):</div>
           <div className="rounded-xl bg-gray-50 dark:bg-gray-950 p-3 font-mono text-xs space-y-1 overflow-x-auto">
             <div><span className="text-brand-600">GET</span>    /test                         → prueba de conexión</div>
             <div><span className="text-brand-600">GET</span>    /planes                       → planes disponibles</div>
@@ -91,6 +91,30 @@ export default function AdminApiIntegracion() {
             <div><span className="text-red-600">DELETE</span> /servicios/:id                → terminar (baja)</div>
             <div><span className="text-brand-600">GET</span>    /servicios/:id                → estado/uso</div>
           </div>
+
+          <div className="text-gray-500">Servicios de REVENDEDOR (mayorista, mismo ciclo de vida):</div>
+          <div className="rounded-xl bg-gray-50 dark:bg-gray-950 p-3 font-mono text-xs space-y-1 overflow-x-auto">
+            <div><span className="text-brand-600">GET</span>    /planes-reseller              → paquetes de mayorista</div>
+            <div><span className="text-brand-600">GET</span>    /resellers                    → LISTA revendedores (sincronizar)</div>
+            <div><span className="text-blue-600">POST</span>   /resellers                    → crear revendedor (al pagar)</div>
+            <div><span className="text-blue-600">POST</span>   /resellers/:id/suspender      → suspender (impago)</div>
+            <div><span className="text-blue-600">POST</span>   /resellers/:id/reactivar      → reactivar (pagó)</div>
+            <div><span className="text-blue-600">POST</span>   /resellers/:id/plan           → cambiar paquete</div>
+            <div><span className="text-red-600">DELETE</span> /resellers/:id                → terminar (baja)</div>
+          </div>
+          <div>
+            <div className="text-gray-500 mb-1">Ejemplo — vender una cuenta de revendedor:</div>
+            <pre className="rounded-xl bg-gray-50 dark:bg-gray-950 p-3 text-xs overflow-x-auto">{`curl -X POST ${base}/resellers \\
+  -H "Authorization: Bearer TU_LLAVE" \\
+  -H "Content-Type: application/json" \\
+  -d '{"email":"mayorista@correo.com","nombre_empresa":"RadioMax","plan_reseller":"Revendedor 10"}'`}</pre>
+          </div>
+          <p className="text-xs text-gray-400">
+            Los paquetes se crean en <b>Planes → Paquetes de revendedor</b>. Al suspender un revendedor
+            también salen del aire las radios de sus clientes; manda <code>{'{"radios": false}'}</code> si
+            solo quieres bloquearle el acceso a él. Al darlo de baja, sus radios <b>no se borran</b>: quedan
+            como clientes directos tuyos.
+          </p>
           <div>
             <div className="text-gray-500 mb-1">Ejemplo — crear radio al pagar una orden:</div>
             <pre className="rounded-xl bg-gray-50 dark:bg-gray-950 p-3 text-xs overflow-x-auto">{`curl -X POST ${base}/servicios \\

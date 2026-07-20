@@ -18,6 +18,8 @@ const apiKeyAuth = require('../middleware/apiKey');
 const provisioning = require('../services/provisioning');
 const clienteModel = require('../models/clienteModel');
 const planModel = require('../models/planModel');
+const planResellerModel = require('../models/planResellerModel');
+const resellerModel = require('../models/resellerModel');
 const servidorModel = require('../models/servidorModel');
 const userModel = require('../models/userModel');
 const azuracast = require('../services/azuracast');
@@ -101,6 +103,138 @@ router.post('/servicios', wrap(async (req, res) => {
       dj_puerto: r.cliente.dj_puerto || null,
     },
   });
+}));
+
+// ==================================================================
+//  SERVICIOS DE REVENDEDOR (cuentas de mayorista vendidas por plan)
+// ==================================================================
+
+/** GET /api/provision/planes-reseller — paquetes de mayorista disponibles. */
+router.get('/planes-reseller', wrap(async (req, res) => {
+  const planes = await planResellerModel.findActivos();
+  res.json({ planes: planes.map((p) => ({ id: p.id, nombre: p.nombre, cupo_radios: p.cupo_radios, max_oyentes_total: p.max_oyentes_total, espacio_total_mb: p.espacio_total_mb })) });
+}));
+
+/** GET /api/provision/resellers — lista de revendedores (sincronizar cuentas). */
+router.get('/resellers', wrap(async (req, res) => {
+  const resellers = await resellerModel.findAllWithEmail();
+  res.json({
+    total: resellers.length,
+    resellers: resellers.map((r) => ({
+      servicio_id: r.id, nombre_empresa: r.nombre_empresa, usuario: r.username, email: r.email,
+      plan: r.plan, activo: r.activo,
+      cupo_radios: r.cupo_radios, radios_usadas: r.radios_usadas,
+      max_oyentes_total: r.max_oyentes_total, espacio_total_mb: r.espacio_total_mb,
+    })),
+  });
+}));
+
+/**
+ * POST /api/provision/resellers — CREA una cuenta de revendedor (CreateAccount).
+ * body: { email, nombre_empresa, plan_reseller_id | plan_reseller, username?, password? }
+ * Igual que /servicios pero mayorista: en vez de una radio entrega un cupo.
+ */
+router.post('/resellers', wrap(async (req, res) => {
+  const { email, nombre_empresa, plan_reseller_id, plan_reseller, username, password } = req.body || {};
+  let pid = plan_reseller_id;
+  if (!pid && plan_reseller) { const p = await planResellerModel.findByNombre(plan_reseller); pid = p?.id; }
+  if (!pid) return res.status(400).json({ error: 'Indica plan_reseller_id o plan_reseller (nombre) válido' });
+
+  const pass = password || crypto.randomBytes(6).toString('hex');
+  const r = await provisioning.crearReseller({ email, username, password: pass, nombre_empresa, plan_reseller_id: pid });
+
+  res.status(201).json({
+    ok: true,
+    servicio_id: r.reseller.id,
+    tipo: 'reseller',
+    login: { url: panelUrl(), usuario: r.credenciales.usuario, email: r.credenciales.email, password: r.credenciales.password },
+    cupo: {
+      plan: r.reseller.plan,
+      radios: r.reseller.cupo_radios,
+      oyentes_total: r.reseller.max_oyentes_total,
+      espacio_total_mb: r.reseller.espacio_total_mb,
+    },
+  });
+}));
+
+/**
+ * POST /api/provision/resellers/:id/suspender (SuspendAccount).
+ * body: { radios: true|false } — por defecto TRUE: también saca del aire las
+ * radios de sus clientes (comportamiento normal de facturación por impago).
+ * Manda { "radios": false } para solo bloquearle el acceso a él.
+ */
+router.post('/resellers/:id/suspender', wrap(async (req, res) => {
+  const r = await resellerModel.findById(Number(req.params.id));
+  if (!r) return res.status(404).json({ error: 'Servicio no encontrado' });
+  await resellerModel.update(r.id, { activo: false });
+
+  let radios = 0;
+  if (req.body?.radios !== false) {
+    const clientes = await clienteModel.findByReseller(r.id);
+    for (const c of clientes) {
+      await clienteModel.update(c.id, { activo: false });
+      if (c.azuracast_station_id) {
+        const az = await azuracast.paraServidorId(c.servidor_id);
+        try { await az.updateStation(c.azuracast_station_id, { is_enabled: false }); } catch (_) {}
+        try { await az.stopStation(c.azuracast_station_id); } catch (_) {}
+      }
+      radios++;
+    }
+  }
+  res.json({ ok: true, message: `Revendedor suspendido${radios ? ` (${radios} radios fuera del aire)` : ' (sus radios siguen al aire)'}`, radios_suspendidas: radios });
+}));
+
+/** POST /api/provision/resellers/:id/reactivar (UnsuspendAccount). */
+router.post('/resellers/:id/reactivar', wrap(async (req, res) => {
+  const r = await resellerModel.findById(Number(req.params.id));
+  if (!r) return res.status(404).json({ error: 'Servicio no encontrado' });
+  await resellerModel.update(r.id, { activo: true });
+
+  let radios = 0;
+  if (req.body?.radios !== false) {
+    const clientes = await clienteModel.findByReseller(r.id);
+    for (const c of clientes) {
+      await clienteModel.update(c.id, { activo: true });
+      if (c.azuracast_station_id) {
+        const az = await azuracast.paraServidorId(c.servidor_id);
+        try { await az.updateStation(c.azuracast_station_id, { is_enabled: true }); } catch (_) {}
+        try { await az.restartStation(c.azuracast_station_id); } catch (_) {}
+      }
+      radios++;
+    }
+  }
+  res.json({ ok: true, message: 'Revendedor reactivado', radios_reactivadas: radios });
+}));
+
+/** POST /api/provision/resellers/:id/plan — cambia el paquete (ChangePackage). */
+router.post('/resellers/:id/plan', wrap(async (req, res) => {
+  const r = await resellerModel.findById(Number(req.params.id));
+  if (!r) return res.status(404).json({ error: 'Servicio no encontrado' });
+  const { plan_reseller_id, plan_reseller } = req.body || {};
+  const p = plan_reseller_id ? await planResellerModel.findById(Number(plan_reseller_id)) : await planResellerModel.findByNombre(plan_reseller);
+  if (!p) return res.status(400).json({ error: 'Plan de revendedor no encontrado' });
+
+  // En un downgrade no se le quitan radios ya creadas: solo no podrá crear más.
+  const usadas = await clienteModel.countByReseller(r.id);
+  const actualizado = await resellerModel.update(r.id, {
+    plan: p.nombre, cupo_radios: p.cupo_radios,
+    max_oyentes_total: p.max_oyentes_total, espacio_total_mb: p.espacio_total_mb,
+  });
+  res.json({
+    ok: true, message: `Paquete cambiado a ${p.nombre}`,
+    cupo_radios: actualizado.cupo_radios, radios_usadas: usadas,
+    aviso: usadas > p.cupo_radios ? `Ya tiene ${usadas} radios y el nuevo cupo es ${p.cupo_radios}: no se le quitó ninguna, pero no podrá crear más.` : null,
+  });
+}));
+
+/** DELETE /api/provision/resellers/:id — da de baja al revendedor (TerminateAccount).
+ *  Sus radios NO se borran: quedan sin revendedor (pasan a ser directas del admin). */
+router.delete('/resellers/:id', wrap(async (req, res) => {
+  const r = await resellerModel.findById(Number(req.params.id));
+  if (!r) return res.status(404).json({ error: 'Servicio no encontrado' });
+  const usadas = await clienteModel.countByReseller(r.id);
+  await userModel.deleteById(r.user_id); // cascade borra el reseller; los clientes quedan con reseller_id NULL
+  res.json({ ok: true, message: 'Revendedor terminado', radios_liberadas: usadas });
 }));
 
 /** POST /api/provision/servicios/:id/suspender (SuspendAccount). */
