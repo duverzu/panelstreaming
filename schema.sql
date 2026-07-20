@@ -127,6 +127,15 @@ CREATE TABLE IF NOT EXISTS clientes (
   activo                BOOLEAN      NOT NULL DEFAULT true
 );
 
+-- Consumo de banda por RADIO y día (lo llena el Guardián de Banda).
+-- Permite ver cuánto gasta cada cliente y, sumando, cada revendedor.
+CREATE TABLE IF NOT EXISTS consumo_cliente (
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+  fecha      DATE    NOT NULL,
+  bytes      BIGINT  NOT NULL DEFAULT 0,
+  PRIMARY KEY (cliente_id, fecha)
+);
+
 -- Suscripciones / facturación de cada cliente.
 CREATE TABLE IF NOT EXISTS suscripciones (
   id                        SERIAL PRIMARY KEY,

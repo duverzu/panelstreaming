@@ -18,6 +18,7 @@ const planResellerModel = require('../models/planResellerModel');
 const resellerModel = require('../models/resellerModel');
 const servidorModel = require('../models/servidorModel');
 const consumoModel = require('../models/consumoModel');
+const consumoClienteModel = require('../models/consumoClienteModel');
 const docModel = require('../models/docModel');
 const apiKeyModel = require('../models/apiKeyModel');
 const biblioteca = require('../services/biblioteca');
@@ -399,9 +400,81 @@ router.delete('/planes/:id', requireAdmin, wrap(async (req, res) => {
 //  REVENDEDORES (RESELLERS)
 // ==================================================================
 
+/**
+ * GET /admin/resellers
+ * Además de la ficha, devuelve el USO de cada revendedor: oyentes asignados
+ * (suma de los planes de sus radios) vs su tope, espacio, oyentes en vivo y
+ * banda consumida en el mes. Es lo que pinta las barras del listado.
+ */
 router.get('/resellers', requireAdmin, wrap(async (req, res) => {
   const resellers = await resellerModel.findAllWithEmail();
-  res.json({ resellers });
+  if (resellers.length === 0) return res.json({ resellers });
+
+  const todos = await clienteModel.findAllWithEmail();
+  const deReseller = todos.filter((c) => c.reseller_id != null);
+
+  // Oyentes en vivo (una consulta por servidor) y banda del mes
+  const { ranking } = await agregarOyentes(deReseller);
+  const oyentesPorCliente = {};
+  ranking.forEach((r) => { oyentesPorCliente[r.cliente_id] = r.oyentes; });
+  const bandaPorReseller = await consumoClienteModel.totalMesPorReseller();
+
+  const enVivo = {};
+  deReseller.forEach((c) => {
+    enVivo[c.reseller_id] = (enVivo[c.reseller_id] || 0) + (oyentesPorCliente[c.id] || 0);
+  });
+
+  const conUso = await Promise.all(resellers.map(async (r) => {
+    const uso = await resellerModel.usoRecursos(r.id);
+    const bytes = bandaPorReseller[r.id] || 0;
+    return {
+      ...r,
+      uso: {
+        radios: r.radios_usadas, cupo_radios: r.cupo_radios,
+        oyentes_asignados: uso.oyentes, max_oyentes_total: r.max_oyentes_total,
+        oyentes_en_vivo: enVivo[r.id] || 0,
+        espacio_mb: uso.espacio, espacio_total_mb: r.espacio_total_mb,
+        banda_mes_bytes: bytes, banda_mes: humanBytes(bytes),
+      },
+    };
+  }));
+
+  res.json({ resellers: conUso });
+}));
+
+/**
+ * GET /admin/resellers/:id/uso — detalle para el panel expandible:
+ * serie diaria de banda (30 días) + sus radios con oyentes y consumo.
+ */
+router.get('/resellers/:id/uso', requireAdmin, wrap(async (req, res) => {
+  const reseller = await resellerModel.findById(Number(req.params.id));
+  if (!reseller) return res.status(404).json({ error: 'Revendedor no encontrado' });
+
+  const clientes = await clienteModel.findByReseller(reseller.id);
+  // OJO: `banda_mes` es del mes EN CURSO (igual que en el listado); la serie es
+  // de 30 días corridos, así que no se suma la serie para obtener el total.
+  const [serie, totalMes, bandaPorCliente, { ranking, oyentes_totales, al_aire }] = await Promise.all([
+    consumoClienteModel.serieReseller(reseller.id, 30),
+    consumoClienteModel.totalMesReseller(reseller.id),
+    consumoClienteModel.totalMesPorClienteDeReseller(reseller.id),
+    agregarOyentes(clientes),
+  ]);
+  const oyentesPorCliente = {};
+  ranking.forEach((r) => { oyentesPorCliente[r.cliente_id] = { oyentes: r.oyentes, online: r.online }; });
+
+  res.json({
+    serie: serie.map((d) => ({ fecha: d.fecha, bytes: d.bytes, gb: +(d.bytes / 1073741824).toFixed(3) })),
+    banda_mes: humanBytes(totalMes),
+    banda_30d: humanBytes(serie.reduce((a, d) => a + d.bytes, 0)),
+    oyentes_totales, al_aire,
+    radios: clientes.map((c) => ({
+      id: c.id, nombre_empresa: c.nombre_empresa, plan: c.plan, activo: c.activo,
+      oyentes: oyentesPorCliente[c.id]?.oyentes || 0,
+      online: oyentesPorCliente[c.id]?.online || false,
+      banda_mes: humanBytes(bandaPorCliente[c.id] || 0),
+      banda_mes_bytes: bandaPorCliente[c.id] || 0,
+    })),
+  });
 }));
 
 /**
