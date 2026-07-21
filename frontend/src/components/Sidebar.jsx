@@ -32,6 +32,20 @@ const MENUS = {
       { label: 'Aprende', icon: IconMic, to: '/reseller/aprende' },
     ]},
   ],
+  // Cliente de VIDEO: mismo panel, otro contenido
+  cliente_video: [
+    { seccion: 'Mi Canal', items: [
+      { label: 'Dashboard', icon: IconDashboard, to: '/cliente' },
+      { label: 'Videos', icon: IconPlaylist, to: '/cliente/videos' },
+    ]},
+    { seccion: 'Cuenta', items: [
+      { label: 'Configuración', icon: IconSettings, to: '/cliente/configuracion' },
+    ]},
+    { seccion: 'Ayuda', items: [
+      { label: 'Aprende', icon: IconMic, to: '/cliente/aprende' },
+    ]},
+  ],
+
   cliente: [
     { seccion: 'Mi Radio', items: [
       { label: 'Dashboard', icon: IconDashboard, to: '/cliente' },
@@ -55,8 +69,10 @@ const MENUS = {
 };
 
 export default function Sidebar() {
-  const { role } = useAuth();
-  const menu = MENUS[role] || MENUS.admin;
+  const { role, user } = useAuth();
+  // Un cliente de video ve otro menú: las páginas de radio no le sirven
+  const esVideo = role === 'cliente' && user?.tipo === 'video';
+  const menu = (esVideo ? MENUS.cliente_video : MENUS[role]) || MENUS.admin;
 
   const itemClass = (isActive) =>
     `w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
@@ -68,9 +84,9 @@ export default function Sidebar() {
   return (
     <aside className="hidden md:flex md:w-64 shrink-0 flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
       <div className="h-16 flex items-center gap-2 px-6 border-b border-gray-200 dark:border-gray-800">
-        <div className="w-8 h-8 rounded-lg bg-brand-600 grid place-items-center text-white text-lg">🎙️</div>
+        <div className="w-8 h-8 rounded-lg bg-brand-600 grid place-items-center text-white text-lg">{esVideo ? '🎬' : '🎙️'}</div>
         <div>
-          <div className="font-bold leading-tight">Panel Radio</div>
+          <div className="font-bold leading-tight">{esVideo ? 'Panel Video' : 'Panel Radio'}</div>
           <div className="text-[11px] text-gray-400 leading-tight">
             {role === 'admin' ? 'Super Admin' : role === 'reseller' ? 'Revendedor' : 'Portal Cliente'}
           </div>

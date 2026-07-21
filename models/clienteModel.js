@@ -33,11 +33,12 @@ async function create({
   reseller_id = null,
   servidor_id = null,
   short_name = null,
+  tipo = 'audio',
 }) {
   const { rows } = await query(
-    `INSERT INTO clientes (user_id, nombre_empresa, plan, azuracast_station_id, url_streaming, reseller_id, servidor_id, short_name)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-    [user_id, nombre_empresa, plan, azuracast_station_id, url_streaming, reseller_id, servidor_id, short_name]
+    `INSERT INTO clientes (user_id, nombre_empresa, plan, azuracast_station_id, url_streaming, reseller_id, servidor_id, short_name, tipo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+    [user_id, nombre_empresa, plan, azuracast_station_id, url_streaming, reseller_id, servidor_id, short_name, tipo]
   );
   return rows[0];
 }

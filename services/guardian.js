@@ -31,6 +31,9 @@ async function muestrear() {
 
   for (const s of servidores) {
     if (!s.activo) continue;
+    // Los nodos de video NO hablan el API de AzuraCast: se miden aparte.
+    // Sin este filtro, agregar un nodo de video llenaría el log de errores.
+    if (s.tipo && s.tipo !== 'audio') continue;
     try {
       const az = await azuracast.paraServidorId(s.id);
       const np = await az.getNowPlayingAll();

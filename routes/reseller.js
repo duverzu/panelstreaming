@@ -195,7 +195,7 @@ router.post('/clientes/:id/impersonar', requireReseller, wrap(async (req, res) =
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   const user = await userModel.findById(cliente.user_id);
   const token = generateToken(user.id, 'cliente', { cliente_id: cliente.id, impersonated_by: req.user.sub });
-  res.json({ token, cliente: { id: cliente.id, nombre_empresa: cliente.nombre_empresa, username: user.username, email: user.email } });
+  res.json({ token, cliente: { id: cliente.id, nombre_empresa: cliente.nombre_empresa, tipo: cliente.tipo || 'audio', username: user.username, email: user.email } });
 }));
 
 module.exports = router;

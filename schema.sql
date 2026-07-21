@@ -141,6 +141,10 @@ CREATE TABLE IF NOT EXISTS clientes (
   activo                BOOLEAN      NOT NULL DEFAULT true
 );
 
+-- Tipo de servicio de la cuenta ('audio' | 'video'). Se copia del plan al
+-- crearla: si el plan luego se renombra o borra, el cliente no cambia de tipo.
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) NOT NULL DEFAULT 'audio';
+
 -- Consumo de banda por RADIO y día (lo llena el Guardián de Banda).
 -- Permite ver cuánto gasta cada cliente y, sumando, cada revendedor.
 CREATE TABLE IF NOT EXISTS consumo_cliente (

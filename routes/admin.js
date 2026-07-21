@@ -151,7 +151,7 @@ router.post('/clientes/:id/impersonar', requireAdmin, wrap(async (req, res) => {
 
   res.json({
     token,
-    cliente: { id: cliente.id, nombre_empresa: cliente.nombre_empresa, username: user.username, email: user.email },
+    cliente: { id: cliente.id, nombre_empresa: cliente.nombre_empresa, tipo: cliente.tipo || 'audio', username: user.username, email: user.email },
   });
 }));
 
@@ -622,6 +622,7 @@ router.get('/banda', requireAdmin, wrap(async (req, res) => {
       id: s.id,
       nombre: s.nombre,
       activo: s.activo,
+      tipo: s.tipo || 'audio',
       consumido_gb: r2(gb),
       tope_gb: tope,
       pct: tope ? Math.min(100, Math.round(pct)) : null,

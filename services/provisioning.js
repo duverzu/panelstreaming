@@ -128,7 +128,7 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
   const cliente = await clienteModel.create({
     user_id: user.id, nombre_empresa, plan: plan.nombre,
     azuracast_station_id: station.id, url_streaming, reseller_id,
-    servidor_id, short_name: station.short_name,
+    servidor_id, short_name: station.short_name, tipo,
   });
   if (dj.dj_usuario) { await clienteModel.update(cliente.id, dj); Object.assign(cliente, dj); }
 

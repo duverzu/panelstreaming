@@ -24,6 +24,7 @@ import ClienteReproductor from './pages/cliente/Reproductor';
 import ClienteRedes from './pages/cliente/Redes';
 import ClienteConectar from './pages/cliente/Conectar';
 import ClienteConfiguracion from './pages/cliente/Configuracion';
+import ClienteVideo from './pages/cliente/Video';
 
 /** Ruta protegida por rol. */
 function Protected({ role, children }) {
@@ -35,6 +36,12 @@ function Protected({ role, children }) {
 
 function homeDe(role) {
   return role === 'admin' ? '/admin' : role === 'reseller' ? '/reseller' : '/cliente';
+}
+
+/** El inicio del cliente depende de si su servicio es de audio o de video. */
+function InicioCliente() {
+  const { user } = useAuth();
+  return user?.tipo === 'video' ? <ClienteVideo /> : <ClienteDashboard />;
 }
 
 export default function App() {
@@ -71,7 +78,9 @@ export default function App() {
 
       {/* Panel Cliente */}
       <Route path="/cliente" element={<Protected role="cliente"><Layout /></Protected>}>
-        <Route index element={<ClienteDashboard />} />
+        {/* El cliente de video ve su canal; el de audio, su radio */}
+        <Route index element={<InicioCliente />} />
+        <Route path="videos" element={<ClienteVideo />} />
         <Route path="musica" element={<ClienteMusica />} />
         <Route path="playlists" element={<ClientePlaylists />} />
         <Route path="autodj" element={<ClienteAutoDJ />} />

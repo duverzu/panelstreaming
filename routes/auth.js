@@ -74,6 +74,7 @@ router.post('/login', wrap(async (req, res) => {
       role: 'cliente',
       cliente_id: cliente.id,
       nombre_empresa: cliente.nombre_empresa,
+      tipo: cliente.tipo || 'audio',
     },
   });
 }));
