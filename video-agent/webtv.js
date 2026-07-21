@@ -4,25 +4,30 @@
  * Mantiene el canal del cliente al aire reproduciendo su lista de videos
  * en bucle. Es lo que sus espectadores ven cuando nadie está en vivo.
  *
- * DECISIÓN CLAVE — se transcodifica al SUBIR, no al emitir:
+ * MODO DUAL, elegido automáticamente según los videos de la cuenta:
  *
- *   Al subir un video se normaliza UNA vez (mismo códec, resolución y
- *   audio que el resto). Emitir es entonces copiar bytes: ffmpeg apenas
- *   usa CPU y el servidor aguanta muchos canales a la vez.
+ *   'copy'      → si todos comparten firma (códec/resolución/fps), se
+ *                 copian bytes: CPU casi cero, aguanta muchos canales.
+ *   'transcode' → si son heterogéneos (el caso de los clientes que vienen
+ *                 de VDO Panel), se normalizan al vuelo a un formato común.
+ *                 Gasta ~medio núcleo por canal, como hacía VDO.
  *
- *   La alternativa (transcodificar en cada emisión) gasta 1-2 núcleos por
- *   canal permanentemente: con 8 núcleos serían 4 canales como mucho.
- *
- * Si los videos no están normalizados, `-c copy` corta el stream entre
- * archivos. Por eso `normalizado` es requisito, no una optimización.
+ * A futuro, normalizar los videos al SUBIR los lleva al modo 'copy' y
+ * libera el CPU. Mientras tanto, 'transcode' hace la migración inmediata
+ * sin tener que recodificar 32 archivos antes de cortar.
  * ------------------------------------------------------------------
  */
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 
 const FFMPEG = process.env.FFMPEG || 'ffmpeg';
+const FFPROBE = process.env.FFPROBE || 'ffprobe';
+// Parámetros de salida cuando hay que normalizar al vuelo (videos heterogéneos)
+const V_RES = process.env.WEBTV_RES || '1280x720';
+const V_FPS = process.env.WEBTV_FPS || '30';
+const V_KBPS = process.env.WEBTV_KBPS || '2500';
 const REINTENTO_MS = Number(process.env.WEBTV_REINTENTO_MS || 5000);
 
 /** Canales en marcha: user -> { proceso, reinicios, desde } */
@@ -56,18 +61,44 @@ async function escribirLista(dirVideos, destino) {
   return { total: archivos.length, ruta: destino, archivos };
 }
 
-/** Argumentos de ffmpeg para emitir la lista en bucle hacia el RTMP local. */
-function argumentos(lista, destinoRtmp) {
-  return [
-    '-hide_banner', '-loglevel', 'warning',
-    '-re',                        // a velocidad real: es una emisión, no una conversión
-    '-stream_loop', '-1',         // en bucle infinito
-    '-f', 'concat', '-safe', '0',
-    '-i', lista,
-    '-c', 'copy',                 // sin recodificar: los videos ya vienen normalizados
-    '-f', 'flv',
-    destinoRtmp,
-  ];
+/** Firma técnica de un video (para saber si la lista es uniforme). */
+function firma(archivo) {
+  return new Promise((resolve) => {
+    execFile(FFPROBE, ['-v', 'error', '-select_streams', 'v:0',
+      '-show_entries', 'stream=codec_name,width,height,r_frame_rate',
+      '-of', 'csv=p=0', archivo], (err, out) => resolve(err ? null : out.trim()));
+  });
+}
+
+/** ¿Todos los videos comparten firma? Entonces se puede emitir con -c copy. */
+async function esUniforme(archivos, dir) {
+  const firmas = new Set();
+  for (const f of archivos) {
+    const s = await firma(path.join(dir, f));
+    firmas.add(s || 'desconocida');
+    if (firmas.size > 1) return false;
+  }
+  return firmas.size === 1;
+}
+
+/**
+ * Argumentos de ffmpeg para emitir la lista en bucle.
+ * modo 'copy'      → copia bytes (videos uniformes, CPU casi cero).
+ * modo 'transcode' → recodifica al vuelo a un formato común (videos
+ *                    heterogéneos): funciona con cualquier mezcla, gasta
+ *                    ~medio núcleo por canal, igual que hacía VDO Panel.
+ */
+function argumentos(lista, destinoRtmp, modo) {
+  const base = ['-hide_banner', '-loglevel', 'warning', '-re', '-stream_loop', '-1',
+    '-f', 'concat', '-safe', '0', '-i', lista];
+  if (modo === 'transcode') {
+    return [...base,
+      '-vf', `scale=${V_RES.replace('x', ':')}:force_original_aspect_ratio=decrease,pad=${V_RES.replace('x', ':')}:(ow-iw)/2:(oh-ih)/2,fps=${V_FPS}`,
+      '-c:v', 'libx264', '-preset', 'veryfast', '-b:v', `${V_KBPS}k`, '-g', String(Number(V_FPS) * 2),
+      '-c:a', 'aac', '-ar', '44100', '-b:a', '128k',
+      '-f', 'flv', destinoRtmp];
+  }
+  return [...base, '-c', 'copy', '-f', 'flv', destinoRtmp];
 }
 
 /**
@@ -80,14 +111,17 @@ async function iniciar(user, { dirCuenta, puertoRtmp, host = '127.0.0.1' }) {
 
   const dirVideos = path.join(dirCuenta, 'uploads');
   const lista = path.join(dirCuenta, 'playlist.txt');
-  const { total } = await escribirLista(dirVideos, lista);
+  const { total, archivos } = await escribirLista(dirVideos, lista);
   if (!total) return { ok: false, error: 'La cuenta no tiene videos para emitir' };
 
+  // Si los videos no son uniformes, se normalizan al vuelo (como hacía VDO)
+  const modo = (await esUniforme(archivos, dirVideos)) ? 'copy' : 'transcode';
+
   const destino = `rtmp://${host}:${puertoRtmp}/${user}stream/play`;
-  const registro = { reinicios: 0, desde: new Date(), total, parar: false };
+  const registro = { reinicios: 0, desde: new Date(), total, parar: false, modo };
 
   const lanzar = () => {
-    const proceso = spawn(FFMPEG, argumentos(lista, destino));
+    const proceso = spawn(FFMPEG, argumentos(lista, destino, modo));
     registro.proceso = proceso;
 
     proceso.stderr.on('data', (d) => {
@@ -105,7 +139,7 @@ async function iniciar(user, { dirCuenta, puertoRtmp, host = '127.0.0.1' }) {
 
   lanzar();
   canales.set(user, registro);
-  return { ok: true, videos: total, destino };
+  return { ok: true, videos: total, modo, destino };
 }
 
 /** Apaga el canal 24/7 de una cuenta. */
@@ -131,6 +165,7 @@ function estado(user) {
   return {
     emitiendo: true,
     videos: r.total,
+    modo: r.modo,
     desde: r.desde,
     reinicios: r.reinicios,
     pid: r.proceso?.pid || null,
