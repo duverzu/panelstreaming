@@ -3,7 +3,16 @@ import { apiFetch } from '../api';
 import Modal from './Modal';
 import { IconPlus, IconTrash, IconInvoice } from '../icons';
 
-const VACIO = { nombre: '', tipo: 'audio', max_bitrate: 128, max_oyentes: 100, espacio_mb: 1024, max_mounts: 1, permite_dj: true };
+// Valores de partida sensatos para cada tipo de servicio
+const VACIO_AUDIO = { nombre: '', tipo: 'audio', max_bitrate: 128, max_oyentes: 100, espacio_mb: 1024, max_mounts: 1, permite_dj: true, max_resolucion: '720p', permite_restream: false };
+const VACIO_VIDEO = { nombre: '', tipo: 'video', max_bitrate: 2500, max_oyentes: 50, espacio_mb: 51200, max_mounts: 1, permite_dj: true, max_resolucion: '720p', permite_restream: false };
+
+const RESOLUCIONES = [
+  { v: '480p',  label: '480p — SD (ahorra banda)' },
+  { v: '720p',  label: '720p — HD (lo más usado)' },
+  { v: '1080p', label: '1080p — Full HD' },
+  { v: 'original', label: 'Sin límite — la que envíe el cliente' },
+];
 
 /**
  * Gestor de planes reutilizable.
@@ -27,10 +36,21 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
   }
   useEffect(() => { cargar(); }, [base]);
 
-  function abrirCrear() { setEditId(null); setForm(VACIO); setError(null); setOpen(true); }
+  function abrirCrear() { setEditId(null); setForm(VACIO_AUDIO); setError(null); setOpen(true); }
+
+  /** Al cambiar el tipo se reajustan los valores por defecto, no los límites de audio. */
+  function cambiarTipo(e) {
+    const tipo = e.target.value;
+    const base = tipo === 'video' ? VACIO_VIDEO : VACIO_AUDIO;
+    setForm((f) => ({ ...base, nombre: f.nombre }));
+  }
   function abrirEditar(p) {
     setEditId(p.id);
-    setForm({ nombre: p.nombre, tipo: p.tipo || 'audio', max_bitrate: p.max_bitrate, max_oyentes: p.max_oyentes, espacio_mb: p.espacio_mb, max_mounts: p.max_mounts, permite_dj: p.permite_dj });
+    setForm({
+      nombre: p.nombre, tipo: p.tipo || 'audio', max_bitrate: p.max_bitrate, max_oyentes: p.max_oyentes,
+      espacio_mb: p.espacio_mb, max_mounts: p.max_mounts, permite_dj: p.permite_dj,
+      max_resolucion: p.max_resolucion || '720p', permite_restream: p.permite_restream || false,
+    });
     setError(null); setOpen(true);
   }
   const set = (k, num) => (e) => setForm((f) => ({ ...f, [k]: num ? Number(e.target.value) : e.target.value }));
@@ -88,12 +108,21 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-sm">
-                <Dato label="Bitrate" value={p.max_bitrate ? `${p.max_bitrate} kbps` : 'Ilimitado'} />
-                <Dato label="Oyentes" value={p.max_oyentes} />
-                <Dato label="Espacio" value={`${(p.espacio_mb / 1024).toFixed(1)} GB`} />
-                <Dato label="DJ en vivo" value={p.permite_dj ? 'Sí' : 'No'} />
-              </div>
+              {p.tipo === 'video' ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-sm">
+                  <Dato label="Resolución" value={p.max_resolucion === 'original' ? 'Sin límite' : p.max_resolucion} />
+                  <Dato label="Espectadores" value={p.max_oyentes} />
+                  <Dato label="Almacenamiento" value={`${(p.espacio_mb / 1024).toFixed(0)} GB`} />
+                  <Dato label="Redes" value={p.permite_restream ? 'Sí' : 'No'} />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-sm">
+                  <Dato label="Bitrate" value={p.max_bitrate ? `${p.max_bitrate} kbps` : 'Ilimitado'} />
+                  <Dato label="Oyentes" value={p.max_oyentes} />
+                  <Dato label="Espacio" value={`${(p.espacio_mb / 1024).toFixed(1)} GB`} />
+                  <Dato label="DJ en vivo" value={p.permite_dj ? 'Sí' : 'No'} />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -104,24 +133,64 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
           <div><label className="label">Nombre</label><input className="input" value={form.nombre} onChange={set('nombre')} placeholder="Ej: Empresarial" required /></div>
           <div>
             <label className="label">Tipo de servicio</label>
-            <select className="input" value={form.tipo} onChange={set('tipo')}>
+            <select className="input" value={form.tipo} onChange={cambiarTipo}>
               <option value="audio">🎵 Audio — radio online</option>
               <option value="video">🎬 Video — streaming de video</option>
             </select>
             <p className="text-xs text-gray-400 mt-1">Decide en qué servidor se crea la cuenta y qué ve el cliente en su panel.</p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="label">Bitrate (kbps)</label><input className="input" type="number" value={form.max_bitrate} onChange={set('max_bitrate', true)} /></div>
-            <div><label className="label">Máx. oyentes</label><input className="input" type="number" value={form.max_oyentes} onChange={set('max_oyentes', true)} /></div>
-            <div><label className="label">Espacio (MB)</label><input className="input" type="number" value={form.espacio_mb} onChange={set('espacio_mb', true)} /></div>
-            <div><label className="label">Máx. mounts</label><input className="input" type="number" value={form.max_mounts} onChange={set('max_mounts', true)} /></div>
-            <div className="col-span-2"><label className="label">DJ en vivo</label>
-              <select className="input" value={form.permite_dj ? '1' : '0'} onChange={(e) => setForm((f) => ({ ...f, permite_dj: e.target.value === '1' }))}>
-                <option value="1">Sí — permite transmisión en vivo</option>
-                <option value="0">No — solo AutoDJ</option>
-              </select>
+          {form.tipo === 'video' ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="label">Resolución máxima</label>
+                <select className="input" value={form.max_resolucion} onChange={set('max_resolucion')}>
+                  {RESOLUCIONES.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Calidad (kbps)</label>
+                <input className="input" type="number" value={form.max_bitrate} onChange={set('max_bitrate', true)} />
+                <p className="text-xs text-gray-400 mt-1">2500 para 720p, 5000 para 1080p</p>
+              </div>
+              <div>
+                <label className="label">Máx. espectadores</label>
+                <input className="input" type="number" value={form.max_oyentes} onChange={set('max_oyentes', true)} />
+              </div>
+              <div className="col-span-2">
+                <label className="label">Almacenamiento (MB)</label>
+                <input className="input" type="number" value={form.espacio_mb} onChange={set('espacio_mb', true)} />
+                <p className="text-xs text-gray-400 mt-1">{(form.espacio_mb / 1024).toFixed(1)} GB para sus videos</p>
+              </div>
+              <div className="col-span-2">
+                <label className="label">Transmisión en vivo</label>
+                <select className="input" value={form.permite_dj ? '1' : '0'} onChange={(e) => setForm((f) => ({ ...f, permite_dj: e.target.value === '1' }))}>
+                  <option value="1">Sí — puede salir en vivo desde su encoder</option>
+                  <option value="0">No — solo emisión 24/7 de sus videos</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="label">Retransmitir a redes</label>
+                <select className="input" value={form.permite_restream ? '1' : '0'} onChange={(e) => setForm((f) => ({ ...f, permite_restream: e.target.value === '1' }))}>
+                  <option value="0">No incluido</option>
+                  <option value="1">Sí — puede reenviar a YouTube, Facebook, Twitch…</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Cada red a la que reenvía consume banda adicional del servidor.</p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label">Bitrate (kbps)</label><input className="input" type="number" value={form.max_bitrate} onChange={set('max_bitrate', true)} /></div>
+              <div><label className="label">Máx. oyentes</label><input className="input" type="number" value={form.max_oyentes} onChange={set('max_oyentes', true)} /></div>
+              <div><label className="label">Espacio (MB)</label><input className="input" type="number" value={form.espacio_mb} onChange={set('espacio_mb', true)} /></div>
+              <div><label className="label">Máx. mounts</label><input className="input" type="number" value={form.max_mounts} onChange={set('max_mounts', true)} /></div>
+              <div className="col-span-2"><label className="label">DJ en vivo</label>
+                <select className="input" value={form.permite_dj ? '1' : '0'} onChange={(e) => setForm((f) => ({ ...f, permite_dj: e.target.value === '1' }))}>
+                  <option value="1">Sí — permite transmisión en vivo</option>
+                  <option value="0">No — solo AutoDJ</option>
+                </select>
+              </div>
+            </div>
+          )}
           {error && <div className="text-sm rounded-xl px-3 py-2 text-red-600 bg-red-50 dark:bg-red-500/10">{error}</div>}
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={() => setOpen(false)} className="btn-ghost flex-1">Cancelar</button>

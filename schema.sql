@@ -56,6 +56,14 @@ CREATE TABLE IF NOT EXISTS planes (
 -- por lo tanto en qué servidor se crea y qué ve el cliente en su panel.
 ALTER TABLE planes ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) NOT NULL DEFAULT 'audio';
 
+-- Parámetros propios del VIDEO. Los planes de audio los ignoran.
+-- El resto de límites se reaprovechan con otro significado según el tipo:
+--   max_bitrate  → kbps del video (2500 = calidad HD normal)
+--   max_oyentes  → espectadores simultáneos
+--   espacio_mb   → almacenamiento de sus videos
+ALTER TABLE planes ADD COLUMN IF NOT EXISTS max_resolucion   VARCHAR(20) NOT NULL DEFAULT '720p';
+ALTER TABLE planes ADD COLUMN IF NOT EXISTS permite_restream BOOLEAN     NOT NULL DEFAULT false;
+
 -- Planes de REVENDEDOR (paquetes de mayorista: cuánto puede vender).
 -- Son distintos a `planes`: aquellos son plantillas de UNA radio; estos son
 -- el cupo total de la cuenta del revendedor. Se venden como un servicio más.
