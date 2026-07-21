@@ -27,9 +27,12 @@ function Snippet({ label, code }) {
 
 export default function ClienteReproductor() {
   const [r, setR] = useState(undefined);
+  const [ext, setExt] = useState(null);   // player de la plataforma (si lo tiene)
 
   useEffect(() => {
-    apiFetch('/cliente/reproductor').then((d) => setR(d.reproductor)).catch(() => setR(null));
+    apiFetch('/cliente/reproductor')
+      .then((d) => { setR(d.reproductor); setExt(d.player_externo || null); })
+      .catch(() => setR(null));
   }, []);
 
   if (r === undefined) return <p className="py-10 text-center text-gray-400">Cargando…</p>;
@@ -41,6 +44,68 @@ export default function ClienteReproductor() {
   const html5 = `<audio controls style="width:100%;max-width:420px"><source src="${r.stream_url}" type="audio/mpeg"></audio>`;
 
   return (
+    <div className="space-y-6">
+      {/* Player oficial de la plataforma: el que el cliente configura allá */}
+      {ext && (
+        <div className="card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+            <div className="flex items-center gap-3">
+              {ext.logo && <img src={ext.logo} alt="" className="w-12 h-12 rounded-xl object-cover bg-gray-100 dark:bg-gray-800" />}
+              <div>
+                <h2 className="font-semibold flex items-center gap-2">
+                  Tu reproductor
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400">{ext.estilo || 'Player'}</span>
+                </h2>
+                <p className="text-xs text-gray-400">
+                  Este es tu player oficial{ext.ubicacion ? ` · ${ext.ubicacion}` : ''}. Su diseño, colores y redes se editan en la plataforma.
+                </p>
+              </div>
+            </div>
+            {ext.url && (
+              <a href={ext.url} target="_blank" rel="noreferrer" className="btn-primary !py-2 !px-3 text-xs shrink-0">
+                Abrir mi player ↗
+              </a>
+            )}
+          </div>
+
+          {ext.url && (
+            <>
+              <div className="rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-800">
+                <iframe src={ext.url} width="100%" height="460" frameBorder="0" allow="autoplay" title="Mi reproductor" style={{ display: 'block' }} />
+              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                ¿No carga la vista previa? Ábrelo con el botón de arriba — algunos navegadores bloquean páginas dentro de otras.
+              </p>
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Snippet label="🔗 Link para compartir" code={ext.url} />
+                <Snippet label="💻 Código para tu web (iframe)" code={ext.embed} />
+              </div>
+            </>
+          )}
+
+          {/* Colores configurados, como referencia visual */}
+          {ext.colores?.primario && (
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-400">
+              <span>Tus colores:</span>
+              {[['Primario', ext.colores.primario], ['Secundario', ext.colores.secundario], ['Fondo', ext.colores.fondo]]
+                .filter(([, c]) => c)
+                .map(([n, c]) => (
+                  <span key={n} className="inline-flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-md border border-gray-200 dark:border-gray-700" style={{ background: c }} />
+                    {n}
+                  </span>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {ext && (
+        <p className="text-sm text-gray-400 -mb-2">
+          ¿Prefieres algo más simple para tu web? También puedes usar estas opciones básicas:
+        </p>
+      )}
+
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Vista previa del reproductor embebible */}
       <div className="card p-5">
@@ -60,6 +125,7 @@ export default function ClienteReproductor() {
         {r.pls_url && <Snippet label="📻 Winamp / VLC / foobar (.pls)" code={r.pls_url} />}
         {r.m3u_url && <Snippet label="📻 iTunes / otros (.m3u)" code={r.m3u_url} />}
       </div>
+    </div>
     </div>
   );
 }

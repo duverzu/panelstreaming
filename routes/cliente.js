@@ -19,6 +19,7 @@ const azuracast = require('../services/azuracast');
 const publico = require('../services/publico');
 const planModel = require('../models/planModel');
 const consumoClienteModel = require('../models/consumoClienteModel');
+const playerExterno = require('../services/playerExterno');
 const authFactory = require('../middleware/auth');
 const isCliente = require('../middleware/isCliente');
 
@@ -450,12 +451,17 @@ router.get('/reproductor', requireCliente, wrap(async (req, res) => {
   const az = await azDe(cliente);
   const st = await az.getStation(cliente.azuracast_station_id);
   const shortcode = st.shortcode || st.short_name;
+  // Player de la plataforma externa (el que el cliente configura allá).
+  // Si existe, es EL player: el del panel queda como alternativa simple.
+  const externo = await playerExterno.buscar(cliente.short_name || shortcode);
+
   res.json({
     reproductor: {
       shortcode, nombre: cliente.nombre_empresa,
       stream_url: `${await publico.deCliente(cliente)}/listen/${shortcode}/radio.mp3`,
       pls_url: st.playlist_pls_url || null, m3u_url: st.playlist_m3u_url || null,
     },
+    player_externo: externo,
   });
 }));
 
