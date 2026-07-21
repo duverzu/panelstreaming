@@ -22,6 +22,10 @@ const claves = require('./claves');
 const webtv = require('./webtv');
 
 const PORT = Number(process.env.PORT || 3000);
+// Por defecto solo escucha en el propio servidor: el panel llega por un
+// túnel SSH, así el puerto no queda expuesto a internet y el token no
+// viaja en claro. Poner 0.0.0.0 solo si se sabe lo que se hace.
+const HOST = process.env.HOST || '127.0.0.1';
 const TOKEN = process.env.AGENT_TOKEN || '';
 const BASE = process.env.HOME_BASE || '/home';
 const CONF_DIR = process.env.NGINX_CONF_DIR || '/etc/nginx/conf.d';
@@ -273,8 +277,9 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message });
 });
 
-app.listen(PORT, () => {
-  console.log(`🎬 Agente de video (SOLO LECTURA) en el puerto ${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`🎬 Agente de video escuchando en ${HOST}:${PORT}`);
+  if (HOST !== '127.0.0.1') console.warn('   ⚠️  Expuesto fuera del servidor: asegúrate de tener firewall');
   console.log(`   Cuentas en: ${BASE}   ·   Config nginx: ${CONF_DIR}`);
   if (!TOKEN) console.warn('   ⚠️  Falta AGENT_TOKEN: el agente rechazará todas las peticiones');
 });
