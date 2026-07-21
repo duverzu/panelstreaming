@@ -95,6 +95,7 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
 
   // 3) Cuenta DJ
   const dj = {};
+  let djMount = '/';
   if (plan.permite_dj) {
     try {
       dj.dj_usuario = station.short_name;
@@ -102,6 +103,8 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
       await az.createStreamer(station.id, { streamer_username: dj.dj_usuario, streamer_password: dj.dj_password, display_name: nombre_empresa, is_active: true });
       const info = await az.getStationAdmin(station.id);
       dj.dj_puerto = info?.backend_config?.dj_port || null;
+      // El DJ conecta al mount del backend ('/'), NO al de escucha (/radio.mp3)
+      djMount = info?.backend_config?.dj_mount_point || '/';
     } catch (e) { console.error('[provision] dj:', e.message); }
   }
 
@@ -123,7 +126,9 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
   if (dj.dj_usuario) { await clienteModel.update(cliente.id, dj); Object.assign(cliente, dj); }
 
   return {
-    cliente: { ...cliente, email, username: usuario },
+    // servidor_url y dj_mount no se guardan en BD: son datos derivados que el
+    // integrador necesita para armar el mensaje de bienvenida del cliente.
+    cliente: { ...cliente, email, username: usuario, servidor_url: baseUrl, dj_mount: djMount },
     credenciales: { usuario, email, password },
   };
 }

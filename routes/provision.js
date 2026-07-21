@@ -32,6 +32,11 @@ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).cat
 
 const panelUrl = () => process.env.PANEL_URL || '';
 
+/** Host limpio de una URL (https://server1.x.co/ -> server1.x.co) para el encoder. */
+function hostDe(url) {
+  try { return new URL(url).hostname; } catch (_) { return null; }
+}
+
 /** GET /api/provision/test — prueba de conexión (como el "Test" de Centova). */
 router.get('/test', wrap(async (req, res) => {
   const servidores = await servidorModel.findAllConUso();
@@ -98,10 +103,17 @@ router.post('/servicios', wrap(async (req, res) => {
     login: { url: panelUrl(), usuario: r.credenciales.usuario, email: r.credenciales.email, password: r.credenciales.password },
     estacion: {
       id: r.cliente.azuracast_station_id,
+      short_name: r.cliente.short_name,
+      // Para ESCUCHAR / compartir la radio
       url_streaming: r.cliente.url_streaming,
+      url_publica: r.cliente.servidor_url ? `${r.cliente.servidor_url}/public/${r.cliente.short_name}` : null,
+      // Para TRANSMITIR en vivo (lo que se pega en BUTT, Mixxx, Sam Broadcaster…)
+      dj_host: hostDe(r.cliente.servidor_url),
+      dj_puerto: r.cliente.dj_puerto || null,
+      dj_mount: r.cliente.dj_mount || '/',
       dj_usuario: r.cliente.dj_usuario || null,
       dj_password: r.cliente.dj_password || null,
-      dj_puerto: r.cliente.dj_puerto || null,
+      dj_tipo: 'Icecast 2',
     },
   });
 }));
