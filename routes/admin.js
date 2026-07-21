@@ -27,6 +27,7 @@ const { agregarOyentes } = require('../services/stats');
 const { generateToken } = require('../services/auth');
 // generateToken se usa también para emitir tokens de cliente al impersonar
 const azuracast = require('../services/azuracast');
+const videoNode = require('../services/videoNode');
 const authFactory = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
 
@@ -693,6 +694,70 @@ router.put('/servidores/:id', requireAdmin, wrap(async (req, res) => {
     message: `Servidor actualizado ✅${urls_actualizadas ? ` (${urls_actualizadas} URLs de radio reescritas)` : ''}`,
     servidor: { ...actualizado, api_key: undefined },
     urls_actualizadas,
+  });
+}));
+
+
+/**
+ * GET /admin/servidores/:id/cuentas — qué hay en un nodo de VIDEO.
+ * Le pregunta al agente que corre en ese VPS. Solo lectura.
+ */
+router.get('/servidores/:id/cuentas', requireAdmin, wrap(async (req, res) => {
+  const servidor = await servidorModel.findById(Number(req.params.id));
+  if (!servidor) return res.status(404).json({ error: 'Servidor no encontrado' });
+  if (servidor.tipo !== 'video') return res.status(400).json({ error: 'Este servidor no es de video' });
+
+  const nodo = videoNode.crearCliente(servidor.url, servidor.api_key);
+  const salud = await nodo.salud();
+  if (!salud) {
+    return res.status(502).json({
+      error: 'No se pudo contactar el agente del nodo. Revisa que esté corriendo y que el token sea correcto.',
+      cuentas: [],
+    });
+  }
+
+  const cuentas = await nodo.cuentas();
+
+  // Cruce con nuestros clientes: cuáles ya están en el panel y cuáles no
+  const nuestros = await clienteModel.findAllWithEmail();
+  const porShort = {};
+  nuestros.forEach((c) => { if (c.short_name) porShort[c.short_name] = c; });
+
+  res.json({
+    servidor: { id: servidor.id, nombre: servidor.nombre, url: servidor.url },
+    cuentas: cuentas.map((c) => ({
+      ...c,
+      espacio: humanBytes(c.espacio_bytes),
+      // null = existe en el nodo pero todavía no está en el panel
+      cliente_id: porShort[c.user]?.id || null,
+      nombre_empresa: porShort[c.user]?.nombre_empresa || null,
+    })),
+  });
+}));
+
+/** GET /admin/servidores/:id/cuentas/:user — detalle y consumo de una cuenta. */
+router.get('/servidores/:id/cuentas/:user', requireAdmin, wrap(async (req, res) => {
+  const servidor = await servidorModel.findById(Number(req.params.id));
+  if (!servidor || servidor.tipo !== 'video') return res.status(404).json({ error: 'Nodo de video no encontrado' });
+
+  const nodo = videoNode.crearCliente(servidor.url, servidor.api_key);
+  const [detalle, consumo] = await Promise.all([
+    nodo.cuenta(req.params.user),
+    nodo.consumo(req.params.user, 30),
+  ]);
+  if (!detalle) return res.status(502).json({ error: 'El nodo no respondió' });
+
+  res.json({
+    ...detalle,
+    espacio: humanBytes(detalle.espacio_bytes),
+    videos: (detalle.videos || []).map((v) => ({ ...v, tam: humanBytes(v.bytes) })),
+    consumo: consumo
+      ? {
+          total: humanBytes(consumo.total_bytes),
+          total_bytes: consumo.total_bytes,
+          por_dia: consumo.por_dia.map((d) => ({ fecha: d.fecha, gb: +(d.bytes / 1073741824).toFixed(3) })),
+        }
+      : null,
   });
 }));
 

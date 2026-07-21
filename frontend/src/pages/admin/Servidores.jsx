@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api';
+import CuentasVideo from '../../components/CuentasVideo';
 import Modal from '../../components/Modal';
 import { IconPlus, IconTrash, IconServer, IconRefresh } from '../../icons';
 
@@ -7,6 +8,7 @@ export default function AdminServidores() {
   const [servidores, setServidores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [verCuentas, setVerCuentas] = useState(null);   // nodo de video desplegado
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ nombre: '', url: '', url_publica: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0, tipo: 'audio' });
   const [error, setError] = useState(null);
@@ -79,14 +81,22 @@ export default function AdminServidores() {
                     {s.url_publica && <div className="text-xs text-brand-600 dark:text-brand-400 break-all">🌐 público: {s.url_publica}</div>}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {s.tipo === 'video' && (
+                      <button onClick={() => setVerCuentas(verCuentas === s.id ? null : s.id)}
+                        className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-brand-500 hover:text-brand-600 transition">
+                        {verCuentas === s.id ? 'Ocultar cuentas' : 'Ver cuentas'}
+                      </button>
+                    )}
                     <button onClick={() => abrirEditar(s)} className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-brand-500 hover:text-brand-600 transition">Editar</button>
                     <button onClick={() => toggle(s)} className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-amber-400 hover:text-amber-500 transition">{s.activo ? 'Pausar' : 'Activar'}</button>
                     <button onClick={() => eliminar(s)} title="Eliminar" className="w-8 h-8 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-800 hover:border-red-400 hover:text-red-500 transition"><IconTrash width={15} height={15} /></button>
                   </div>
                 </div>
+                {verCuentas === s.id && <CuentasVideo servidorId={s.id} />}
+
                 <div className="mt-4">
                   <div className="flex justify-between text-sm mb-1.5">
-                    <span className="text-gray-500 dark:text-gray-400">Radios</span>
+                    <span className="text-gray-500 dark:text-gray-400">{s.tipo === 'video' ? 'Cuentas' : 'Radios'}</span>
                     <span className="font-semibold tabular-nums">{s.radios} / {s.capacidad_radios}</span>
                   </div>
                   <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
@@ -112,7 +122,7 @@ export default function AdminServidores() {
             </select>
             <p className="text-xs text-gray-400 mt-1">Las cuentas se crean en el servidor que corresponde a su plan.</p>
           </div>
-          <div><label className="label">URL de AzuraCast</label><input className="input" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://server3.streaminghd.co" required />
+          <div><label className="label">{form.tipo === 'video' ? 'URL del agente de video' : 'URL de AzuraCast'}</label><input className="input" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={form.tipo === 'video' ? 'http://147.93.112.161:3000' : 'https://server3.streaminghd.co'} required />
             <p className="text-xs text-gray-400 mt-1">Solo la usa el panel para hablar con la API. No se le muestra al cliente.</p></div>
           <div>
             <label className="label">URL pública (marca blanca)</label>
