@@ -97,18 +97,24 @@ async function medirCarpeta(dir) {
   return { bytes, archivos };
 }
 
-/** Puertos del cliente, leídos de la configuración de nginx que ya existe. */
+/**
+ * Puertos del cliente. Los busca en NUESTRA config y en la de VDO Panel,
+ * porque durante la migración conviven ambas y después queda solo la nuestra.
+ */
 async function puertosDe(user) {
-  const leer = async (archivo, regex) => {
-    try {
-      const txt = await fsp.readFile(path.join(CONF_DIR, archivo), 'utf8');
-      const m = txt.match(regex);
-      return m ? Number(m[1]) : null;
-    } catch { return null; }
+  const CUENTAS_DIR = process.env.NGINX_CUENTAS_DIR || '/opt/nginx-panel/conf/cuentas';
+  const buscar = async (candidatos, regex) => {
+    for (const ruta of candidatos) {
+      try {
+        const m = (await fsp.readFile(ruta, 'utf8')).match(regex);
+        if (m) return Number(m[1]);
+      } catch { /* no existe, siguiente */ }
+    }
+    return null;
   };
   return {
-    http: await leer(`${user}-http.http`, /listen\s+(\d+)\s*ssl/),
-    rtmp: await leer(`${user}-rtmp.conf`, /listen\s+(\d+)\s*;/),
+    http: await buscar([path.join(CUENTAS_DIR, `${user}.http`), path.join(CONF_DIR, `${user}-http.http`)], /listen\s+(\d+)\s*ssl/),
+    rtmp: await buscar([path.join(CUENTAS_DIR, `${user}.rtmp`), path.join(CONF_DIR, `${user}-rtmp.conf`)], /listen\s+(\d+)\s*;/),
   };
 }
 
@@ -300,16 +306,17 @@ app.post('/rtmp/fin', wrap(async (req, res) => {
  *               Si se omiten, se asignan del rango de cuentas nuevas.
  */
 app.post('/cuentas', wrap(async (req, res) => {
-  const { user, http, rtmp, iniciar_24_7 } = req.body || {};
+  const { user, http, rtmp, iniciar_24_7, reload = true } = req.body || {};
   if (!user) return res.status(400).json({ error: 'Falta el usuario' });
 
   const puertos = (http && rtmp) ? { http: Number(http), rtmp: Number(rtmp) } : undefined;
   const info = await crearCuenta(user, { puertos });
 
-  const reload = await recargarNginx();
-  if (!reload.ok) {
-    // La config quedó escrita pero nginx no la aceptó: se avisa con el detalle
-    return res.status(500).json({ error: 'nginx rechazó la configuración', detalle: reload.error, ...info });
+  // En la PREPARACIÓN de una migración se pasa reload:false: la config queda
+  // escrita pero no se activa (los puertos aún los tiene VDO Panel).
+  if (reload) {
+    const r = await recargarNginx();
+    if (!r.ok) return res.status(500).json({ error: 'nginx rechazó la configuración', detalle: r.error, ...info });
   }
 
   let webtvEstado = null;
@@ -340,9 +347,10 @@ app.post('/cuentas/:user/24-7', wrap(async (req, res) => {
 
   if (!encender) return res.json({ ok: true, ...webtv.detener(user) });
 
-  // El puerto RTMP se lee de la config de la cuenta
-  const puertos = await puertosDe(user);
-  const r = await webtv.iniciar(user, { dirCuenta: c.dir, puertoRtmp: puertos.rtmp });
+  // El puerto RTMP se puede pasar explícito (migración) o leer de la config.
+  const rtmp = req.body?.rtmp || (await puertosDe(user)).rtmp;
+  if (!rtmp) return res.status(400).json({ error: 'No se pudo determinar el puerto RTMP de la cuenta' });
+  const r = await webtv.iniciar(user, { dirCuenta: c.dir, puertoRtmp: Number(rtmp) });
   res.json({ ok: true, ...r });
 }));
 
