@@ -26,8 +26,13 @@ export default function ClienteDashboard() {
   const [stats, setStats] = useState(null);
   const [saltando, setSaltando] = useState(false);
   const [consumo, setConsumo] = useState(null);
+  const [estado, setEstado] = useState(null);   // 'sonando ahora' ya resuelto
 
-  function cargarNP() { apiFetch('/cliente/nowplaying').then((d) => setNowplaying(d.nowplaying)).catch((e) => setNpError(e.message)); }
+  function cargarNP() {
+    apiFetch('/cliente/nowplaying')
+      .then((d) => { setNowplaying(d.nowplaying); setEstado(d.estado || null); })
+      .catch((e) => setNpError(e.message));
+  }
 
   useEffect(() => {
     apiFetch('/cliente/perfil').then((d) => setPerfil(d.perfil)).catch(() => {});
@@ -43,9 +48,8 @@ export default function ClienteDashboard() {
     catch (e) { alert(e.message); } finally { setSaltando(false); }
   }
 
-  const cancion = nowplaying?.now_playing?.song;
-  // En vivo + sin título = el encoder del DJ no está mandando metadata
-  const sinTitulosEnVivo = Boolean(nowplaying?.live?.is_live) && !cancion?.title;
+  const enVivo = Boolean(estado?.is_live);
+  const sinTitulosEnVivo = Boolean(estado?.sin_metadata_en_vivo);
   const banda = (consumo?.banda?.serie || []).map((d) => ({
     label: new Date(d.fecha).toLocaleDateString('es', { day: '2-digit', month: 'short' }),
     valor: d.gb,
@@ -69,7 +73,7 @@ export default function ClienteDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatTile label="Oyentes ahora" value={stats?.oyentes_ahora ?? 0} icon={IconMic} color="brand" gradient hint="en vivo" />
         <StatTile label="Pico de audiencia" value={stats?.pico ?? 0} icon={IconChart} color="violet" hint="máx. del mes" />
-        <StatTile label="En vivo" value={nowplaying?.live?.is_live ? 'DJ' : 'AutoDJ'} icon={IconUsers} color="blue" hint={nowplaying?.live?.is_live ? 'transmitiendo' : 'automático'} />
+        <StatTile label="En vivo" value={enVivo ? 'DJ' : 'AutoDJ'} icon={IconUsers} color="blue" hint={enVivo ? (estado?.streamer || 'transmitiendo') : 'automático'} />
         <StatTile label="Estado" value={estacion?.azuracast_station_id ? 'OK' : '—'} icon={IconRadio} color="amber" hint={estacion?.azuracast_station_id ? 'activa' : 'sin estación'} />
       </div>
 
@@ -141,14 +145,32 @@ export default function ClienteDashboard() {
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold flex items-center gap-2"><IconMic width={18} height={18} /> Sonando ahora</h2>
-            <button onClick={saltar} disabled={saltando} className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-brand-500 hover:text-brand-600 transition disabled:opacity-50">
-              {saltando ? 'Saltando…' : '⏭ Saltar canción'}
-            </button>
+            {!enVivo && (
+              <button onClick={saltar} disabled={saltando} className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-brand-500 hover:text-brand-600 transition disabled:opacity-50">
+                {saltando ? 'Saltando…' : '⏭ Saltar canción'}
+              </button>
+            )}
           </div>
-          {cancion ? (
-            <div><div className="text-lg font-semibold">{cancion.title || 'Sin título'}</div><div className="text-gray-500">{cancion.artist || 'Artista desconocido'}</div></div>
+          {estado?.is_online ? (
+            <div>
+              {/* De dónde viene el audio ahora mismo */}
+              <div className="flex items-center gap-2 mb-1.5">
+                {enVivo ? (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> EN VIVO
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400">
+                    AUTODJ
+                  </span>
+                )}
+                {enVivo && estado?.streamer && <span className="text-xs text-gray-400">{estado.streamer}</span>}
+              </div>
+              <div className="text-lg font-semibold">{estado?.titulo || 'Sin título'}</div>
+              <div className="text-gray-500">{estado?.artista || (enVivo ? '' : 'Artista desconocido')}</div>
+            </div>
           ) : (
-            <div className="text-sm text-gray-400">{npError ? 'La estación no está transmitiendo en este momento.' : 'Cargando información en vivo…'}</div>
+            <div className="text-sm text-gray-400">{npError || estado ? 'La estación no está transmitiendo en este momento.' : 'Cargando información en vivo…'}</div>
           )}
 
           {/* El DJ está al aire pero su programa no envía el nombre de la canción */}

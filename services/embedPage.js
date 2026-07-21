@@ -72,13 +72,10 @@ function embedPage(shortcode, baseURL) {
       fetch('/api/public/nowplaying/' + encodeURIComponent(SHORT))
         .then(function(r){ return r.json(); })
         .then(function(d){
-          // Si el DJ transmite sin enviar titulos, mostramos algo con sentido
-          // en vez de un hueco: "En vivo" y el nombre del DJ.
+          // El backend ya resuelve el titulo: si el DJ esta en vivo sin enviar
+          // metadata, manda "En vivo" en vez de la cancion vieja del AutoDJ.
           var t = d.title, a = d.artist || '';
-          if (!t) {
-            if (d.is_live) { t = 'En vivo'; a = a || d.streamer || ''; }
-            else { t = d.is_online ? 'En emisión' : 'Fuera de aire'; }
-          }
+          if (!t) t = d.is_online ? 'En emisión' : 'Fuera de aire';
           document.getElementById('title').textContent = t;
           document.getElementById('artist').textContent = a;
           document.getElementById('art').src = d.art || DEFAULT_ART;

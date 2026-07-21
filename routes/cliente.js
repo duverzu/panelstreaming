@@ -20,6 +20,7 @@ const publico = require('../services/publico');
 const planModel = require('../models/planModel');
 const consumoClienteModel = require('../models/consumoClienteModel');
 const playerExterno = require('../services/playerExterno');
+const nowplayingSvc = require('../services/nowplaying');
 const authFactory = require('../middleware/auth');
 const isCliente = require('../middleware/isCliente');
 
@@ -101,7 +102,8 @@ router.get('/nowplaying', requireCliente, wrap(async (req, res) => {
   if (!cliente?.azuracast_station_id) return res.json({ nowplaying: null });
   try {
     const az = await azDe(cliente);
-    res.json({ nowplaying: await az.getNowPlaying(cliente.azuracast_station_id) });
+    const np = await az.getNowPlaying(cliente.azuracast_station_id);
+    res.json({ nowplaying: np, estado: nowplayingSvc.normalizar(np) });
   } catch (err) { res.status(err.status || 502).json({ error: err.message }); }
 }));
 

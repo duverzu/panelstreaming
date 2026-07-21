@@ -8,6 +8,7 @@
  */
 const express = require('express');
 const azuracast = require('../services/azuracast');
+const nowplaying = require('../services/nowplaying');
 const clienteModel = require('../models/clienteModel');
 const docModel = require('../models/docModel');
 
@@ -32,15 +33,16 @@ router.get('/nowplaying/:shortcode', wrap(async (req, res) => {
     const cliente = await clienteModel.findByShortName(req.params.shortcode);
     const az = await azuracast.paraServidorId(cliente?.servidor_id);
     const np = await az.getNowPlaying(req.params.shortcode);
-    const song = np?.now_playing?.song || {};
+    const n = nowplaying.normalizar(np);
     res.json({
-      is_online: !!np?.is_online,
-      is_live: !!np?.live?.is_live,
-      streamer: np?.live?.streamer_name || '',
-      title: song.title || '',
-      artist: song.artist || '',
-      art: song.art || '',
-      listeners: np?.listeners?.current ?? 0,
+      is_online: n.is_online,
+      is_live: n.is_live,
+      streamer: n.streamer,
+      title: n.titulo,
+      artist: n.artista,
+      art: n.art,
+      fuente: n.fuente,
+      listeners: n.listeners,
     });
   } catch {
     res.json({ is_online: false, is_live: false, title: '', artist: '', art: '' });
