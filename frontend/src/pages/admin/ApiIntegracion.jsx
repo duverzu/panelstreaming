@@ -90,6 +90,10 @@ export default function AdminApiIntegracion() {
             <div><span className="text-blue-600">POST</span>   /servicios/:id/plan           → cambiar plan</div>
             <div><span className="text-red-600">DELETE</span> /servicios/:id                → terminar (baja)</div>
             <div><span className="text-brand-600">GET</span>    /servicios/:id                → estado/uso</div>
+            <div><span className="text-blue-600">POST</span>   /servicios/:id/iniciar        → poner al aire</div>
+            <div><span className="text-blue-600">POST</span>   /servicios/:id/detener        → detener transmisión</div>
+            <div><span className="text-blue-600">POST</span>   /servicios/:id/reiniciar      → reiniciar stream</div>
+            <div><span className="text-blue-600">POST</span>   /servicios/:id/password       → cambiar contraseña</div>
           </div>
 
           <div className="text-gray-500">Servicios de REVENDEDOR (mayorista, mismo ciclo de vida):</div>

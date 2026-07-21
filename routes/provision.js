@@ -13,6 +13,7 @@
  */
 const express = require('express');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 
 const apiKeyAuth = require('../middleware/apiKey');
 const provisioning = require('../services/provisioning');
@@ -307,6 +308,79 @@ router.delete('/servicios/:id', wrap(async (req, res) => {
   }
   await userModel.deleteById(c.user_id);
   res.json({ ok: true, message: 'Servicio terminado' });
+}));
+
+// ---- Control del stream (botones del panel de facturación) --------
+
+/** Busca el servicio y su cliente AzuraCast; 404/400 si no aplica. */
+async function conEstacion(req, res) {
+  const c = await clienteModel.findById(Number(req.params.id));
+  if (!c) { res.status(404).json({ error: 'Servicio no encontrado' }); return null; }
+  if (!c.azuracast_station_id) { res.status(400).json({ error: 'El servicio no tiene estación' }); return null; }
+  return { c, az: await azuracast.paraServidorId(c.servidor_id) };
+}
+
+/** POST /api/provision/servicios/:id/iniciar — pone la radio al aire. */
+router.post('/servicios/:id/iniciar', wrap(async (req, res) => {
+  const ctx = await conEstacion(req, res);
+  if (!ctx) return;
+  await ctx.az.restartStation(ctx.c.azuracast_station_id); // restart registra los servicios y arranca
+  res.json({ ok: true, message: 'Radio al aire' });
+}));
+
+/** POST /api/provision/servicios/:id/detener — detiene la transmisión (no suspende la cuenta). */
+router.post('/servicios/:id/detener', wrap(async (req, res) => {
+  const ctx = await conEstacion(req, res);
+  if (!ctx) return;
+  await ctx.az.stopStation(ctx.c.azuracast_station_id);
+  res.json({ ok: true, message: 'Transmisión detenida' });
+}));
+
+/** POST /api/provision/servicios/:id/reiniciar — reinicia el stream. */
+router.post('/servicios/:id/reiniciar', wrap(async (req, res) => {
+  const ctx = await conEstacion(req, res);
+  if (!ctx) return;
+  await ctx.az.restartStation(ctx.c.azuracast_station_id);
+  res.json({ ok: true, message: 'Radio reiniciada' });
+}));
+
+/**
+ * POST /api/provision/servicios/:id/password — cambia contraseñas (ChangePassword).
+ * body: { password?, dj? }
+ *   password → la del panel; si no viene, se genera una y se devuelve.
+ *   dj: true → además regenera la contraseña de transmisión en vivo (source/DJ).
+ */
+router.post('/servicios/:id/password', wrap(async (req, res) => {
+  const c = await clienteModel.findById(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Servicio no encontrado' });
+
+  const nueva = req.body?.password || crypto.randomBytes(6).toString('hex');
+  if (String(nueva).length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+  await userModel.updatePassword(c.user_id, await bcrypt.hash(String(nueva), 10));
+  const user = await userModel.findById(c.user_id);
+
+  const resp = { ok: true, message: 'Contraseña actualizada', usuario: user?.username, password: nueva };
+
+  // Opcional: rotar también la clave con la que el DJ conecta el encoder
+  if (req.body?.dj && c.azuracast_station_id) {
+    try {
+      const az = await azuracast.paraServidorId(c.servidor_id);
+      const streamers = await az.getStreamers(c.azuracast_station_id);
+      const st = streamers.find((s) => s.streamer_username === c.dj_usuario) || streamers[0];
+      if (st) {
+        const djPass = crypto.randomBytes(6).toString('hex');
+        await az.updateStreamer(c.azuracast_station_id, st.id, { streamer_password: djPass });
+        await clienteModel.update(c.id, { dj_password: djPass });
+        resp.dj_usuario = c.dj_usuario;
+        resp.dj_password = djPass;
+      } else {
+        resp.aviso = 'El plan no incluye DJ en vivo: solo se cambió la contraseña del panel';
+      }
+    } catch (e) {
+      resp.aviso = 'No se pudo cambiar la contraseña de DJ: ' + e.message;
+    }
+  }
+  res.json(resp);
 }));
 
 /** GET /api/provision/servicios/:id — estado/uso del servicio. */
