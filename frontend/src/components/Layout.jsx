@@ -18,6 +18,7 @@ const TITULOS = {
   '/reseller/planes': { title: 'Mis Planes', subtitle: 'Tus plantillas + las globales del sistema' },
   '/reseller/estadisticas': { title: 'Estadísticas', subtitle: 'Audiencia de tus radios' },
   '/reseller/aprende': { title: 'Aprende', subtitle: 'Guías para usar y vender el panel' },
+  '/cliente/videos': { title: 'Videos', subtitle: 'Sube y organiza los videos de tu canal' },
   '/cliente/musica': { title: 'Música', subtitle: 'Tu biblioteca para el AutoDJ' },
   '/cliente/playlists': { title: 'Playlists', subtitle: 'Música, jingles/spots y programas por horario' },
   '/cliente/estadisticas': { title: 'Estadísticas', subtitle: 'Oyentes en vivo y audiencia de tu radio' },

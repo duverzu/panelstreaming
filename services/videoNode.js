@@ -60,6 +60,24 @@ function crearCliente(baseURL, token) {
       try { return (await api.get(`/cuentas/${encodeURIComponent(user)}/consumo`, { params: { dias } })).data; }
       catch (e) { return fallo(`consumo(${user})`, e); }
     },
+
+    /** Pide un ticket para que el navegador suba directo al nodo. */
+    ticketSubida: async (user) => {
+      try { return (await api.post(`/cuentas/${encodeURIComponent(user)}/ticket`)).data; }
+      catch (e) { return fallo(`ticket(${user})`, e); }
+    },
+
+    /** Borra un video de la cuenta. */
+    borrarVideo: async (user, nombre) => {
+      try { return (await api.delete(`/cuentas/${encodeURIComponent(user)}/videos/${encodeURIComponent(nombre)}`)).data; }
+      catch (e) { return fallo(`borrar(${user})`, e) || { ok: false }; }
+    },
+
+    /** Enciende/apaga la emisión 24/7. */
+    emision: async (user, encender) => {
+      try { return (await api.post(`/cuentas/${encodeURIComponent(user)}/24-7`, { encender })).data; }
+      catch (e) { return fallo(`emision(${user})`, e); }
+    },
   };
 }
 

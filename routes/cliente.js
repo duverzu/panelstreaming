@@ -20,6 +20,8 @@ const publico = require('../services/publico');
 const planModel = require('../models/planModel');
 const consumoClienteModel = require('../models/consumoClienteModel');
 const playerExterno = require('../services/playerExterno');
+const videoNode = require('../services/videoNode');
+const servidorModel = require('../models/servidorModel');
 const nowplayingSvc = require('../services/nowplaying');
 const authFactory = require('../middleware/auth');
 const isCliente = require('../middleware/isCliente');
@@ -506,5 +508,82 @@ router.put('/autodj', requireCliente, wrap(async (req, res) => {
   await az.updateStation(cliente.azuracast_station_id, { backend_config });
   res.json({ message: 'AutoDJ actualizado ✅' });
 }));
+
+
+// ==================================================================
+//  CLIENTE DE VIDEO — sus videos, subida, borrado y datos del canal
+// ==================================================================
+
+/** Nodo de video del cliente (o null si su cuenta no es de video). */
+async function nodoDe(cliente) {
+  if (!cliente || cliente.tipo !== 'video' || !cliente.servidor_id) return null;
+  const s = await servidorModel.findById(cliente.servidor_id);
+  if (!s || s.tipo !== 'video') return null;
+  return { nodo: videoNode.crearCliente(s.url, s.api_key), servidor: s };
+}
+
+/** GET /cliente/video — resumen del canal: videos, espacio, consumo, URLs. */
+router.get('/video', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  const ctx = await nodoDe(cliente);
+  if (!ctx) return res.status(400).json({ error: 'Tu cuenta no es de video' });
+
+  const user = cliente.short_name;
+  const [detalle, consumo] = await Promise.all([
+    ctx.nodo.cuenta(user),
+    ctx.nodo.consumo(user, 30),
+  ]);
+  if (!detalle) return res.status(502).json({ error: 'No se pudo consultar tu canal ahora mismo. Intenta en un momento.' });
+
+  const publica = (ctx.servidor.url_publica || ctx.servidor.url).replace(/\/+$/, '');
+  const puerto = detalle.puertos?.http;
+  const base = puerto ? `${publica}:${puerto}` : publica;
+
+  res.json({
+    nombre: cliente.nombre_empresa,
+    al_aire: detalle.al_aire,
+    videos: (detalle.videos || []).map((v) => ({
+      nombre: v.nombre, tam_mb: +(v.bytes / 1048576).toFixed(1), modificado: v.modificado,
+    })),
+    espacio_mb: +(detalle.espacio_bytes / 1048576).toFixed(1),
+    urls: {
+      canal: `${base}/hybrid/play.m3u8`,     // lo que ponen en su web/app
+      emision: `${base}/stream/play.m3u8`,
+      vivo: `${base}/live/play.m3u8`,
+    },
+    consumo: consumo ? {
+      total_gb: +(consumo.total_bytes / 1073741824).toFixed(2),
+      por_dia: consumo.por_dia.map((d) => ({ fecha: d.fecha, gb: +(d.bytes / 1073741824).toFixed(3) })),
+    } : null,
+  });
+}));
+
+/** POST /cliente/video/ticket — ticket para subir un video directo al nodo. */
+router.post('/video/ticket', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  const ctx = await nodoDe(cliente);
+  if (!ctx) return res.status(400).json({ error: 'Tu cuenta no es de video' });
+
+  const detalle = await ctx.nodo.cuenta(cliente.short_name);
+  const t = await ctx.nodo.ticketSubida(cliente.short_name);
+  if (!t?.ticket) return res.status(502).json({ error: 'No se pudo preparar la subida' });
+
+  const publica = (ctx.servidor.url_publica || ctx.servidor.url).replace(/\/+$/, '');
+  const puerto = detalle?.puertos?.http;
+  // El navegador sube directo a esta URL (no pasa por el panel)
+  res.json({ url: `${publica}${puerto ? ':' + puerto : ''}/_subir?ticket=${encodeURIComponent(t.ticket)}` });
+}));
+
+/** DELETE /cliente/video/:nombre — borra uno de sus videos. */
+router.delete('/video/:nombre', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  const ctx = await nodoDe(cliente);
+  if (!ctx) return res.status(400).json({ error: 'Tu cuenta no es de video' });
+
+  const r = await ctx.nodo.borrarVideo(cliente.short_name, req.params.nombre);
+  if (!r?.ok) return res.status(404).json({ error: r?.error || 'No se pudo borrar' });
+  res.json({ ok: true });
+}));
+
 
 module.exports = router;

@@ -42,6 +42,7 @@ const GLOBALES = new Set([
   'encodeURI', 'decodeURI', 'Symbol', 'BigInt', 'WeakMap', 'WeakSet', 'Proxy', 'Reflect',
   'TextEncoder', 'TextDecoder', 'crypto', 'performance', 'history', 'screen', 'matchMedia',
   'FileReader', 'Audio', 'Notification', 'IntersectionObserver', 'ResizeObserver', 'WebSocket',
+  'XMLHttpRequest', 'FormData', 'DataTransfer', 'MutationObserver', 'AbortSignal',
 ]);
 
 let fallos = 0;
