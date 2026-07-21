@@ -751,6 +751,68 @@ router.get('/servidores/:id/cuentas', requireAdmin, wrap(async (req, res) => {
   });
 }));
 
+
+/**
+ * POST /admin/servidores/:id/cuentas/:user/importar
+ * Da de alta en el panel una cuenta que YA existe en el nodo de video.
+ *
+ * No toca el nodo: solo crea el registro de nuestro lado para poder verla,
+ * medirla y facturarla. El cliente no recibe acceso aquí — se le genera
+ * después, cuando su panel tenga algo que mostrarle.
+ */
+router.post('/servidores/:id/cuentas/:user/importar', requireAdmin, wrap(async (req, res) => {
+  const servidor = await servidorModel.findById(Number(req.params.id));
+  if (!servidor || servidor.tipo !== 'video') return res.status(404).json({ error: 'Nodo de video no encontrado' });
+
+  const user = String(req.params.user);
+  if (await clienteModel.findByShortName(user)) {
+    return res.status(409).json({ error: `La cuenta "${user}" ya está dada de alta en el panel` });
+  }
+
+  // Debe existir de verdad en el nodo (no inventar cuentas)
+  const nodo = videoNode.crearCliente(servidor.url, servidor.api_key);
+  const cuentas = await nodo.cuentas();
+  const enNodo = cuentas.find((c) => c.user === user);
+  if (!enNodo) return res.status(404).json({ error: `El nodo no tiene ninguna cuenta llamada "${user}"` });
+
+  const { nombre_empresa, email, plan_id } = req.body || {};
+  let plan = null;
+  if (plan_id) {
+    plan = await planModel.findById(Number(plan_id));
+    if (!plan) return res.status(400).json({ error: 'Plan no encontrado' });
+    if (plan.tipo !== 'video') return res.status(400).json({ error: 'Ese plan es de audio: elige uno de video' });
+  }
+
+  // Usuario de acceso: se crea con contraseña aleatoria que NADIE conoce.
+  // El cliente no puede entrar hasta que se le genere una a propósito.
+  const usuario = (await userModel.findByUsername(user)) ? await userModel.generarUsername(user) : user;
+  const password_hash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
+  const cuentaUser = await userModel.create({
+    username: usuario,
+    email: email || `${user}@sin-correo.local`,
+    password_hash, role: 'cliente',
+  });
+
+  // La URL que el cliente ya tiene publicada (híbrido: vivo + emisión 24/7)
+  const base = (servidor.url_publica || servidor.url).replace(/\/+$/, '');
+  const url_streaming = enNodo.puertos?.http ? `${base}:${enNodo.puertos.http}/hybrid/play.m3u8` : null;
+
+  const cliente = await clienteModel.create({
+    user_id: cuentaUser.id,
+    nombre_empresa: nombre_empresa || user,
+    plan: plan?.nombre || 'Importado',
+    tipo: 'video',
+    short_name: user,
+    servidor_id: servidor.id,
+    url_streaming,
+  });
+
+  res.status(201).json({
+    message: `Cuenta "${user}" dada de alta ✅`,
+    cliente: { ...cliente, username: usuario, sin_acceso: true },
+  });
+}));
+
 /** GET /admin/servidores/:id/cuentas/:user — detalle y consumo de una cuenta. */
 router.get('/servidores/:id/cuentas/:user', requireAdmin, wrap(async (req, res) => {
   const servidor = await servidorModel.findById(Number(req.params.id));

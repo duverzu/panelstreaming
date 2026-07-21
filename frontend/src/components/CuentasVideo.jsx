@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../api';
 import AreaChart from './charts/AreaChart';
+import Modal from './Modal';
 
 /**
  * Cuentas que hay en un nodo de VIDEO, leídas por el agente que corre allí.
@@ -11,6 +12,39 @@ export default function CuentasVideo({ servidorId }) {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
   const [abierta, setAbierta] = useState(null);
+  const [importar, setImportar] = useState(null);   // cuenta que se está dando de alta
+  const [planes, setPlanes] = useState([]);
+  const [form, setForm] = useState({ nombre_empresa: '', email: '', plan_id: '' });
+  const [guardando, setGuardando] = useState(false);
+  const [errImport, setErrImport] = useState(null);
+  const [aviso, setAviso] = useState(null);
+
+  function cargar() {
+    apiFetch(`/admin/servidores/${servidorId}/cuentas`).then(setDatos).catch((e) => setError(e.message));
+  }
+
+  function abrirImportar(c) {
+    setImportar(c);
+    setForm({ nombre_empresa: c.user, email: '', plan_id: '' });
+    setErrImport(null);
+    apiFetch('/admin/planes')
+      .then(({ planes }) => setPlanes(planes.filter((p) => p.tipo === 'video')))
+      .catch(() => setPlanes([]));
+  }
+
+  async function confirmarImportar(e) {
+    e.preventDefault();
+    setGuardando(true); setErrImport(null);
+    try {
+      const r = await apiFetch(`/admin/servidores/${servidorId}/cuentas/${encodeURIComponent(importar.user)}/importar`, {
+        method: 'POST', body: JSON.stringify(form),
+      });
+      setImportar(null);
+      setAviso(r.message);
+      cargar();
+    } catch (err) { setErrImport(err.message); }
+    finally { setGuardando(false); }
+  }
 
   useEffect(() => {
     let vivo = true;
@@ -30,6 +64,12 @@ export default function CuentasVideo({ servidorId }) {
   if (!datos) return <div className="mt-4 text-sm text-gray-400">Consultando el nodo…</div>;
 
   return (
+    <>
+    {aviso && (
+      <div className="mt-4 text-xs rounded-xl px-3 py-2 text-brand-700 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-400">
+        {aviso} · El cliente aún no tiene acceso; se le genera cuando su panel muestre sus videos.
+      </div>
+    )}
     <div className="mt-4 rounded-xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
       {datos.cuentas.length === 0 && (
         <div className="p-4 text-sm text-gray-400 text-center">Este nodo no tiene cuentas todavía.</div>
@@ -51,8 +91,13 @@ export default function CuentasVideo({ servidorId }) {
                   </span>
                 )}
                 {!c.cliente_id && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
-                    sin dar de alta
+                  <span
+                    role="button" tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); abrirImportar(c); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); abrirImportar(c); } }}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-500/20 cursor-pointer transition"
+                  >
+                    + Dar de alta
                   </span>
                 )}
               </span>
@@ -70,6 +115,39 @@ export default function CuentasVideo({ servidorId }) {
         </div>
       ))}
     </div>
+
+    <Modal open={Boolean(importar)} onClose={() => setImportar(null)} title={`Dar de alta "${importar?.user || ''}"`}>
+      <form onSubmit={confirmarImportar} className="space-y-3">
+        <p className="text-xs text-gray-400">
+          Registra esta cuenta en el panel para verla, medirla y facturarla.
+          <b> No se toca nada en el servidor de video</b> y el cliente no recibe acceso todavía.
+        </p>
+        <div>
+          <label className="label">Nombre del canal</label>
+          <input className="input" value={form.nombre_empresa} onChange={(e) => setForm({ ...form, nombre_empresa: e.target.value })} required />
+        </div>
+        <div>
+          <label className="label">Email de contacto</label>
+          <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="opcional" />
+        </div>
+        <div>
+          <label className="label">Plan</label>
+          <select className="input" value={form.plan_id} onChange={(e) => setForm({ ...form, plan_id: e.target.value })}>
+            <option value="">Sin plan (se marca como «Importado»)</option>
+            {planes.map((p) => <option key={p.id} value={p.id}>{p.nombre} · {(p.espacio_mb / 1024).toFixed(0)} GB</option>)}
+          </select>
+          {planes.length === 0 && (
+            <p className="text-xs text-gray-400 mt-1">No tienes planes de video. Puedes crearlos luego en Planes y asignarlo después.</p>
+          )}
+        </div>
+        {errImport && <div className="text-sm rounded-xl px-3 py-2 text-red-600 bg-red-50 dark:bg-red-500/10">{errImport}</div>}
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={() => setImportar(null)} className="btn-ghost flex-1">Cancelar</button>
+          <button className="btn-primary flex-1" disabled={guardando}>{guardando ? 'Dando de alta…' : 'Dar de alta'}</button>
+        </div>
+      </form>
+    </Modal>
+    </>
   );
 }
 
