@@ -23,7 +23,7 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState(VACIO);
+  const [form, setForm] = useState(VACIO_AUDIO);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
