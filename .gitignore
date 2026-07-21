@@ -28,3 +28,7 @@ Thumbs.db
 
 # Biblioteca de música: los MP3 viven en el servidor, no en git
 biblioteca/*.mp3
+
+# Agente de video
+video-agent/node_modules/
+video-agent/.env
