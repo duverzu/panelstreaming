@@ -72,8 +72,15 @@ function embedPage(shortcode, baseURL) {
       fetch('/api/public/nowplaying/' + encodeURIComponent(SHORT))
         .then(function(r){ return r.json(); })
         .then(function(d){
-          document.getElementById('title').textContent = d.title || (d.is_online ? 'En emisión' : 'Fuera de aire');
-          document.getElementById('artist').textContent = d.artist || '';
+          // Si el DJ transmite sin enviar titulos, mostramos algo con sentido
+          // en vez de un hueco: "En vivo" y el nombre del DJ.
+          var t = d.title, a = d.artist || '';
+          if (!t) {
+            if (d.is_live) { t = 'En vivo'; a = a || d.streamer || ''; }
+            else { t = d.is_online ? 'En emisión' : 'Fuera de aire'; }
+          }
+          document.getElementById('title').textContent = t;
+          document.getElementById('artist').textContent = a;
           document.getElementById('art').src = d.art || DEFAULT_ART;
           document.getElementById('live').style.display = d.is_live ? 'inline-flex' : 'none';
           document.getElementById('listeners').textContent = d.listeners ? ('🎧 ' + d.listeners + ' oyentes') : '';

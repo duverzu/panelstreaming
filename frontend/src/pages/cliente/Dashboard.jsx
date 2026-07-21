@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch } from '../../api';
 import StatTile from '../../components/charts/StatTile';
 import AreaChart from '../../components/charts/AreaChart';
@@ -43,6 +44,8 @@ export default function ClienteDashboard() {
   }
 
   const cancion = nowplaying?.now_playing?.song;
+  // En vivo + sin título = el encoder del DJ no está mandando metadata
+  const sinTitulosEnVivo = Boolean(nowplaying?.live?.is_live) && !cancion?.title;
   const banda = (consumo?.banda?.serie || []).map((d) => ({
     label: new Date(d.fecha).toLocaleDateString('es', { day: '2-digit', month: 'short' }),
     valor: d.gb,
@@ -146,6 +149,16 @@ export default function ClienteDashboard() {
             <div><div className="text-lg font-semibold">{cancion.title || 'Sin título'}</div><div className="text-gray-500">{cancion.artist || 'Artista desconocido'}</div></div>
           ) : (
             <div className="text-sm text-gray-400">{npError ? 'La estación no está transmitiendo en este momento.' : 'Cargando información en vivo…'}</div>
+          )}
+
+          {/* El DJ está al aire pero su programa no envía el nombre de la canción */}
+          {sinTitulosEnVivo && (
+            <div className="mt-4 text-xs rounded-xl px-3 py-2.5 text-amber-700 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400">
+              <b>Estás en vivo, pero sin enviar el nombre de la canción.</b><br />
+              Tus oyentes ven el reproductor sin el título. Se activa en tu programa de transmisión
+              (BUTT, Mixxx, Sam Broadcaster…). Te explicamos cómo en{' '}
+              <Link to="/cliente/aprende" className="underline underline-offset-2 font-medium">Aprende</Link>.
+            </div>
           )}
         </div>
 

@@ -183,6 +183,38 @@ Ve a **Reproductor** en el menú. Ahí tienes:
 
 Copia el que prefieras y pégalo en tu página. El reproductor con carátula muestra
 **lo que suena en vivo** y se actualiza solo.` },
+      { titulo: 'No se ve el nombre de la canción cuando transmito en vivo', categoria: 'Transmitir', orden: 2, contenido:
+`# 🎵 Que se vea el nombre de la canción
+
+Cuando transmites **en vivo**, el título que ven tus oyentes lo envía **tu programa de transmisión**, no la radio. Si tu programa no lo manda, el reproductor se ve sin título aunque el sonido salga perfecto.
+
+> Con el **AutoDJ** esto no pasa: el título sale solo de las etiquetas de tus MP3.
+
+## Cómo activarlo según tu programa
+
+### BUTT (el caso más común)
+Por defecto **no envía títulos**. Actívalo así:
+1. **Settings → Stream**
+2. Marca **Update song name manually** o **Read song name from file**
+3. Si eliges manual, escribe el título en el recuadro y pulsa **Update**
+
+### Mixxx
+Lo envía solo. Verifica en **Preferences → Live Broadcasting** que esté activo *Enable metadata*.
+
+### Sam Broadcaster / RadioDJ / Zara Radio
+Lo envían automáticamente. Si no aparece, revisa en la configuración del encoder que el servidor sea **Icecast 2** (no SHOUTcast).
+
+### Winamp + SHOUTcast DSP
+Lo envía solo desde la pestaña **Output → Yellowpages**.
+
+### Solo micrófono, sin programa de música
+No hay canción que anunciar. Tus oyentes verán **"En vivo"** y tu nombre de DJ — eso es normal y está bien.
+
+## ¿Cómo sé si está funcionando?
+Mira el **Dashboard** mientras transmites: si en *Sonando ahora* aparece el título, tus oyentes lo están viendo. Si sale un aviso amarillo, tu programa aún no lo está enviando.
+
+## Consejo
+Escribe siempre **Artista - Título**. Es el formato que entienden los reproductores y las apps.` },
     ];
     for (const d of docs) {
       await query('INSERT INTO documentacion (titulo, categoria, contenido, orden) VALUES ($1,$2,$3,$4)', [d.titulo, d.categoria, d.contenido, d.orden]);
