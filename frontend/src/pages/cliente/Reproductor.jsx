@@ -28,6 +28,21 @@ function Snippet({ label, code }) {
 export default function ClienteReproductor() {
   const [r, setR] = useState(undefined);
   const [ext, setExt] = useState(null);   // player de la plataforma (si lo tiene)
+  const [entrando, setEntrando] = useState(false);
+
+  /** Pide un enlace de acceso directo y lo abre. Si falla, abre el player normal. */
+  async function editarPlayer() {
+    setEntrando(true);
+    // La pestaña se abre YA (en el clic) para que el navegador no la bloquee
+    const tab = window.open('', '_blank');
+    try {
+      const { url } = await apiFetch('/cliente/player/acceso', { method: 'POST' });
+      if (tab) tab.location = url; else window.location = url;
+    } catch (e) {
+      if (tab) tab.location = ext?.url_editar || ext?.url;
+      else alert(e.message);
+    } finally { setEntrando(false); }
+  }
 
   useEffect(() => {
     apiFetch('/cliente/reproductor')
@@ -57,14 +72,14 @@ export default function ClienteReproductor() {
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400">{ext.estilo || 'Player'}</span>
                 </h2>
                 <p className="text-xs text-gray-400">
-                  Este es tu player oficial{ext.ubicacion ? ` · ${ext.ubicacion}` : ''}. Su diseño, colores y redes se editan en la plataforma.
+                  Este es tu player oficial{ext.ubicacion ? ` · ${ext.ubicacion}` : ''}. Edítalo con el botón: entras sin volver a poner contraseña.
                 </p>
               </div>
             </div>
             {(ext.url_editar || ext.url) && (
-              <a href={ext.url_editar || ext.url} target="_blank" rel="noreferrer" className="btn-primary !py-2 !px-3 text-xs shrink-0">
-                Editar player ↗
-              </a>
+              <button onClick={editarPlayer} disabled={entrando} className="btn-primary !py-2 !px-3 text-xs shrink-0 disabled:opacity-60">
+                {entrando ? 'Abriendo…' : 'Editar player ↗'}
+              </button>
             )}
           </div>
 

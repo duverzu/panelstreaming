@@ -468,6 +468,20 @@ router.get('/reproductor', requireCliente, wrap(async (req, res) => {
 // ==================================================================
 //  AUTODJ
 // ==================================================================
+/**
+ * POST /cliente/player/acceso — enlace de acceso directo a SU player.
+ * El cliente solo puede pedir el suyo (sale del token, no del body).
+ */
+router.post('/player/acceso', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  const user = cliente?.short_name;
+  if (!user) return res.status(400).json({ error: 'Tu estación aún no está lista' });
+
+  const url = await playerExterno.magicLink(user);
+  if (!url) return res.status(502).json({ error: 'No se pudo generar el acceso. Intenta de nuevo en un momento.' });
+  res.json({ url });
+}));
+
 router.get('/autodj', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   if (!cliente?.azuracast_station_id) return res.json({ autodj: null });

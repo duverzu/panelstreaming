@@ -20,6 +20,10 @@ const WEB_BASE = (process.env.PLAYER_WEB_URL || '').replace(/\/+$/, '');
 // Dónde edita el cliente su player. Si no se define, se usa la del player.
 const EDIT_BASE = (process.env.PLAYER_EDIT_URL || '').replace(/\/+$/, '');
 const TTL_MS = Number(process.env.PLAYER_CACHE_MS || 5 * 60 * 1000);
+// Acceso directo: la plataforma emite un enlace temporal (~10 min) para un `user`.
+// Si no se define, se deduce del mismo host de la API.
+const MAGIC_URL = process.env.PLAYER_MAGIC_URL
+  || (API_URL ? API_URL.replace(/\/clientes\/?$/, '') + '/magic-link' : '');
 
 let cache = { at: 0, porUser: null };
 
@@ -83,7 +87,31 @@ async function buscar(user) {
   }
 }
 
+/**
+ * Pide a la plataforma un enlace de acceso directo para ese `user`.
+ * Se genera SIEMPRE en el backend: el token nunca llega al navegador y el
+ * enlace es de un solo uso y corta duración, así que no se cachea.
+ * Devuelve la URL o null si la plataforma no lo permite.
+ */
+async function magicLink(user) {
+  if (!activo() || !MAGIC_URL || !user) return null;
+  try {
+    const { data } = await axios.post(
+      MAGIC_URL,
+      { user },
+      { headers: { Authorization: `Bearer ${API_TOKEN}` }, timeout: 10000 }
+    );
+    // La plataforma puede llamar al campo de varias formas: se aceptan todas.
+    const url = data?.url || data?.magic_link || data?.link || data?.magicLink
+      || data?.data?.url || data?.data?.magic_link || data?.data?.link;
+    return typeof url === 'string' && /^https?:\/\//.test(url) ? url : null;
+  } catch (e) {
+    console.error('[playerExterno] magic-link:', e.response?.status || '', e.message);
+    return null;
+  }
+}
+
 /** Fuerza recarga (tras crear una radio nueva, para que aparezca al toque). */
 function limpiarCache() { cache = { at: 0, porUser: null }; }
 
-module.exports = { buscar, limpiarCache, activo };
+module.exports = { buscar, magicLink, limpiarCache, activo };
