@@ -21,6 +21,7 @@ const readline = require('readline');
 const claves = require('./claves');
 const webtv = require('./webtv');
 const { crearCuenta, eliminarConfig } = require('./crear');
+const normalizar = require('./normalizar');
 const { exec } = require('child_process');
 
 const PORT = Number(process.env.PORT || 3000);
@@ -364,6 +365,44 @@ app.post('/cuentas/:user/clave', wrap(async (req, res) => {
 app.post('/cuentas/:user/clave/activar', wrap(async (req, res) => {
   const ok = await claves.activar(String(req.params.user), req.body?.activo !== false);
   res.json({ ok });
+}));
+
+
+// ==================================================================
+//  NORMALIZAR — pasar una cuenta de transcode a copy (libera CPU)
+// ==================================================================
+
+/**
+ * POST /cuentas/:user/normalizar — recodifica los videos a formato uniforme
+ * en segundo plano. Al terminar, reinicia el canal en modo copy si estaba
+ * al aire. La emisión NO se corta durante el proceso.
+ */
+app.post('/cuentas/:user/normalizar', wrap(async (req, res) => {
+  const user = String(req.params.user);
+  const lista = await cuentas();
+  const c = lista.find((x) => x.user === user);
+  if (!c) return res.status(404).json({ error: 'Cuenta no encontrada' });
+
+  const puertos = await puertosDe(user);
+  const r = await normalizar.cuenta(user, c.dir, (resultado) => {
+    // Al terminar: si el canal estaba emitiendo, reiniciarlo (ya en modo copy)
+    if (resultado.ok && webtv.estado(user).emitiendo && puertos.rtmp) {
+      webtv.recargar(user, { dirCuenta: c.dir, puertoRtmp: puertos.rtmp })
+        .then((x) => console.log(`[normalizar] ${user} reiniciado en modo ${x.modo}`))
+        .catch((e) => console.error('[normalizar] reinicio:', e.message));
+    }
+  });
+  res.json(r);
+}));
+
+/** GET /cuentas/:user/normalizar — progreso del trabajo. */
+app.get('/cuentas/:user/normalizar', wrap(async (req, res) => {
+  res.json(normalizar.estado(String(req.params.user)));
+}));
+
+/** DELETE /cuentas/:user/normalizar — cancela el trabajo en curso. */
+app.delete('/cuentas/:user/normalizar', wrap(async (req, res) => {
+  res.json(normalizar.cancelar(String(req.params.user)));
 }));
 
 app.use((req, res) => res.status(404).json({ error: `Ruta no encontrada: ${req.method} ${req.path}` }));
