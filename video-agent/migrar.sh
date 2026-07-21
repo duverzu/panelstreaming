@@ -64,11 +64,10 @@ cortar() {
 
   echo "3) Encendiendo los canales 24/7…"
   for entrada in "${CLIENTES[@]}"; do
-    IFS=: read -r user _ _ <<< "$entrada"
-    IFS=: read -r u _ rtmp <<< "$entrada"
-    api -X POST "$AGENTE/cuentas/$u/24-7" -H 'Content-Type: application/json' \
-        -d "{\"encender\":true,\"rtmp\":$rtmp}" -o /tmp/on-$u.json
-    echo "   $user → $(cat /tmp/on-$user.json | head -c 80)"
+    IFS=: read -r user _ rtmp <<< "$entrada"
+    api -X POST "$AGENTE/cuentas/$user/24-7" -H 'Content-Type: application/json' \
+        -d "{\"encender\":true,\"rtmp\":$rtmp}" -o /tmp/on-$user.json
+    echo "   $user → $(head -c 80 /tmp/on-$user.json)"
   done
 
   echo
