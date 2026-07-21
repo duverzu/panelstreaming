@@ -32,3 +32,4 @@ biblioteca/*.mp3
 # Agente de video
 video-agent/node_modules/
 video-agent/.env
+video-agent/claves.json

@@ -5,8 +5,8 @@
  * videos, espacio y consumo. El panel nunca entra por SSH ni toca discos
  * remotos: le pregunta a este agente por HTTP.
  *
- * FASE A: SOLO LECTURA. No crea, no borra, no modifica nada. Se puede
- * instalar con VDO Panel funcionando sin ningún riesgo.
+ * Lectura (cuentas, videos, consumo) + autenticación del vivo. Todavía no
+ * crea cuentas ni borra archivos: eso llega con la fase de escritura.
  *
  * Autenticación: cabecera `Authorization: Bearer <AGENT_TOKEN>`.
  * Además conviene limitar el puerto por firewall a la IP del panel.
@@ -18,6 +18,8 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const readline = require('readline');
+const claves = require('./claves');
+const webtv = require('./webtv');
 
 const PORT = Number(process.env.PORT || 3000);
 const TOKEN = process.env.AGENT_TOKEN || '';
@@ -28,10 +30,18 @@ const IGNORAR = (process.env.IGNORAR || 'vdopanel,ubuntu,lost+found').split(',')
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));   // nginx-rtmp envía formularios
 
 // ---- Autenticación ------------------------------------------------
 app.use((req, res, next) => {
   if (req.path === '/health') return next();
+  // nginx pregunta desde el propio servidor en cada conexión de vídeo:
+  // no lleva token, se acepta solo si viene de localhost.
+  if (req.path.startsWith('/rtmp/')) {
+    const ip = (req.ip || '').replace('::ffff:', '');
+    if (ip === '127.0.0.1' || ip === '::1') return next();
+    return res.status(403).end();
+  }
   if (!TOKEN) return res.status(500).json({ error: 'AGENT_TOKEN no configurado en el agente' });
   const h = req.headers.authorization || '';
   const enviado = h.startsWith('Bearer ') ? h.slice(7) : req.headers['x-api-key'];
@@ -153,7 +163,7 @@ async function cuentas() {
 
 // ---- Rutas --------------------------------------------------------
 
-app.get('/health', (req, res) => res.json({ agente: 'video', modo: 'solo-lectura', ok: true }));
+app.get('/health', (req, res) => res.json({ agente: 'video', ok: true }));
 
 /** GET /cuentas — qué clientes hay en este nodo, con su uso. */
 app.get('/cuentas', wrap(async (req, res) => {
@@ -212,6 +222,51 @@ app.get('/cuentas/:user/consumo', wrap(async (req, res) => {
     user: c.user, dias, total_bytes: total,
     por_dia: Object.entries(porDia).sort().map(([fecha, bytes]) => ({ fecha, bytes })),
   });
+}));
+
+
+// ==================================================================
+//  VIVO — nginx pregunta aquí antes de dejar transmitir
+// ==================================================================
+
+/**
+ * POST /rtmp/publicar — lo llama nginx (on_publish) cuando alguien conecta
+ * su encoder. El cliente publica en la aplicación `<user>live` usando SU
+ * CLAVE como nombre de stream.
+ *
+ * Respuestas que entiende nginx-rtmp:
+ *   2xx           → permitido
+ *   302 + Location → permitido, pero renombrando el stream
+ *   otra cosa      → rechazado
+ *
+ * Se usa el 302 para que la salida SIEMPRE se llame `play`, sin importar
+ * la clave: así el HLS queda en play.m3u8, que es la dirección que el
+ * cliente ya tiene publicada en su web y su app.
+ */
+app.post('/rtmp/publicar', wrap(async (req, res) => {
+  const app_ = String(req.body?.app || '');
+  const clave = String(req.body?.name || '');
+  const user = app_.replace(/live$/, '');
+
+  if (!user || !app_.endsWith('live')) {
+    console.error('[rtmp] aplicación desconocida:', app_);
+    return res.status(400).end();
+  }
+
+  if (!(await claves.valida(user, clave))) {
+    console.error(`[rtmp] ${user}: clave incorrecta o vivo desactivado (desde ${req.body?.addr})`);
+    return res.status(403).end();
+  }
+
+  console.log(`[rtmp] ${user}: al aire desde ${req.body?.addr}`);
+  res.redirect(302, 'play');     // la salida se llama play, no la clave
+}));
+
+/** POST /rtmp/fin — nginx avisa que la transmisión terminó (on_publish_done). */
+app.post('/rtmp/fin', wrap(async (req, res) => {
+  const user = String(req.body?.app || '').replace(/live$/, '');
+  if (user) console.log(`[rtmp] ${user}: terminó la transmisión en vivo`);
+  res.status(200).end();
 }));
 
 app.use((req, res) => res.status(404).json({ error: `Ruta no encontrada: ${req.method} ${req.path}` }));
