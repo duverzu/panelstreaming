@@ -92,9 +92,19 @@ app.use((req, res) => {
 // ---- Manejador de errores global ---------------------------------
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  console.error('[ERROR]', err.message);
+  console.error('[ERROR]', err.message);           // completo en el log del servidor
   const status = err.status || 500;
-  res.status(status).json({ error: err.message || 'Error interno del servidor' });
+
+  // Marca blanca: al cliente y al revendedor nunca les llega el detalle
+  // tecnico ni el nombre del motor de streaming. El admin sí lo ve, porque
+  // lo necesita para diagnosticar.
+  const interno = /^\/api\/(cliente|reseller|public)/.test(req.path);
+  const tecnico = /\[AzuraCast\]|azuracast/i.test(err.message || '');
+  const mensaje = interno && tecnico
+    ? 'No se pudo completar la operación en tu radio. Intenta de nuevo en unos minutos.'
+    : (err.message || 'Error interno del servidor');
+
+  res.status(status).json({ error: mensaje });
 });
 
 // ---- Guardián de banda (muestreo periódico) ----------------------

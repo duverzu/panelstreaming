@@ -71,7 +71,7 @@ export default function ClienteAutoDJ() {
           <label className="label">Canciones preparadas por adelantado</label>
           <input className="input max-w-[200px]" type="number" min="1" max="15"
             value={f.cola} onChange={(e) => setF({ ...f, cola: Number(e.target.value) })} />
-          <p className="text-xs text-gray-400 mt-1.5">AzuraCast prepara esta cantidad de canciones por adelantado en la cola.</p>
+          <p className="text-xs text-gray-400 mt-1.5">Tu radio prepara esta cantidad de canciones por adelantado en la cola.</p>
         </div>
       </div>
 

@@ -47,7 +47,7 @@ export default function MapaOyentes({ oyentes = [] }) {
       {conCoords === 0 && (
         <div className="absolute inset-0 grid place-items-center pointer-events-none">
           <span className="text-sm text-gray-500 bg-white/80 dark:bg-gray-900/80 px-3 py-1.5 rounded-lg">
-            {oyentes.length ? 'Oyentes sin ubicación (falta GeoLite2 en AzuraCast)' : 'Sin oyentes en el mapa ahora'}
+            {oyentes.length ? 'Oyentes sin ubicación disponible' : 'Sin oyentes en el mapa ahora'}
           </span>
         </div>
       )}
