@@ -33,6 +33,28 @@ const REINTENTO_MS = Number(process.env.WEBTV_REINTENTO_MS || 5000);
 /** Canales en marcha: user -> { proceso, reinicios, desde } */
 const canales = new Map();
 
+// Archivo con los canales que DEBEN estar al aire, para reencenderlos si el
+// agente o el servidor se reinician. Guarda lo justo para volver a arrancar.
+const ESTADO_FILE = process.env.WEBTV_ESTADO || path.join(__dirname, 'canales-activos.json');
+const opciones = new Map();   // user -> { dirCuenta, puertoRtmp, host }
+
+async function persistir() {
+  const datos = {};
+  for (const [user, o] of opciones) datos[user] = o;
+  try { await fsp.writeFile(ESTADO_FILE, JSON.stringify(datos, null, 2)); } catch (_) {}
+}
+
+/** Reenciende al arrancar los canales que estaban al aire (tras un reinicio). */
+async function restaurar() {
+  let datos = {};
+  try { datos = JSON.parse(await fsp.readFile(ESTADO_FILE, 'utf8')); } catch { return; }
+  const users = Object.keys(datos);
+  if (users.length) console.log(`[webtv] restaurando ${users.length} canal(es): ${users.join(', ')}`);
+  for (const [user, o] of Object.entries(datos)) {
+    await iniciar(user, o).catch((e) => console.error(`[webtv] no se pudo restaurar ${user}:`, e.message));
+  }
+}
+
 const VIDEO = /\.(mp4|mkv|mov|webm|flv|ts)$/i;
 
 /**
@@ -139,6 +161,8 @@ async function iniciar(user, { dirCuenta, puertoRtmp, host = '127.0.0.1' }) {
 
   lanzar();
   canales.set(user, registro);
+  opciones.set(user, { dirCuenta, puertoRtmp, host });
+  await persistir();
   return { ok: true, videos: total, modo, destino };
 }
 
@@ -150,6 +174,8 @@ function detener(user) {
   clearTimeout(r.timer);
   try { r.proceso?.kill('SIGTERM'); } catch (_) {}
   canales.delete(user);
+  opciones.delete(user);
+  persistir();
   return { ok: true };
 }
 
@@ -174,4 +200,4 @@ function estado(user) {
 
 const todos = () => Object.fromEntries([...canales.keys()].map((u) => [u, estado(u)]));
 
-module.exports = { iniciar, detener, recargar, estado, todos, escribirLista, argumentos };
+module.exports = { iniciar, detener, recargar, estado, todos, restaurar, escribirLista, argumentos };

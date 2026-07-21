@@ -33,3 +33,4 @@ biblioteca/*.mp3
 video-agent/node_modules/
 video-agent/.env
 video-agent/claves.json
+video-agent/canales-activos.json

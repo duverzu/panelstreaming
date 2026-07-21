@@ -374,6 +374,8 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, HOST, () => {
   console.log(`🎬 Agente de video escuchando en ${HOST}:${PORT}`);
+  // Reencender los canales 24/7 que estaban al aire (sobrevive reinicios)
+  webtv.restaurar().catch((e) => console.error('[webtv] restaurar:', e.message));
   if (HOST !== '127.0.0.1') console.warn('   ⚠️  Expuesto fuera del servidor: asegúrate de tener firewall');
   console.log(`   Cuentas en: ${BASE}   ·   Config nginx: ${CONF_DIR}`);
   if (!TOKEN) console.warn('   ⚠️  Falta AGENT_TOKEN: el agente rechazará todas las peticiones');
