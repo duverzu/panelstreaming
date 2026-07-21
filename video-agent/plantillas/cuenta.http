@@ -1,0 +1,50 @@
+# Cuenta {{USER}} — salida de video
+# Generado por el panel. No editar a mano: se reescribe.
+server {
+    listen {{PUERTO_HTTP}} ssl;
+    http2 on;
+    server_name {{DOMINIO}};
+
+    ssl_certificate     {{CERT_FULLCHAIN}};
+    ssl_certificate_key {{CERT_KEY}};
+
+    access_log logs/{{USER}}-http.log video;
+
+    # Cabeceras comunes a todo lo que se sirve de este canal
+    add_header 'Access-Control-Allow-Origin' '*' always;
+    add_header 'Access-Control-Expose-Headers' 'Content-Length' always;
+
+    # --- Las tres salidas de HLS ---
+    location /live {
+        alias {{HOME}}/{{USER}}/live-streaming/hls;
+        add_header 'Cache-Control' 'no-cache' always;
+        add_header 'Access-Control-Allow-Origin' '*' always;
+    }
+
+    location /stream {
+        alias {{HOME}}/{{USER}}/stream/hls;
+        add_header 'Cache-Control' 'no-cache' always;
+        add_header 'Access-Control-Allow-Origin' '*' always;
+    }
+
+    location /hybrid {
+        alias {{HOME}}/{{USER}}/stream-hybrid/hls;
+        add_header 'Cache-Control' 'no-cache' always;
+        add_header 'Access-Control-Allow-Origin' '*' always;
+    }
+
+    # --- Videos guardados ---
+    location /embed {
+        alias {{HOME}}/{{USER}}/uploads;
+        add_header 'Access-Control-Allow-Origin' '*' always;
+    }
+
+    # Preflight de CORS para reproductores en otros dominios
+    if ($request_method = 'OPTIONS') {
+        add_header 'Access-Control-Allow-Origin' '*';
+        add_header 'Access-Control-Allow-Headers' 'Range,Origin,Accept';
+        add_header 'Access-Control-Max-Age' 1728000;
+        add_header 'Content-Length' 0;
+        return 204;
+    }
+}

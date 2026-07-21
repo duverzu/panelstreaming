@@ -1,0 +1,50 @@
+# Cuenta {{USER}} — entrada de video
+# Generado por el panel. No editar a mano: se reescribe.
+server {
+    listen {{PUERTO_RTMP}};
+    chunk_size 4096;
+    access_log logs/{{USER}}-rtmp.log;
+
+    # 1) EN VIVO — aquí conecta el cliente con su encoder (OBS, vMix…)
+    application {{USER}}live {
+        live on;
+        hls on;
+        hls_path {{HOME}}/{{USER}}/live-streaming/hls;
+        hls_fragment 3;
+        hls_playlist_length 60;
+
+        # El agente valida usuario y clave antes de dejar transmitir
+        on_publish http://127.0.0.1:{{PUERTO_AGENTE}}/rtmp/publicar;
+        on_publish_done http://127.0.0.1:{{PUERTO_AGENTE}}/rtmp/fin;
+
+        # Lo que entra en vivo pisa al canal continuo
+        push rtmp://127.0.0.1:{{PUERTO_RTMP}}/{{USER}}hybrid/play;
+    }
+
+    # 2) EMISIÓN 24/7 — la alimenta ffmpeg con la lista del cliente
+    application {{USER}}stream {
+        live on;
+        hls on;
+        hls_path {{HOME}}/{{USER}}/stream/hls;
+        hls_fragment 3;
+        hls_playlist_length 60;
+
+        # Solo desde este servidor: nadie de fuera publica aquí
+        allow publish 127.0.0.1;
+        deny publish all;
+
+        push rtmp://127.0.0.1:{{PUERTO_RTMP}}/{{USER}}hybrid/play;
+    }
+
+    # 3) HÍBRIDO — lo que ve el público: el vivo cuando hay, si no la emisión
+    application {{USER}}hybrid {
+        live on;
+        hls on;
+        hls_path {{HOME}}/{{USER}}/stream-hybrid/hls;
+        hls_fragment 3;
+        hls_playlist_length 60;
+
+        allow publish 127.0.0.1;
+        deny publish all;
+    }
+}
