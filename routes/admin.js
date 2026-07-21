@@ -619,14 +619,29 @@ router.post('/servidores', requireAdmin, wrap(async (req, res) => {
 router.put('/servidores/:id', requireAdmin, wrap(async (req, res) => {
   const servidor = await servidorModel.findById(Number(req.params.id));
   if (!servidor) return res.status(404).json({ error: 'Servidor no encontrado' });
-  const { nombre, url, api_key, capacidad_radios, banda_mensual_gb, activo } = req.body || {};
+  const { nombre, url, url_publica, api_key, capacidad_radios, banda_mensual_gb, activo } = req.body || {};
   const num = (v) => (v === undefined ? undefined : Number(v));
+  const limpia = (v) => (v === undefined ? undefined : String(v).replace(/\/+$/, ''));
   const actualizado = await servidorModel.update(servidor.id, {
-    nombre, url: url ? String(url).replace(/\/+$/, '') : undefined, api_key,
+    nombre, url: url ? limpia(url) : undefined, url_publica: limpia(url_publica), api_key,
     capacidad_radios: num(capacidad_radios), banda_mensual_gb: num(banda_mensual_gb),
     activo: activo === undefined ? undefined : Boolean(activo),
   });
-  res.json({ message: 'Servidor actualizado ✅', servidor: { ...actualizado, api_key: undefined } });
+
+  // Si cambió el dominio público, las radios ya creadas tienen guardada la URL
+  // vieja: se reescriben todas para que el cliente vea la nueva.
+  let urls_actualizadas = 0;
+  if (url_publica !== undefined && limpia(url_publica) !== (servidor.url_publica || '')) {
+    const base = limpia(url_publica) || actualizado.url;
+    const esDefecto = (actualizado.url || '') === String(process.env.AZURACAST_BASE_URL || '').replace(/\/+$/, '');
+    urls_actualizadas = await clienteModel.reescribirUrls(actualizado.id, base, esDefecto);
+  }
+
+  res.json({
+    message: `Servidor actualizado ✅${urls_actualizadas ? ` (${urls_actualizadas} URLs de radio reescritas)` : ''}`,
+    servidor: { ...actualizado, api_key: undefined },
+    urls_actualizadas,
+  });
 }));
 
 router.delete('/servidores/:id', requireAdmin, wrap(async (req, res) => {

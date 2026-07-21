@@ -79,6 +79,12 @@ CREATE TABLE IF NOT EXISTS servidores (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- URL PÚBLICA del servidor: la que ven los clientes (escucha y DJ).
+-- `url` es la de administración (la API de AzuraCast); `url_publica` es un
+-- dominio de marca blanca que solo expone /listen y /public. Si está vacía se
+-- usa `url`, así las instalaciones viejas siguen funcionando igual.
+ALTER TABLE servidores ADD COLUMN IF NOT EXISTS url_publica VARCHAR(255);
+
 -- Tope de banda mensual del servidor (GB). 0 = sin tope definido.
 ALTER TABLE servidores ADD COLUMN IF NOT EXISTS banda_mensual_gb INTEGER NOT NULL DEFAULT 0;
 

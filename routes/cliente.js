@@ -16,6 +16,7 @@ const userModel = require('../models/userModel');
 const clienteModel = require('../models/clienteModel');
 const { generateToken } = require('../services/auth');
 const azuracast = require('../services/azuracast');
+const publico = require('../services/publico');
 const authFactory = require('../middleware/auth');
 const isCliente = require('../middleware/isCliente');
 
@@ -107,8 +108,7 @@ router.get('/configurar-dj', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   if (!cliente.dj_usuario) return res.json({ disponible: false, mensaje: 'Tu plan no incluye DJ en vivo. Usa el AutoDJ subiendo tu música.' });
-  const az = await azDe(cliente);
-  const host = (az.baseURL || '').replace(/^https?:\/\//, '');
+  const host = publico.host(await publico.deCliente(cliente));
   res.json({
     disponible: true, servidor: host, puerto: cliente.dj_puerto, punto_montaje: '/',
     usuario: cliente.dj_usuario, password: cliente.dj_password, formato: 'MP3', protocolo: 'Icecast 2',
@@ -296,7 +296,7 @@ router.get('/configuracion', requireCliente, wrap(async (req, res) => {
       username: user?.username, email: user?.email, plan: cliente.plan, nombre: st.name, descripcion: st.description || '',
       genero: st.genre || '', sitio_web: st.url || '', timezone: st.timezone || 'UTC',
       pagina_publica: st.enable_public_page, permite_solicitudes: st.enable_requests,
-      url_publica: `${az.baseURL}/public/${st.short_name}`,
+      url_publica: `${await publico.deCliente(cliente)}/public/${st.short_name}`,
     },
   });
 }));
@@ -394,7 +394,7 @@ router.get('/reproductor', requireCliente, wrap(async (req, res) => {
   res.json({
     reproductor: {
       shortcode, nombre: cliente.nombre_empresa,
-      stream_url: st.listen_url || `${az.baseURL}/listen/${shortcode}/radio.mp3`,
+      stream_url: `${await publico.deCliente(cliente)}/listen/${shortcode}/radio.mp3`,
       pls_url: st.playlist_pls_url || null, m3u_url: st.playlist_m3u_url || null,
     },
   });

@@ -59,15 +59,15 @@ app.use('/api/provision', provisionRoutes);
 
 // ---- Reproductor embebible (iframe) — antes del fallback SPA ------
 const clienteModel = require('./models/clienteModel');
-const azuracast = require('./services/azuracast');
+const publico = require('./services/publico');
 app.get('/embed/:shortcode', async (req, res) => {
   res.set('Content-Type', 'text/html; charset=utf-8');
   res.set('X-Frame-Options', 'ALLOWALL'); // permite embeber en cualquier sitio
-  let baseURL = process.env.AZURACAST_BASE_URL;
+  // El reproductor embebido va en sitios de terceros: siempre la URL pública
+  let baseURL = process.env.AZURACAST_PUBLIC_URL || process.env.AZURACAST_BASE_URL;
   try {
     const cliente = await clienteModel.findByShortName(req.params.shortcode);
-    const az = await azuracast.paraServidorId(cliente?.servidor_id);
-    baseURL = az.baseURL;
+    baseURL = await publico.deCliente(cliente);
   } catch (_) {}
   res.send(embedPage(req.params.shortcode, baseURL));
 });

@@ -86,6 +86,23 @@ async function update(id, fields) {
   return rows[0] || null;
 }
 
+/**
+ * Reescribe la URL de escucha de todas las radios de un servidor cuando cambia
+ * su dominio público (las radios ya creadas la tienen guardada en la fila).
+ * Devuelve cuántas se actualizaron.
+ */
+async function reescribirUrls(servidorId, baseUrlPublica, esDefecto = false) {
+  const base = String(baseUrlPublica).replace(/\/+$/, '');
+  const { rowCount } = await query(
+    `UPDATE clientes
+        SET url_streaming = $1 || '/listen/' || short_name || '/radio.mp3'
+      WHERE short_name IS NOT NULL
+        AND (servidor_id = $2 OR ($3 AND servidor_id IS NULL))`,
+    [base, servidorId, esDefecto]
+  );
+  return rowCount;
+}
+
 /** Métricas globales para el panel admin. */
 async function stats() {
   const { rows } = await query(
@@ -98,4 +115,4 @@ async function stats() {
   return rows[0];
 }
 
-module.exports = { findAllWithEmail, findById, findByUserId, findByShortName, create, update, stats, findByReseller, countByReseller };
+module.exports = { reescribirUrls, findAllWithEmail, findById, findByUserId, findByShortName, create, update, stats, findByReseller, countByReseller };

@@ -14,6 +14,7 @@ const planModel = require('../models/planModel');
 const servidorModel = require('../models/servidorModel');
 const azuracast = require('./azuracast');
 const biblioteca = require('./biblioteca');
+const publico = require('./publico');
 
 function err(msg, status) {
   const e = new Error(msg);
@@ -75,7 +76,8 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
   const servidor = await servidorModel.elegirServidor();
   const az = servidor ? azuracast.crearCliente(servidor.url, servidor.api_key) : azuracast.porDefecto;
   const servidor_id = servidor ? servidor.id : null;
-  const baseUrl = servidor ? servidor.url : process.env.AZURACAST_BASE_URL;
+  const baseUrl = servidor ? servidor.url : process.env.AZURACAST_BASE_URL;   // admin (API)
+  const baseUrlPublica = publico.deServidor(servidor);                        // la que ve el cliente
 
   // 1) Usuario
   const password_hash = await bcrypt.hash(password, 10);
@@ -117,7 +119,7 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
     .catch((e) => console.error('[biblioteca]', e.message));
 
   // 6) Cliente en BD (con servidor y shortcode)
-  const url_streaming = `${baseUrl}/listen/${station.short_name}/radio.mp3`;
+  const url_streaming = `${baseUrlPublica}/listen/${station.short_name}/radio.mp3`;
   const cliente = await clienteModel.create({
     user_id: user.id, nombre_empresa, plan: plan.nombre,
     azuracast_station_id: station.id, url_streaming, reseller_id,
@@ -128,7 +130,7 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
   return {
     // servidor_url y dj_mount no se guardan en BD: son datos derivados que el
     // integrador necesita para armar el mensaje de bienvenida del cliente.
-    cliente: { ...cliente, email, username: usuario, servidor_url: baseUrl, dj_mount: djMount },
+    cliente: { ...cliente, email, username: usuario, servidor_url: baseUrlPublica, dj_mount: djMount },
     credenciales: { usuario, email, password },
   };
 }

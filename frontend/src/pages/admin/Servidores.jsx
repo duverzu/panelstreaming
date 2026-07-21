@@ -8,7 +8,7 @@ export default function AdminServidores() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ nombre: '', url: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0 });
+  const [form, setForm] = useState({ nombre: '', url: '', url_publica: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0 });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -19,14 +19,14 @@ export default function AdminServidores() {
   }
   useEffect(() => { cargar(); }, []);
 
-  function abrirCrear() { setEditId(null); setForm({ nombre: '', url: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0 }); setError(null); setOpen(true); }
-  function abrirEditar(s) { setEditId(s.id); setForm({ nombre: s.nombre, url: s.url, api_key: '', capacidad_radios: s.capacidad_radios, banda_mensual_gb: s.banda_mensual_gb || 0 }); setError(null); setOpen(true); }
+  function abrirCrear() { setEditId(null); setForm({ nombre: '', url: '', url_publica: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0 }); setError(null); setOpen(true); }
+  function abrirEditar(s) { setEditId(s.id); setForm({ nombre: s.nombre, url: s.url, url_publica: s.url_publica || '', api_key: '', capacidad_radios: s.capacidad_radios, banda_mensual_gb: s.banda_mensual_gb || 0 }); setError(null); setOpen(true); }
 
   async function guardar(e) {
     e.preventDefault();
     setSaving(true); setError(null);
     try {
-      const payload = { nombre: form.nombre, url: form.url, capacidad_radios: Number(form.capacidad_radios), banda_mensual_gb: Number(form.banda_mensual_gb) };
+      const payload = { nombre: form.nombre, url: form.url, url_publica: form.url_publica, capacidad_radios: Number(form.capacidad_radios), banda_mensual_gb: Number(form.banda_mensual_gb) };
       if (form.api_key) payload.api_key = form.api_key;
       if (editId) await apiFetch('/admin/servidores/' + editId, { method: 'PUT', body: JSON.stringify(payload) });
       else await apiFetch('/admin/servidores', { method: 'POST', body: JSON.stringify(payload) });
@@ -74,6 +74,7 @@ export default function AdminServidores() {
                         : <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400">Pausado</span>}
                     </div>
                     <div className="text-xs text-gray-400 break-all">{s.url}</div>
+                    {s.url_publica && <div className="text-xs text-brand-600 dark:text-brand-400 break-all">🌐 público: {s.url_publica}</div>}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button onClick={() => abrirEditar(s)} className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-brand-500 hover:text-brand-600 transition">Editar</button>
@@ -101,7 +102,13 @@ export default function AdminServidores() {
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? 'Editar servidor' : 'Agregar servidor'}>
         <form onSubmit={guardar} className="space-y-3">
           <div><label className="label">Nombre</label><input className="input" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Nodo 2" required /></div>
-          <div><label className="label">URL de AzuraCast</label><input className="input" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://server3.streaminghd.co" required /></div>
+          <div><label className="label">URL de AzuraCast</label><input className="input" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://server3.streaminghd.co" required />
+            <p className="text-xs text-gray-400 mt-1">Solo la usa el panel para hablar con la API. No se le muestra al cliente.</p></div>
+          <div>
+            <label className="label">URL pública (marca blanca)</label>
+            <input className="input" value={form.url_publica} onChange={(e) => setForm({ ...form, url_publica: e.target.value })} placeholder="https://stream.streaminghd.co" />
+            <p className="text-xs text-gray-400 mt-1">La que ve el cliente para escuchar y conectar su encoder. Déjala vacía para usar la de arriba. Al cambiarla se reescriben las URLs de las radios existentes.</p>
+          </div>
           <div>
             <label className="label">API Key {editId && <span className="text-gray-400">(dejar vacío para no cambiar)</span>}</label>
             <input className="input" value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })} placeholder="xxxx:yyyy" required={!editId} />
