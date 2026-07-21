@@ -569,22 +569,73 @@ router.post('/resellers/:id/impersonar', requireAdmin, wrap(async (req, res) => 
 router.get('/banda', requireAdmin, wrap(async (req, res) => {
   const servidores = await servidorModel.findAllConUso();
   const GB = 1024 ** 3;
+  const r2 = (n) => Math.round(n * 100) / 100;
+
+  // Días del mes: lo consumido va a ritmo de `hoy`, y falta hasta `total`.
+  const hoy = new Date();
+  const diaActual = hoy.getDate();
+  const diasDelMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+  const diasRestantes = diasDelMes - diaActual;
+
   const out = [];
   for (const s of servidores) {
     const dias = await consumoModel.mesActual(s.id);
     const bytes = dias.reduce((a, d) => a + Number(d.bytes), 0);
     const gb = bytes / GB;
     const tope = s.banda_mensual_gb || 0;
+
+    // Ritmo: promedio de los últimos 7 días con datos (reacciona a un pico
+    // reciente mejor que el promedio de todo el mes).
+    const ultimos = dias.slice(-7);
+    const promedio = ultimos.length
+      ? ultimos.reduce((a, d) => a + Number(d.bytes), 0) / GB / ultimos.length
+      : gb / Math.max(1, diaActual);
+
+    // A este ritmo, ¿con cuánto se termina el mes?
+    const proyeccion = gb + promedio * diasRestantes;
+
+    // ¿Qué día se agotaría el tope? (null si no se agota este mes)
+    let dia_agotamiento = null;
+    if (tope && promedio > 0 && proyeccion > tope) {
+      const faltan = Math.max(0, (tope - gb) / promedio);
+      const dia = Math.ceil(diaActual + faltan);
+      if (dia <= diasDelMes) dia_agotamiento = dia;
+    }
+
+    const pct = tope ? (gb / tope) * 100 : null;
+    const pctProy = tope ? (proyeccion / tope) * 100 : null;
+
+    // Estado: manda lo que ya se consumió, pero la proyección puede
+    // adelantarlo (aún vas en 40% pero al ritmo actual revientas el tope).
+    let estado = 'sin-tope';
+    if (tope) {
+      // Umbrales bajos a propósito: el estimado NO cuenta el tráfico del panel
+      // ni las actualizaciones del servidor, así que se queda corto. Avisar
+      // tarde no sirve de nada: cuando Hostinger corta, ya no hay vuelta atrás.
+      if (pct >= 90) estado = 'critico';
+      else if (pct >= 75 || (pctProy != null && pctProy >= 100)) estado = 'riesgo';
+      else if (pct >= 50 || (pctProy != null && pctProy >= 80)) estado = 'atencion';
+      else estado = 'ok';
+    }
+
     out.push({
       id: s.id,
       nombre: s.nombre,
       activo: s.activo,
-      consumido_gb: Math.round(gb * 100) / 100,
+      consumido_gb: r2(gb),
       tope_gb: tope,
-      pct: tope ? Math.min(100, Math.round((gb / tope) * 100)) : null,
+      pct: tope ? Math.min(100, Math.round(pct)) : null,
+      // Proyección a fin de mes
+      promedio_diario_gb: r2(promedio),
+      proyeccion_gb: r2(proyeccion),
+      proyeccion_pct: pctProy != null ? Math.round(pctProy) : null,
+      dia_agotamiento,
+      dias_restantes: diasRestantes,
+      dias_del_mes: diasDelMes,
+      estado,
       por_dia: dias.map((d) => ({
         dia: new Date(d.fecha).getUTCDate(),
-        gb: Math.round((Number(d.bytes) / GB) * 100) / 100,
+        gb: r2(Number(d.bytes) / GB),
       })),
     });
   }
