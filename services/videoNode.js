@@ -31,7 +31,16 @@ function crearCliente(baseURL, token) {
   return {
     baseURL,
 
-    /** ¿Está vivo el agente? */
+    /**
+     * ¿Responde Y acepta nuestro token? Se prueba contra una ruta autenticada:
+     * /health no sirve para validar porque a propósito no pide token.
+     */
+    verificar: async () => {
+      try { await api.get('/cuentas'); return true; }
+      catch (e) { fallo('verificar', e); return false; }
+    },
+
+    /** ¿Está vivo el agente? (sin comprobar el token) */
     salud: async () => {
       try { return (await api.get('/health')).data; } catch (e) { return fallo('salud', e); }
     },

@@ -654,18 +654,34 @@ router.get('/servidores', requireAdmin, wrap(async (req, res) => {
 
 /** POST /admin/servidores  body: { nombre, url, api_key, capacidad_radios } */
 router.post('/servidores', requireAdmin, wrap(async (req, res) => {
-  const { nombre, url, api_key, capacidad_radios = 100, banda_mensual_gb = 0 } = req.body || {};
+  const { nombre, url, url_publica, api_key, tipo = 'audio', capacidad_radios = 100, banda_mensual_gb = 0 } = req.body || {};
   if (!nombre || !url || !api_key) return res.status(400).json({ error: 'nombre, url y api_key son requeridos' });
   const limpio = String(url).replace(/\/+$/, ''); // sin barra final
+  const esVideo = tipo === 'video';
 
-  // Verificar que responde antes de guardar
-  try {
-    await azuracast.crearCliente(limpio, api_key).getServerStats();
-  } catch (e) {
-    return res.status(400).json({ error: 'No se pudo conectar al servidor: ' + e.message });
+  // Verificar que responde ANTES de guardar, cada uno en su idioma:
+  // un nodo de video habla con nuestro agente, no con la API de AzuraCast.
+  if (esVideo) {
+    const ok = await videoNode.crearCliente(limpio, api_key).verificar();
+    if (!ok) {
+      return res.status(400).json({
+        error: 'El agente de video no respondió. Revisa que esté corriendo (pm2 status), que la URL incluya el puerto (ej: http://IP:3000) y que el token sea el del archivo .env del agente.',
+      });
+    }
+  } else {
+    try {
+      await azuracast.crearCliente(limpio, api_key).getServerStats();
+    } catch (e) {
+      return res.status(400).json({ error: 'No se pudo conectar al servidor: ' + e.message });
+    }
   }
 
-  const servidor = await servidorModel.create({ nombre, url: limpio, api_key, capacidad_radios: Number(capacidad_radios), banda_mensual_gb: Number(banda_mensual_gb) });
+  const servidor = await servidorModel.create({
+    nombre, url: limpio,
+    url_publica: url_publica ? String(url_publica).replace(/\/+$/, '') : null,
+    api_key, tipo: esVideo ? 'video' : 'audio',
+    capacidad_radios: Number(capacidad_radios), banda_mensual_gb: Number(banda_mensual_gb),
+  });
   res.status(201).json({ message: 'Servidor agregado ✅', servidor: { ...servidor, api_key: undefined } });
 }));
 

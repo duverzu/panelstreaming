@@ -38,10 +38,11 @@ async function elegirServidor(tipo = 'audio') {
   return s;
 }
 
-async function create({ nombre, url, api_key, capacidad_radios = 100, banda_mensual_gb = 0 }) {
+async function create({ nombre, url, url_publica = null, api_key, tipo = 'audio', capacidad_radios = 100, banda_mensual_gb = 0 }) {
   const { rows } = await query(
-    `INSERT INTO servidores (nombre, url, api_key, capacidad_radios, banda_mensual_gb) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [nombre, url, api_key, capacidad_radios, banda_mensual_gb]
+    `INSERT INTO servidores (nombre, url, url_publica, api_key, tipo, capacidad_radios, banda_mensual_gb)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [nombre, url, url_publica, api_key, tipo === 'video' ? 'video' : 'audio', capacidad_radios, banda_mensual_gb]
   );
   return rows[0];
 }
