@@ -529,9 +529,11 @@ router.get('/video', requireCliente, wrap(async (req, res) => {
   if (!ctx) return res.status(400).json({ error: 'Tu cuenta no es de video' });
 
   const user = cliente.short_name;
-  const [detalle, consumo] = await Promise.all([
+  const [detalle, consumo, conexion, plan] = await Promise.all([
     ctx.nodo.cuenta(user),
     ctx.nodo.consumo(user, 30),
+    ctx.nodo.conexion(user),
+    planModel.findByNombre(cliente.plan),
   ]);
   if (!detalle) return res.status(502).json({ error: 'No se pudo consultar tu canal ahora mismo. Intenta en un momento.' });
 
@@ -546,6 +548,12 @@ router.get('/video', requireCliente, wrap(async (req, res) => {
       nombre: v.nombre, tam_mb: +(v.bytes / 1048576).toFixed(1), modificado: v.modificado,
     })),
     espacio_mb: +(detalle.espacio_bytes / 1048576).toFixed(1),
+    espacio_total_mb: plan?.espacio_mb || null,
+    permite_vivo: plan?.permite_dj !== false,
+    conexion: conexion ? {
+      servidor: conexion.servidor_rtmp,
+      clave: conexion.clave,
+    } : null,
     urls: {
       canal: `${base}/hybrid/play.m3u8`,     // lo que ponen en su web/app
       emision: `${base}/stream/play.m3u8`,

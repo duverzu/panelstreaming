@@ -73,6 +73,12 @@ function crearCliente(baseURL, token) {
       catch (e) { return fallo(`borrar(${user})`, e) || { ok: false }; }
     },
 
+    /** Datos para transmitir en vivo (servidor RTMP, clave). */
+    conexion: async (user) => {
+      try { return (await api.get(`/cuentas/${encodeURIComponent(user)}/conexion`)).data; }
+      catch (e) { return fallo(`conexion(${user})`, e); }
+    },
+
     /** Enciende/apaga la emisión 24/7. */
     emision: async (user, encender) => {
       try { return (await api.post(`/cuentas/${encodeURIComponent(user)}/24-7`, { encender })).data; }

@@ -413,6 +413,21 @@ app.delete('/cuentas/:user/normalizar', wrap(async (req, res) => {
 //  VIDEOS — subir (directo del navegador) y borrar
 // ==================================================================
 
+
+/** GET /cuentas/:user/conexion — datos para transmitir en vivo (OBS, vMix…). */
+app.get('/cuentas/:user/conexion', wrap(async (req, res) => {
+  const user = String(req.params.user);
+  const puertos = await puertosDe(user);
+  if (!puertos.rtmp) return res.status(404).json({ error: 'Cuenta sin configuración de video' });
+  const clave = await claves.obtener(user);
+  res.json({
+    servidor_rtmp: `rtmp://${process.env.DOMINIO || 'video.streaminghd.co'}:${puertos.rtmp}/${user}live`,
+    clave,               // el "stream key" que va en OBS
+    puerto: puertos.rtmp,
+    aplicacion: `${user}live`,
+  });
+}));
+
 /** POST /cuentas/:user/ticket — el panel pide un ticket de subida para el cliente. */
 app.post('/cuentas/:user/ticket', wrap(async (req, res) => {
   res.json(subida.emitirTicket(String(req.params.user)));

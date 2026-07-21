@@ -36,6 +36,13 @@ async function guardar(datos) {
   await fsp.rename(tmp, ARCHIVO);
 }
 
+/** Devuelve la clave actual de una cuenta; la crea si aún no tiene. */
+async function obtener(user) {
+  const datos = await leer();
+  if (!datos[user]?.clave) return definir(user);
+  return datos[user].clave;
+}
+
 /** Define (o reemplaza) la clave de una cuenta. Si no se pasa, se genera. */
 async function definir(user, clave) {
   const datos = await leer();
@@ -78,4 +85,4 @@ async function valida(user, clave) {
 
 const listar = async () => Object.keys(await leer());
 
-module.exports = { definir, activar, quitar, valida, listar, ARCHIVO };
+module.exports = { definir, obtener, activar, quitar, valida, listar, ARCHIVO };
