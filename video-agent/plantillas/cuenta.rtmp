@@ -3,7 +3,7 @@
 server {
     listen {{PUERTO_RTMP}};
     chunk_size 4096;
-    access_log logs/{{USER}}-rtmp.log;
+    access_log {{HOME}}/{{USER}}/logs/rtmp.log;
 
     # 1) EN VIVO — aquí conecta el cliente con su encoder (OBS, vMix…)
     #

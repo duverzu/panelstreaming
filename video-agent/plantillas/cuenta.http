@@ -8,7 +8,7 @@ server {
     ssl_certificate     {{CERT_FULLCHAIN}};
     ssl_certificate_key {{CERT_KEY}};
 
-    access_log logs/{{USER}}-http.log video;
+    access_log {{HOME}}/{{USER}}/logs/access.log video;
 
     # Cabeceras comunes a todo lo que se sirve de este canal
     add_header 'Access-Control-Allow-Origin' '*' always;

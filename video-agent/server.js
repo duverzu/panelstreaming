@@ -20,6 +20,8 @@ const path = require('path');
 const readline = require('readline');
 const claves = require('./claves');
 const webtv = require('./webtv');
+const { crearCuenta, eliminarConfig } = require('./crear');
+const { exec } = require('child_process');
 
 const PORT = Number(process.env.PORT || 3000);
 // Por defecto solo escucha en el propio servidor: el panel llega por un
@@ -54,6 +56,21 @@ app.use((req, res, next) => {
 });
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+const NGINX = process.env.NGINX_BIN || '/opt/nginx-panel/sbin/nginx';
+/** Prueba y recarga nginx. Si la config es inválida, NO recarga (deja lo que había). */
+function recargarNginx() {
+  return new Promise((resolve) => {
+    exec(`${NGINX} -t`, (err, _o, stderr) => {
+      if (err) return resolve({ ok: false, error: stderr.trim() });
+      exec(`${NGINX} -s reload`, (err2, _o2, stderr2) => {
+        resolve(err2 ? { ok: false, error: stderr2.trim() } : { ok: true });
+      });
+    });
+  });
+}
+
+const RTMP_LOCAL = Number(process.env.PUERTO_RTMP_BASE || 0); // se lee de la config de cada cuenta
 const existe = (p) => fs.promises.access(p).then(() => true).catch(() => false);
 
 // ---- Utilidades ---------------------------------------------------
@@ -269,6 +286,76 @@ app.post('/rtmp/fin', wrap(async (req, res) => {
   const user = String(req.body?.app || '').replace(/live$/, '');
   if (user) console.log(`[rtmp] ${user}: terminó la transmisión en vivo`);
   res.status(200).end();
+}));
+
+
+// ==================================================================
+//  ESCRITURA — crear y gestionar cuentas (fase de provisioning)
+// ==================================================================
+
+/**
+ * POST /cuentas — crea la cuenta en el motor propio.
+ * body: { user, http?, rtmp?, iniciar_24_7? }
+ *   http/rtmp → puertos exactos (para MIGRAR con los de VDO Panel).
+ *               Si se omiten, se asignan del rango de cuentas nuevas.
+ */
+app.post('/cuentas', wrap(async (req, res) => {
+  const { user, http, rtmp, iniciar_24_7 } = req.body || {};
+  if (!user) return res.status(400).json({ error: 'Falta el usuario' });
+
+  const puertos = (http && rtmp) ? { http: Number(http), rtmp: Number(rtmp) } : undefined;
+  const info = await crearCuenta(user, { puertos });
+
+  const reload = await recargarNginx();
+  if (!reload.ok) {
+    // La config quedó escrita pero nginx no la aceptó: se avisa con el detalle
+    return res.status(500).json({ error: 'nginx rechazó la configuración', detalle: reload.error, ...info });
+  }
+
+  let webtvEstado = null;
+  if (iniciar_24_7) {
+    webtvEstado = await webtv.iniciar(info.user, { dirCuenta: info.dir, puertoRtmp: info.puertos.rtmp });
+  }
+
+  res.status(201).json({ ok: true, ...info, webtv: webtvEstado });
+}));
+
+/** DELETE /cuentas/:user — quita la config y apaga el canal (NO borra videos). */
+app.delete('/cuentas/:user', wrap(async (req, res) => {
+  const user = String(req.params.user);
+  webtv.detener(user);
+  await claves.quitar(user);
+  await eliminarConfig(user);
+  await recargarNginx();
+  res.json({ ok: true, message: 'Cuenta desmontada (sus videos siguen en disco)' });
+}));
+
+/** POST /cuentas/:user/24-7 — enciende o apaga la emisión continua. */
+app.post('/cuentas/:user/24-7', wrap(async (req, res) => {
+  const user = String(req.params.user);
+  const encender = req.body?.encender !== false;
+  const lista = await cuentas();
+  const c = lista.find((x) => x.user === user);
+  if (!c) return res.status(404).json({ error: 'Cuenta no encontrada' });
+
+  if (!encender) return res.json({ ok: true, ...webtv.detener(user) });
+
+  // El puerto RTMP se lee de la config de la cuenta
+  const puertos = await puertosDe(user);
+  const r = await webtv.iniciar(user, { dirCuenta: c.dir, puertoRtmp: puertos.rtmp });
+  res.json({ ok: true, ...r });
+}));
+
+/** POST /cuentas/:user/clave — define/regenera la clave de transmisión en vivo. */
+app.post('/cuentas/:user/clave', wrap(async (req, res) => {
+  const clave = await claves.definir(String(req.params.user), req.body?.clave);
+  res.json({ ok: true, clave });
+}));
+
+/** POST /cuentas/:user/clave/activar — suspende o reactiva el vivo sin perder la clave. */
+app.post('/cuentas/:user/clave/activar', wrap(async (req, res) => {
+  const ok = await claves.activar(String(req.params.user), req.body?.activo !== false);
+  res.json({ ok });
 }));
 
 app.use((req, res) => res.status(404).json({ error: `Ruta no encontrada: ${req.method} ${req.path}` }));
