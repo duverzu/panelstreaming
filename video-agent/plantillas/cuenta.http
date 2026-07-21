@@ -38,13 +38,7 @@ server {
         alias {{HOME}}/{{USER}}/uploads;
         add_header 'Access-Control-Allow-Origin' '*' always;
     }
-
-    # Preflight de CORS para reproductores en otros dominios
-    if ($request_method = 'OPTIONS') {
-        add_header 'Access-Control-Allow-Origin' '*';
-        add_header 'Access-Control-Allow-Headers' 'Range,Origin,Accept';
-        add_header 'Access-Control-Max-Age' 1728000;
-        add_header 'Content-Length' 0;
-        return 204;
-    }
 }
+# Los add_header 'always' de cada location ya ponen CORS en todas las
+# respuestas. No hace falta un bloque OPTIONS aparte: pedir segmentos HLS
+# con Range es una "simple request" y no dispara preflight.
