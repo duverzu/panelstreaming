@@ -38,21 +38,21 @@ async function findByNombre(nombre) {
 async function create(p) {
   const { rows } = await query(
     `INSERT INTO planes (nombre, precio_mensual, max_bitrate, max_oyentes, espacio_mb, max_mounts,
-                         permite_dj, reseller_id, tipo, max_resolucion, permite_restream)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+                         permite_dj, reseller_id, tipo, max_resolucion, permite_restream, permite_24_7)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
     [p.nombre, p.precio_mensual || 0,
      p.max_bitrate ?? (p.tipo === 'video' ? 2500 : 128),
      p.max_oyentes ?? 100,
      p.espacio_mb ?? (p.tipo === 'video' ? 51200 : 1024),
      p.max_mounts ?? 1, p.permite_dj ?? true, p.reseller_id ?? null,
      p.tipo === 'video' ? 'video' : 'audio',
-     p.max_resolucion ?? '720p', p.permite_restream ?? false]
+     p.max_resolucion ?? '720p', p.permite_restream ?? false, p.permite_24_7 ?? true]
   );
   return normaliza(rows[0]);
 }
 
 async function update(id, fields) {
-  const allowed = ['nombre', 'precio_mensual', 'max_bitrate', 'max_oyentes', 'espacio_mb', 'max_mounts', 'permite_dj', 'activo', 'tipo', 'max_resolucion', 'permite_restream'];
+  const allowed = ['nombre', 'precio_mensual', 'max_bitrate', 'max_oyentes', 'espacio_mb', 'max_mounts', 'permite_dj', 'activo', 'tipo', 'max_resolucion', 'permite_restream', 'permite_24_7'];
   const sets = [];
   const values = [];
   let i = 1;

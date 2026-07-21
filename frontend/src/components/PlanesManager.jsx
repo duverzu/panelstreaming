@@ -4,8 +4,8 @@ import Modal from './Modal';
 import { IconPlus, IconTrash, IconInvoice } from '../icons';
 
 // Valores de partida sensatos para cada tipo de servicio
-const VACIO_AUDIO = { nombre: '', tipo: 'audio', max_bitrate: 128, max_oyentes: 100, espacio_mb: 1024, max_mounts: 1, permite_dj: true, max_resolucion: '720p', permite_restream: false };
-const VACIO_VIDEO = { nombre: '', tipo: 'video', max_bitrate: 2500, max_oyentes: 50, espacio_mb: 51200, max_mounts: 1, permite_dj: true, max_resolucion: '720p', permite_restream: false };
+const VACIO_AUDIO = { nombre: '', tipo: 'audio', max_bitrate: 128, max_oyentes: 100, espacio_mb: 1024, max_mounts: 1, permite_dj: true, max_resolucion: '720p', permite_restream: false, permite_24_7: true };
+const VACIO_VIDEO = { nombre: '', tipo: 'video', max_bitrate: 2500, max_oyentes: 50, espacio_mb: 51200, max_mounts: 1, permite_dj: true, max_resolucion: '720p', permite_restream: false, permite_24_7: true };
 
 const RESOLUCIONES = [
   { v: '480p',  label: '480p — SD (ahorra banda)' },
@@ -50,6 +50,7 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
       nombre: p.nombre, tipo: p.tipo || 'audio', max_bitrate: p.max_bitrate, max_oyentes: p.max_oyentes,
       espacio_mb: p.espacio_mb, max_mounts: p.max_mounts, permite_dj: p.permite_dj,
       max_resolucion: p.max_resolucion || '720p', permite_restream: p.permite_restream || false,
+      permite_24_7: p.permite_24_7 !== false,
     });
     setError(null); setOpen(true);
   }
@@ -111,9 +112,10 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
               {p.tipo === 'video' ? (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-sm">
                   <Dato label="Resolución" value={p.max_resolucion === 'original' ? 'Sin límite' : p.max_resolucion} />
+                  <Dato label="En vivo" value={p.permite_dj ? 'Sí' : 'No'} />
                   <Dato label="Espectadores" value={p.max_oyentes} />
                   <Dato label="Almacenamiento" value={`${(p.espacio_mb / 1024).toFixed(0)} GB`} />
-                  <Dato label="Redes" value={p.permite_restream ? 'Sí' : 'No'} />
+                  <Dato label="Emisión 24/7" value={p.permite_24_7 !== false ? 'Sí' : 'No'} />
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-sm">
@@ -162,11 +164,22 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
                 <p className="text-xs text-gray-400 mt-1">{(form.espacio_mb / 1024).toFixed(1)} GB para sus videos</p>
               </div>
               <div className="col-span-2">
+                <label className="label">Emisión 24/7 desde sus videos</label>
+                <select className="input" value={form.permite_24_7 ? '1' : '0'} onChange={(e) => setForm((f) => ({ ...f, permite_24_7: e.target.value === '1' }))}>
+                  <option value="1">Sí — su canal siempre al aire con su lista de videos</option>
+                  <option value="0">No — solo videos bajo demanda</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Es el equivalente al AutoDJ de la radio: mantiene el canal sonando cuando nadie transmite.</p>
+              </div>
+              <div className="col-span-2">
                 <label className="label">Transmisión en vivo</label>
                 <select className="input" value={form.permite_dj ? '1' : '0'} onChange={(e) => setForm((f) => ({ ...f, permite_dj: e.target.value === '1' }))}>
                   <option value="1">Sí — puede salir en vivo desde su encoder</option>
-                  <option value="0">No — solo emisión 24/7 de sus videos</option>
+                  <option value="0">No — sin transmisión en vivo</option>
                 </select>
+                {form.permite_24_7 && form.permite_dj && (
+                  <p className="text-xs text-gray-400 mt-1">Con ambas activas, el vivo interrumpe la emisión 24/7 y al terminar vuelve sola.</p>
+                )}
               </div>
               <div className="col-span-2">
                 <label className="label">Retransmitir a redes</label>

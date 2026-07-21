@@ -63,6 +63,9 @@ ALTER TABLE planes ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) NOT NULL DEFAULT 'a
 --   espacio_mb   → almacenamiento de sus videos
 ALTER TABLE planes ADD COLUMN IF NOT EXISTS max_resolucion   VARCHAR(20) NOT NULL DEFAULT '720p';
 ALTER TABLE planes ADD COLUMN IF NOT EXISTS permite_restream BOOLEAN     NOT NULL DEFAULT false;
+-- Emisión continua desde su propia lista de videos (el "AutoDJ" del video).
+-- Es lo que mantiene el canal al aire cuando el cliente no está transmitiendo.
+ALTER TABLE planes ADD COLUMN IF NOT EXISTS permite_24_7     BOOLEAN     NOT NULL DEFAULT true;
 
 -- Planes de REVENDEDOR (paquetes de mayorista: cuánto puede vender).
 -- Son distintos a `planes`: aquellos son plantillas de UNA radio; estos son
