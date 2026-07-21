@@ -234,14 +234,12 @@ app.get('/cuentas/:user/consumo', wrap(async (req, res) => {
  * su encoder. El cliente publica en la aplicación `<user>live` usando SU
  * CLAVE como nombre de stream.
  *
- * Respuestas que entiende nginx-rtmp:
- *   2xx           → permitido
- *   302 + Location → permitido, pero renombrando el stream
- *   otra cosa      → rechazado
+ * Responde 2xx para permitir y cualquier otra cosa para rechazar.
  *
- * Se usa el 302 para que la salida SIEMPRE se llame `play`, sin importar
- * la clave: así el HLS queda en play.m3u8, que es la dirección que el
- * cliente ya tiene publicada en su web y su app.
+ * El renombrado del stream a `play` NO se hace aquí: se probó devolver 302
+ * con Location y nginx-rtmp siguió nombrando el HLS con la clave del
+ * cliente. Se resuelve en la configuración, reenviando el vivo con el
+ * nombre fijo `play` a otra aplicación (ver plantilla cuenta.rtmp).
  */
 app.post('/rtmp/publicar', wrap(async (req, res) => {
   const app_ = String(req.body?.app || '');
@@ -259,7 +257,7 @@ app.post('/rtmp/publicar', wrap(async (req, res) => {
   }
 
   console.log(`[rtmp] ${user}: al aire desde ${req.body?.addr}`);
-  res.redirect(302, 'play');     // la salida se llama play, no la clave
+  res.status(200).end();
 }));
 
 /** POST /rtmp/fin — nginx avisa que la transmisión terminó (on_publish_done). */

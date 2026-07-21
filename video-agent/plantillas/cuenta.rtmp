@@ -6,19 +6,33 @@ server {
     access_log logs/{{USER}}-rtmp.log;
 
     # 1) EN VIVO — aquí conecta el cliente con su encoder (OBS, vMix…)
+    #
+    # OJO: aquí NO se genera HLS. El cliente publica usando su clave como
+    # nombre de stream, y el HLS heredaría ese nombre (clave-0.ts), lo que
+    # rompería la dirección que ya tiene publicada Y expondría su clave en
+    # la URL. Se reenvía con el nombre fijo `play` a las aplicaciones que
+    # sí generan HLS.
     application {{USER}}live {
+        live on;
+
+        # El agente valida usuario y clave antes de dejar transmitir
+        on_publish http://127.0.0.1:{{PUERTO_AGENTE}}/rtmp/publicar;
+        on_publish_done http://127.0.0.1:{{PUERTO_AGENTE}}/rtmp/fin;
+
+        push rtmp://127.0.0.1:{{PUERTO_RTMP}}/{{USER}}livehls/play;  # /live/play.m3u8
+        push rtmp://127.0.0.1:{{PUERTO_RTMP}}/{{USER}}hybrid/play;   # pisa al canal 24/7
+    }
+
+    # 1b) El HLS del vivo, ya con el nombre correcto
+    application {{USER}}livehls {
         live on;
         hls on;
         hls_path {{HOME}}/{{USER}}/live-streaming/hls;
         hls_fragment 3;
         hls_playlist_length 60;
 
-        # El agente valida usuario y clave antes de dejar transmitir
-        on_publish http://127.0.0.1:{{PUERTO_AGENTE}}/rtmp/publicar;
-        on_publish_done http://127.0.0.1:{{PUERTO_AGENTE}}/rtmp/fin;
-
-        # Lo que entra en vivo pisa al canal continuo
-        push rtmp://127.0.0.1:{{PUERTO_RTMP}}/{{USER}}hybrid/play;
+        allow publish 127.0.0.1;
+        deny publish all;
     }
 
     # 2) EMISIÓN 24/7 — la alimenta ffmpeg con la lista del cliente
