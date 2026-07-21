@@ -61,9 +61,9 @@ export default function ClienteReproductor() {
                 </p>
               </div>
             </div>
-            {ext.url && (
-              <a href={ext.url} target="_blank" rel="noreferrer" className="btn-primary !py-2 !px-3 text-xs shrink-0">
-                Abrir mi player ↗
+            {(ext.url_editar || ext.url) && (
+              <a href={ext.url_editar || ext.url} target="_blank" rel="noreferrer" className="btn-primary !py-2 !px-3 text-xs shrink-0">
+                Editar player ↗
               </a>
             )}
           </div>
@@ -74,7 +74,7 @@ export default function ClienteReproductor() {
                 <iframe src={ext.url} width="100%" height="460" frameBorder="0" allow="autoplay" title="Mi reproductor" style={{ display: 'block' }} />
               </div>
               <p className="text-xs text-gray-400 mt-2">
-                ¿No carga la vista previa? Ábrelo con el botón de arriba — algunos navegadores bloquean páginas dentro de otras.
+                ¿No carga la vista previa? <a href={ext.url} target="_blank" rel="noreferrer" className="text-brand-600 dark:text-brand-400 underline underline-offset-2">Ábrelo en una pestaña nueva</a> — algunos navegadores bloquean páginas dentro de otras.
               </p>
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Snippet label="🔗 Link para compartir" code={ext.url} />

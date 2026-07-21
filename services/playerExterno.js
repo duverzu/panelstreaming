@@ -17,6 +17,8 @@ const axios = require('axios');
 const API_URL = process.env.PLAYER_API_URL || '';
 const API_TOKEN = process.env.PLAYER_API_TOKEN || '';
 const WEB_BASE = (process.env.PLAYER_WEB_URL || '').replace(/\/+$/, '');
+// Dónde edita el cliente su player. Si no se define, se usa la del player.
+const EDIT_BASE = (process.env.PLAYER_EDIT_URL || '').replace(/\/+$/, '');
 const TTL_MS = Number(process.env.PLAYER_CACHE_MS || 5 * 60 * 1000);
 
 let cache = { at: 0, porUser: null };
@@ -56,6 +58,7 @@ async function buscar(user) {
       nombre: c.nombre,
       user: c.user,
       url,
+      url_editar: EDIT_BASE || url,
       // Código listo para pegar en la web del cliente
       embed: url ? `<iframe src="${url}" width="100%" height="480" frameborder="0" allow="autoplay" style="border:0"></iframe>` : null,
       estado: c.estado,
