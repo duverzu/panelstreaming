@@ -94,8 +94,10 @@ async function seed() {
   );
 
   // --- Documentación por defecto (si no hay artículos) ---
-  const { rows: dcount } = await query('SELECT COUNT(*)::int AS n FROM documentacion');
-  if (dcount[0].n === 0) {
+  // Se insertan por TÍTULO los que falten: así una guía nueva llega a
+  // instalaciones que ya tienen documentación, sin pisar lo que el admin editó.
+  {
+    let nuevos = 0;
     const docs = [
       { titulo: 'Bienvenido a tu panel de radio', categoria: 'Primeros pasos', orden: 1, contenido:
 `# 👋 Bienvenido
@@ -201,6 +203,9 @@ Por defecto **no envía títulos**. Actívalo así:
 ### Mixxx
 Lo envía solo. Verifica en **Preferences → Live Broadcasting** que esté activo *Enable metadata*.
 
+### RadioCaster
+En la pestaña **Song info** / **Metadata** elige **Automático desde el reproductor** si usas RadioBOSS, Winamp o AIMP. Si no, puedes indicarle un **archivo de texto** o el **título de la ventana**. Sin esto transmite bien, pero sin título.
+
 ### Sam Broadcaster / RadioDJ / Zara Radio
 Lo envían automáticamente. Si no aparece, revisa en la configuración del encoder que el servidor sea **Icecast 2** (no SHOUTcast).
 
@@ -215,10 +220,63 @@ Mira el **Dashboard** mientras transmites: si en *Sonando ahora* aparece el tít
 
 ## Consejo
 Escribe siempre **Artista - Título**. Es el formato que entienden los reproductores y las apps.` },
+      { titulo: 'Transmitir con RadioCaster', categoria: 'Transmitir', orden: 3, contenido:
+`# 📡 Transmitir con RadioCaster
+
+**RadioCaster** (de DJSoft) toma el audio de tu computadora —de cualquier programa, del micrófono o de la tarjeta de sonido— y lo envía a tu radio. Es muy usado porque te deja seguir usando el reproductor que ya conoces.
+
+Descárgalo en: https://www.djsoft.net/radiocaster/
+
+## 1) Ten a mano tus datos
+Ábrelos en el menú **Conectar** de tu panel. Son estos cinco:
+
+| Campo en RadioCaster | De dónde sale |
+|---|---|
+| Server / Dirección | **Servidor** |
+| Port / Puerto | **Puerto** |
+| Mount point | **Punto de montaje** (una barra: \`/\`) |
+| Login / User | **Usuario DJ** |
+| Password | **Contraseña DJ** |
+
+## 2) Configura la conexión
+1. Abre RadioCaster y pulsa **Add** (o *Agregar*) para crear un servidor.
+2. **Server type**: elige **Icecast 2**. ⚠️ No elijas SHOUTcast: no conectará.
+3. Escribe **Server**, **Port**, **Mount point**, **Login** y **Password** con los datos de arriba.
+4. **Encoder / Formato**: **MP3**, y el bitrate de tu plan (128 kbps si no sabes cuál).
+5. Guarda con **OK**.
+
+## 3) Elige qué audio se transmite
+En **Sound source** (fuente de sonido) escoge de dónde toma el audio:
+- **Tarjeta de sonido / What U Hear**: transmite todo lo que suena en tu PC.
+- **Entrada de micrófono**: solo tu voz.
+- **Un programa específico**: solo esa aplicación.
+
+## 4) Al aire
+Pulsa **Connect** (o *Start*). Cuando el indicador se ponga en verde ya estás transmitiendo: compruébalo en tu **Dashboard**.
+
+## Que se vea el nombre de la canción
+En la pestaña **Song info** / **Metadata** eliges de dónde saca el título:
+- **Automático desde el reproductor**: si usas RadioBOSS, Winamp, AIMP o similares, RadioCaster lo detecta solo. ✅ Es la mejor opción.
+- **Archivo de texto**: si tu programa escribe la canción en un \`.txt\`, indícale la ruta.
+- **Título de la ventana**: útil cuando ninguna de las anteriores funciona.
+- **Manual**: lo escribes tú y pulsas actualizar.
+
+Si dejas esto sin configurar, tu radio suena bien pero tus oyentes verán el reproductor **sin el nombre de la canción**.
+
+## Si no conecta
+- **Error de autenticación** → revisa usuario y contraseña, y que el tipo sea **Icecast 2**.
+- **No encuentra el servidor** → revisa que el puerto sea el de tu panel (no el 80 ni el 443).
+- **Conecta y se cae** → suele ser el bitrate: bájalo al de tu plan.
+- **Suena pero nadie te escucha** → confirma que el **Mount point** sea \`/\` exactamente.` },
     ];
     for (const d of docs) {
-      await query('INSERT INTO documentacion (titulo, categoria, contenido, orden) VALUES ($1,$2,$3,$4)', [d.titulo, d.categoria, d.contenido, d.orden]);
+      const { rows: yaEsta } = await query('SELECT id FROM documentacion WHERE titulo = $1', [d.titulo]);
+      if (yaEsta.length === 0) {
+        await query('INSERT INTO documentacion (titulo, categoria, contenido, orden) VALUES ($1,$2,$3,$4)', [d.titulo, d.categoria, d.contenido, d.orden]);
+        nuevos++;
+      }
     }
+    if (nuevos) console.log(`   ${nuevos} artículo(s) de ayuda agregados`);
   }
 
   console.log('✅ Seed completado.');
