@@ -72,8 +72,13 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
     usuario = await userModel.generarUsername(nombre_empresa || email);
   }
 
-  // 0) Elegir servidor con espacio (o el por defecto del .env si no hay tabla)
-  const servidor = await servidorModel.elegirServidor();
+  // 0) Elegir servidor con espacio, DEL TIPO que pide el plan.
+  //    Un plan de video se va a un nodo de video; los de audio, como siempre.
+  const tipo = plan.tipo === 'video' ? 'video' : 'audio';
+  const servidor = await servidorModel.elegirServidor(tipo);
+  if (tipo === 'video' && !servidor) {
+    throw err('No hay servidores de video con espacio disponible. Agrega uno en Servidores.', 503);
+  }
   const az = servidor ? azuracast.crearCliente(servidor.url, servidor.api_key) : azuracast.porDefecto;
   const servidor_id = servidor ? servidor.id : null;
   const baseUrl = servidor ? servidor.url : process.env.AZURACAST_BASE_URL;   // admin (API)

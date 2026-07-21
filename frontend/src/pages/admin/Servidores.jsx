@@ -8,7 +8,7 @@ export default function AdminServidores() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ nombre: '', url: '', url_publica: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0 });
+  const [form, setForm] = useState({ nombre: '', url: '', url_publica: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0, tipo: 'audio' });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -19,14 +19,14 @@ export default function AdminServidores() {
   }
   useEffect(() => { cargar(); }, []);
 
-  function abrirCrear() { setEditId(null); setForm({ nombre: '', url: '', url_publica: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0 }); setError(null); setOpen(true); }
-  function abrirEditar(s) { setEditId(s.id); setForm({ nombre: s.nombre, url: s.url, url_publica: s.url_publica || '', api_key: '', capacidad_radios: s.capacidad_radios, banda_mensual_gb: s.banda_mensual_gb || 0 }); setError(null); setOpen(true); }
+  function abrirCrear() { setEditId(null); setForm({ nombre: '', url: '', url_publica: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0, tipo: 'audio' }); setError(null); setOpen(true); }
+  function abrirEditar(s) { setEditId(s.id); setForm({ nombre: s.nombre, url: s.url, url_publica: s.url_publica || '', tipo: s.tipo || 'audio', api_key: '', capacidad_radios: s.capacidad_radios, banda_mensual_gb: s.banda_mensual_gb || 0 }); setError(null); setOpen(true); }
 
   async function guardar(e) {
     e.preventDefault();
     setSaving(true); setError(null);
     try {
-      const payload = { nombre: form.nombre, url: form.url, url_publica: form.url_publica, capacidad_radios: Number(form.capacidad_radios), banda_mensual_gb: Number(form.banda_mensual_gb) };
+      const payload = { nombre: form.nombre, url: form.url, url_publica: form.url_publica, tipo: form.tipo, capacidad_radios: Number(form.capacidad_radios), banda_mensual_gb: Number(form.banda_mensual_gb) };
       if (form.api_key) payload.api_key = form.api_key;
       if (editId) await apiFetch('/admin/servidores/' + editId, { method: 'PUT', body: JSON.stringify(payload) });
       else await apiFetch('/admin/servidores', { method: 'POST', body: JSON.stringify(payload) });
@@ -73,7 +73,9 @@ export default function AdminServidores() {
                         ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400">Activo</span>
                         : <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400">Pausado</span>}
                     </div>
-                    <div className="text-xs text-gray-400 break-all">{s.url}</div>
+                    <div className="text-xs text-gray-400 break-all">
+                      <span className="mr-1.5">{s.tipo === 'video' ? '🎬 Video' : '🎵 Audio'}</span>· {s.url}
+                    </div>
                     {s.url_publica && <div className="text-xs text-brand-600 dark:text-brand-400 break-all">🌐 público: {s.url_publica}</div>}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -102,6 +104,14 @@ export default function AdminServidores() {
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? 'Editar servidor' : 'Agregar servidor'}>
         <form onSubmit={guardar} className="space-y-3">
           <div><label className="label">Nombre</label><input className="input" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Nodo 2" required /></div>
+          <div>
+            <label className="label">Tipo de servicio</label>
+            <select className="input" value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
+              <option value="audio">🎵 Audio — radios</option>
+              <option value="video">🎬 Video — streaming de video</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Las cuentas se crean en el servidor que corresponde a su plan.</p>
+          </div>
           <div><label className="label">URL de AzuraCast</label><input className="input" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://server3.streaminghd.co" required />
             <p className="text-xs text-gray-400 mt-1">Solo la usa el panel para hablar con la API. No se le muestra al cliente.</p></div>
           <div>

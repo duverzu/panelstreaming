@@ -3,7 +3,7 @@ import { apiFetch } from '../api';
 import Modal from './Modal';
 import { IconPlus, IconTrash, IconInvoice } from '../icons';
 
-const VACIO = { nombre: '', max_bitrate: 128, max_oyentes: 100, espacio_mb: 1024, max_mounts: 1, permite_dj: true };
+const VACIO = { nombre: '', tipo: 'audio', max_bitrate: 128, max_oyentes: 100, espacio_mb: 1024, max_mounts: 1, permite_dj: true };
 
 /**
  * Gestor de planes reutilizable.
@@ -30,7 +30,7 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
   function abrirCrear() { setEditId(null); setForm(VACIO); setError(null); setOpen(true); }
   function abrirEditar(p) {
     setEditId(p.id);
-    setForm({ nombre: p.nombre, max_bitrate: p.max_bitrate, max_oyentes: p.max_oyentes, espacio_mb: p.espacio_mb, max_mounts: p.max_mounts, permite_dj: p.permite_dj });
+    setForm({ nombre: p.nombre, tipo: p.tipo || 'audio', max_bitrate: p.max_bitrate, max_oyentes: p.max_oyentes, espacio_mb: p.espacio_mb, max_mounts: p.max_mounts, permite_dj: p.permite_dj });
     setError(null); setOpen(true);
   }
   const set = (k, num) => (e) => setForm((f) => ({ ...f, [k]: num ? Number(e.target.value) : e.target.value }));
@@ -78,7 +78,7 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
                       {p.nombre}
                       {esRevendedor && !editable(p) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400">Global</span>}
                     </div>
-                    <div className="text-sm text-gray-400">Plantilla de radio</div>
+                    <div className="text-sm text-gray-400">{p.tipo === 'video' ? 'Plantilla de video' : 'Plantilla de radio'}</div>
                   </div>
                 </div>
                 {editable(p) && (
@@ -102,6 +102,14 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? 'Editar plan' : 'Crear plan'}>
         <form onSubmit={guardar} className="space-y-3">
           <div><label className="label">Nombre</label><input className="input" value={form.nombre} onChange={set('nombre')} placeholder="Ej: Empresarial" required /></div>
+          <div>
+            <label className="label">Tipo de servicio</label>
+            <select className="input" value={form.tipo} onChange={set('tipo')}>
+              <option value="audio">🎵 Audio — radio online</option>
+              <option value="video">🎬 Video — streaming de video</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Decide en qué servidor se crea la cuenta y qué ve el cliente en su panel.</p>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label">Bitrate (kbps)</label><input className="input" type="number" value={form.max_bitrate} onChange={set('max_bitrate', true)} /></div>
             <div><label className="label">Máx. oyentes</label><input className="input" type="number" value={form.max_oyentes} onChange={set('max_oyentes', true)} /></div>

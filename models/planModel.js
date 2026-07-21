@@ -37,16 +37,17 @@ async function findByNombre(nombre) {
 
 async function create(p) {
   const { rows } = await query(
-    `INSERT INTO planes (nombre, precio_mensual, max_bitrate, max_oyentes, espacio_mb, max_mounts, permite_dj, reseller_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    `INSERT INTO planes (nombre, precio_mensual, max_bitrate, max_oyentes, espacio_mb, max_mounts, permite_dj, reseller_id, tipo)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
     [p.nombre, p.precio_mensual || 0, p.max_bitrate ?? 128, p.max_oyentes ?? 100,
-     p.espacio_mb ?? 1024, p.max_mounts ?? 1, p.permite_dj ?? true, p.reseller_id ?? null]
+     p.espacio_mb ?? 1024, p.max_mounts ?? 1, p.permite_dj ?? true, p.reseller_id ?? null,
+     p.tipo === 'video' ? 'video' : 'audio']
   );
   return normaliza(rows[0]);
 }
 
 async function update(id, fields) {
-  const allowed = ['nombre', 'precio_mensual', 'max_bitrate', 'max_oyentes', 'espacio_mb', 'max_mounts', 'permite_dj', 'activo'];
+  const allowed = ['nombre', 'precio_mensual', 'max_bitrate', 'max_oyentes', 'espacio_mb', 'max_mounts', 'permite_dj', 'activo', 'tipo'];
   const sets = [];
   const values = [];
   let i = 1;

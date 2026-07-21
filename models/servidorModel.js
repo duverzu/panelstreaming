@@ -11,7 +11,7 @@ async function findById(id) {
 /** Todos los servidores con su nº de radios asignadas (oculta la api_key). */
 async function findAllConUso() {
   const { rows } = await query(
-    `SELECT s.id, s.nombre, s.url, s.url_publica, s.capacidad_radios, s.banda_mensual_gb, s.activo, s.created_at,
+    `SELECT s.id, s.nombre, s.url, s.url_publica, s.tipo, s.capacidad_radios, s.banda_mensual_gb, s.activo, s.created_at,
             (SELECT COUNT(*)::int FROM clientes c WHERE c.servidor_id = s.id) AS radios
        FROM servidores s ORDER BY s.id`
   );
@@ -19,13 +19,18 @@ async function findAllConUso() {
 }
 
 /** Elige el servidor activo con más espacio libre (o null si no hay). */
-async function elegirServidor() {
+/**
+ * Elige el servidor ACTIVO con más espacio, del tipo pedido.
+ * `tipo` por defecto 'audio': así todo lo existente se comporta igual.
+ */
+async function elegirServidor(tipo = 'audio') {
   const { rows } = await query(
     `SELECT s.*, (SELECT COUNT(*)::int FROM clientes c WHERE c.servidor_id = s.id) AS radios
        FROM servidores s
-      WHERE s.activo = true
+      WHERE s.activo = true AND s.tipo = $1
       ORDER BY (s.capacidad_radios - (SELECT COUNT(*) FROM clientes c WHERE c.servidor_id = s.id)) DESC, s.id
-      LIMIT 1`
+      LIMIT 1`,
+    [tipo]
   );
   const s = rows[0];
   if (!s) return null;
@@ -42,7 +47,7 @@ async function create({ nombre, url, api_key, capacidad_radios = 100, banda_mens
 }
 
 async function update(id, fields) {
-  const allowed = ['nombre', 'url', 'url_publica', 'api_key', 'capacidad_radios', 'banda_mensual_gb', 'activo'];
+  const allowed = ['nombre', 'url', 'url_publica', 'api_key', 'capacidad_radios', 'banda_mensual_gb', 'activo', 'tipo'];
   const sets = [];
   const values = [];
   let i = 1;

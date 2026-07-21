@@ -52,6 +52,10 @@ CREATE TABLE IF NOT EXISTS planes (
   created_at      TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 
+-- Tipo de servicio del plan: decide si la cuenta es de radio o de video, y
+-- por lo tanto en qué servidor se crea y qué ve el cliente en su panel.
+ALTER TABLE planes ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) NOT NULL DEFAULT 'audio';
+
 -- Planes de REVENDEDOR (paquetes de mayorista: cuánto puede vender).
 -- Son distintos a `planes`: aquellos son plantillas de UNA radio; estos son
 -- el cupo total de la cuenta del revendedor. Se venden como un servicio más.
@@ -78,6 +82,10 @@ CREATE TABLE IF NOT EXISTS servidores (
   activo           BOOLEAN NOT NULL DEFAULT true,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Tipo de servicio del servidor: 'audio' (radio) o 'video'.
+-- Por defecto 'audio' para que todo lo que ya existe siga igual.
+ALTER TABLE servidores ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) NOT NULL DEFAULT 'audio';
 
 -- URL PÚBLICA del servidor: la que ven los clientes (escucha y DJ).
 -- `url` es la de administración (la API de AzuraCast); `url_publica` es un
