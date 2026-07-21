@@ -22,6 +22,7 @@ const claves = require('./claves');
 const webtv = require('./webtv');
 const { crearCuenta, eliminarConfig } = require('./crear');
 const normalizar = require('./normalizar');
+const subida = require('./subida');
 const { exec } = require('child_process');
 
 const PORT = Number(process.env.PORT || 3000);
@@ -49,6 +50,8 @@ app.use((req, res, next) => {
     if (ip === '127.0.0.1' || ip === '::1') return next();
     return res.status(403).end();
   }
+  // La subida se autoriza por ticket firmado (el navegador no tiene el token)
+  if (req.path === '/subir') return next();
   if (!TOKEN) return res.status(500).json({ error: 'AGENT_TOKEN no configurado en el agente' });
   const h = req.headers.authorization || '';
   const enviado = h.startsWith('Bearer ') ? h.slice(7) : req.headers['x-api-key'];
@@ -403,6 +406,61 @@ app.get('/cuentas/:user/normalizar', wrap(async (req, res) => {
 /** DELETE /cuentas/:user/normalizar — cancela el trabajo en curso. */
 app.delete('/cuentas/:user/normalizar', wrap(async (req, res) => {
   res.json(normalizar.cancelar(String(req.params.user)));
+}));
+
+
+// ==================================================================
+//  VIDEOS — subir (directo del navegador) y borrar
+// ==================================================================
+
+/** POST /cuentas/:user/ticket — el panel pide un ticket de subida para el cliente. */
+app.post('/cuentas/:user/ticket', wrap(async (req, res) => {
+  res.json(subida.emitirTicket(String(req.params.user)));
+}));
+
+/**
+ * POST /subir?ticket=... — el NAVEGADOR sube aquí (vía nginx /_subir).
+ * No lleva token de agente: se autoriza con el ticket firmado.
+ */
+app.post('/subir', (req, res) => {
+  const user = subida.validarTicket(req.query.ticket);
+  if (!user) return res.status(403).json({ error: 'Ticket inválido o vencido. Vuelve a la página de subir.' });
+  req.videoUser = user;
+
+  subida.subir(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'No se recibió ningún video (formatos: mp4, mkv, mov, webm, flv)' });
+
+    // Si el canal está al aire, reiniciarlo para que incluya el nuevo video
+    try {
+      const lista = await cuentas();
+      const c = lista.find((x) => x.user === user);
+      if (c && webtv.estado(user).emitiendo) {
+        const puertos = await puertosDe(user);
+        if (puertos.rtmp) await webtv.recargar(user, { dirCuenta: c.dir, puertoRtmp: puertos.rtmp });
+      }
+    } catch (e) { console.error('[subir] reinicio canal:', e.message); }
+
+    res.status(201).json({ ok: true, archivo: req.file.filename, bytes: req.file.size });
+  });
+});
+
+/** DELETE /cuentas/:user/videos/:nombre — borra un video y reinicia el canal. */
+app.delete('/cuentas/:user/videos/:nombre', wrap(async (req, res) => {
+  const user = String(req.params.user);
+  const r = await subida.borrar(user, req.params.nombre);
+  if (!r.ok) return res.status(404).json(r);
+
+  try {
+    const lista = await cuentas();
+    const c = lista.find((x) => x.user === user);
+    if (c && webtv.estado(user).emitiendo) {
+      const puertos = await puertosDe(user);
+      if (puertos.rtmp) await webtv.recargar(user, { dirCuenta: c.dir, puertoRtmp: puertos.rtmp });
+    }
+  } catch (e) { console.error('[borrar] reinicio canal:', e.message); }
+
+  res.json(r);
 }));
 
 app.use((req, res) => res.status(404).json({ error: `Ruta no encontrada: ${req.method} ${req.path}` }));

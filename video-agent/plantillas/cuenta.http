@@ -38,6 +38,16 @@ server {
         alias {{HOME}}/{{USER}}/uploads;
         add_header 'Access-Control-Allow-Origin' '*' always;
     }
+
+    # --- Subida directa del navegador al agente (archivos grandes) ---
+    location /_subir {
+        proxy_pass http://127.0.0.1:{{PUERTO_AGENTE}}/subir;
+        proxy_request_buffering off;      # pasa el archivo directo, sin bufferear GB
+        proxy_http_version 1.1;
+        proxy_read_timeout 3600s;         # subidas largas
+        client_max_body_size 0;           # sin límite de nginx (lo pone el agente)
+        add_header 'Access-Control-Allow-Origin' '*' always;
+    }
 }
 # Los add_header 'always' de cada location ya ponen CORS en todas las
 # respuestas. No hace falta un bloque OPTIONS aparte: pedir segmentos HLS
