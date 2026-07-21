@@ -18,7 +18,7 @@ node -v || (curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - &&
 sudo mkdir -p /opt/video-agent && cd /opt/video-agent
 # copiar aquí video-agent/ del repo (git clone o scp)
 
-npm install --omit=dev
+npm install --omit=dev   # sin --silent: si algo falla, hay que verlo
 
 # 3) Configurar
 cp .env.example .env
