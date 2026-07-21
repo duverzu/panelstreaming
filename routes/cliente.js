@@ -17,6 +17,8 @@ const clienteModel = require('../models/clienteModel');
 const { generateToken } = require('../services/auth');
 const azuracast = require('../services/azuracast');
 const publico = require('../services/publico');
+const planModel = require('../models/planModel');
+const consumoClienteModel = require('../models/consumoClienteModel');
 const authFactory = require('../middleware/auth');
 const isCliente = require('../middleware/isCliente');
 
@@ -33,6 +35,14 @@ const upload = multer({
 });
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+/** Bytes a algo legible (B/KB/MB/GB/TB). */
+function humanBytes(n) {
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0; let v = Number(n) || 0;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return v.toFixed(1) + ' ' + u[i];
+}
 
 /** Cliente del token. */
 function getCliente(req) {
@@ -259,6 +269,55 @@ router.get('/estadisticas', requireCliente, wrap(async (req, res) => {
     top_canciones = (bw?.mostPlayed || []).slice(0, 10).map((s) => ({ titulo: s.song?.title || s.title || 'Desconocida', artista: s.song?.artist || s.artist || '', reproducciones: s.num_plays ?? s.plays ?? 0 }));
   } catch (_) {}
   res.json({ oyentes_ahora, pico: por_hora.reduce((m, p) => Math.max(m, p.y), 0), por_hora, por_dia, top_canciones });
+}));
+
+
+/**
+ * GET /cliente/consumo — transferencia y disco de SU radio.
+ * La banda sale del Guardián (muestreo de oyentes × bitrate) y el disco de la
+ * cuota real de AzuraCast. Es lo que pinta los gráficos del dashboard.
+ */
+router.get('/consumo', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  const plan = await planModel.findByNombre(cliente?.plan);
+
+  // --- Transferencia (últimos 30 días + total del mes) ---
+  const [serie, bandaMes] = await Promise.all([
+    consumoClienteModel.serieCliente(cliente.id, 30),
+    consumoClienteModel.totalMesCliente(cliente.id),
+  ]);
+
+  // --- Disco (cuota real de la estación en AzuraCast) ---
+  let disco = { usado_mb: 0, total_mb: plan?.espacio_mb || 0, porcentaje: 0, archivos: 0 };
+  if (cliente?.azuracast_station_id) {
+    const az = await azDe(cliente);
+    try {
+      const info = await az.getStationAdmin(cliente.azuracast_station_id);
+      const loc = info?.media_storage_location
+        ? await az.getStorageLocation(typeof info.media_storage_location === 'object' ? info.media_storage_location.id : info.media_storage_location)
+        : null;
+      const usadoBytes = Number(loc?.storageUsedBytes ?? loc?.storage_used_bytes ?? 0);
+      const totalBytes = Number(loc?.storageQuotaBytes ?? loc?.storage_quota_bytes ?? 0);
+      if (usadoBytes) disco.usado_mb = Math.round(usadoBytes / 1048576);
+      if (totalBytes) disco.total_mb = Math.round(totalBytes / 1048576);
+    } catch (e) { console.error('[consumo] disco:', e.message); }
+    try {
+      const archivos = await az.listMedia(cliente.azuracast_station_id);
+      disco.archivos = (archivos || []).length;
+    } catch (_) {}
+  }
+  disco.porcentaje = disco.total_mb > 0 ? Math.min(100, Math.round((disco.usado_mb / disco.total_mb) * 100)) : 0;
+
+  res.json({
+    banda: {
+      mes_bytes: bandaMes,
+      mes: humanBytes(bandaMes),
+      serie: serie.map((d) => ({ fecha: d.fecha, gb: +(d.bytes / 1073741824).toFixed(3) })),
+      hay_datos: serie.some((d) => d.bytes > 0),
+    },
+    disco,
+    plan: { nombre: cliente?.plan, max_oyentes: plan?.max_oyentes || null, espacio_mb: plan?.espacio_mb || null },
+  });
 }));
 
 router.get('/oyentes', requireCliente, wrap(async (req, res) => {

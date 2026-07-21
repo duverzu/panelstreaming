@@ -67,6 +67,18 @@ async function totalMesPorClienteDeReseller(resellerId) {
   return mapa;
 }
 
+/** Consumo del mes en curso de UNA radio (bytes). Se calcula en SQL para que
+ *  el corte de mes lo haga Postgres y no dependa de la zona horaria del proceso. */
+async function totalMesCliente(clienteId) {
+  const { rows } = await query(
+    `SELECT COALESCE(SUM(bytes), 0)::bigint AS bytes
+       FROM consumo_cliente
+      WHERE cliente_id = $1 AND fecha >= date_trunc('month', CURRENT_DATE)`,
+    [clienteId]
+  );
+  return Number(rows[0].bytes);
+}
+
 /** Serie diaria de UNA radio (para el panel del cliente / detalle). */
 async function serieCliente(clienteId, dias = 30) {
   const { rows } = await query(
@@ -81,5 +93,5 @@ async function serieCliente(clienteId, dias = 30) {
 
 module.exports = {
   registrar, serieReseller, totalMesReseller, totalMesPorReseller,
-  totalMesPorClienteDeReseller, serieCliente,
+  totalMesPorClienteDeReseller, serieCliente, totalMesCliente,
 };

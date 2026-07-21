@@ -64,6 +64,7 @@ function crearCliente(baseURL, apiKey) {
   const getListeners = async (id) => { try { return (await api.get(`/station/${id}/listeners`)).data; } catch (e) { handleError(`getListeners(${id})`, e); } };
   const getCharts = async (id) => { try { return (await api.get(`/station/${id}/reports/overview/charts`)).data; } catch (e) { handleError(`getCharts(${id})`, e); } };
   const getBestWorst = async (id) => { try { return (await api.get(`/station/${id}/reports/overview/best-and-worst`)).data; } catch (e) { handleError(`getBestWorst(${id})`, e); } };
+  const getStorageLocation = async (id) => { try { return (await api.get(`/admin/storage_location/${id}`)).data; } catch (e) { handleError(`getStorageLocation(${id})`, e); } };
   const updateStorageLocation = async (id, data) => { try { return (await api.put(`/admin/storage_location/${id}`, data)).data; } catch (e) { handleError(`updateStorageLocation(${id})`, e); } };
   const getServerStats = async () => { try { return (await api.get('/admin/server/stats')).data; } catch (e) { handleError('getServerStats', e); } };
 
@@ -75,7 +76,7 @@ function crearCliente(baseURL, apiKey) {
     listMedia, uploadMedia, deleteMedia, setFilePlaylists,
     getPlaylists, createPlaylist, updatePlaylist, deletePlaylist,
     getWebhooks, createWebhook, updateWebhook, deleteWebhook,
-    getListeners, getCharts, getBestWorst, updateStorageLocation, getServerStats,
+    getListeners, getCharts, getBestWorst, getStorageLocation, updateStorageLocation, getServerStats,
   };
 }
 

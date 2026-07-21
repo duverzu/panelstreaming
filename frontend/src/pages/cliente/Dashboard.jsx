@@ -2,8 +2,15 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api';
 import StatTile from '../../components/charts/StatTile';
 import AreaChart from '../../components/charts/AreaChart';
+import DonutChart from '../../components/charts/DonutChart';
 import Player from '../../components/Player';
-import { IconMic, IconChart, IconRadio, IconUsers } from '../../icons';
+import { IconMic, IconChart, IconRadio, IconUsers, IconServer, IconMusic } from '../../icons';
+
+/** MB legibles: 512 → "512 MB", 5120 → "5.0 GB" */
+function mb(n) {
+  const v = Number(n) || 0;
+  return v >= 1024 ? (v / 1024).toFixed(1) + ' GB' : v + ' MB';
+}
 
 function label(x) {
   if (typeof x === 'number') { const d = new Date(x > 1e12 ? x : x * 1000); return isNaN(d) ? String(x) : d.getHours() + 'h'; }
@@ -17,6 +24,7 @@ export default function ClienteDashboard() {
   const [npError, setNpError] = useState(null);
   const [stats, setStats] = useState(null);
   const [saltando, setSaltando] = useState(false);
+  const [consumo, setConsumo] = useState(null);
 
   function cargarNP() { apiFetch('/cliente/nowplaying').then((d) => setNowplaying(d.nowplaying)).catch((e) => setNpError(e.message)); }
 
@@ -24,6 +32,7 @@ export default function ClienteDashboard() {
     apiFetch('/cliente/perfil').then((d) => setPerfil(d.perfil)).catch(() => {});
     apiFetch('/cliente/mi-estacion').then((d) => setEstacion(d.estacion)).catch(() => {});
     apiFetch('/cliente/estadisticas').then(setStats).catch(() => {});
+    apiFetch('/cliente/consumo').then(setConsumo).catch(() => {});
     cargarNP();
   }, []);
 
@@ -34,6 +43,12 @@ export default function ClienteDashboard() {
   }
 
   const cancion = nowplaying?.now_playing?.song;
+  const banda = (consumo?.banda?.serie || []).map((d) => ({
+    label: new Date(d.fecha).toLocaleDateString('es', { day: '2-digit', month: 'short' }),
+    valor: d.gb,
+  }));
+  const disco = consumo?.disco;
+  const libreMb = Math.max(0, (disco?.total_mb || 0) - (disco?.usado_mb || 0));
   const porHora = (stats?.por_hora || []).map((p) => ({ label: label(p.x), valor: p.y }));
 
   return (
@@ -53,6 +68,63 @@ export default function ClienteDashboard() {
         <StatTile label="Pico de audiencia" value={stats?.pico ?? 0} icon={IconChart} color="violet" hint="máx. del mes" />
         <StatTile label="En vivo" value={nowplaying?.live?.is_live ? 'DJ' : 'AutoDJ'} icon={IconUsers} color="blue" hint={nowplaying?.live?.is_live ? 'transmitiendo' : 'automático'} />
         <StatTile label="Estado" value={estacion?.azuracast_station_id ? 'OK' : '—'} icon={IconRadio} color="amber" hint={estacion?.azuracast_station_id ? 'activa' : 'sin estación'} />
+      </div>
+
+      {/* Consumo: transferencia y disco */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Transferencia */}
+        <div className="card p-5 lg:col-span-2">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h2 className="font-semibold flex items-center gap-2"><IconChart width={18} height={18} /> Transferencia</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Datos enviados a tus oyentes · últimos 30 días</p>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-2xl font-bold tabular-nums">{consumo?.banda?.mes || '—'}</div>
+              <div className="text-xs text-gray-400">este mes</div>
+            </div>
+          </div>
+          {consumo?.banda?.hay_datos ? (
+            <AreaChart data={banda} color="#6366f1" unidad=" GB" height={190} />
+          ) : (
+            <div className="grid place-items-center text-center text-sm text-gray-400 px-4" style={{ height: 190 }}>
+              <div>
+                <div className="text-2xl mb-2">📊</div>
+                Aún no hay medición.<br />
+                <span className="text-xs">Se registra automáticamente mientras tu radio tenga oyentes.</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Disco */}
+        <div className="card p-5">
+          <h2 className="font-semibold flex items-center gap-2 mb-1"><IconServer width={18} height={18} /> Almacenamiento</h2>
+          <p className="text-xs text-gray-400 mb-3">Espacio de tu música</p>
+
+          <div className="grid place-items-center">
+            <DonutChart
+              size={150} thickness={20}
+              centro={`${disco?.porcentaje ?? 0}%`}
+              data={[
+                { label: 'Usado', valor: disco?.usado_mb || 0, color: (disco?.porcentaje ?? 0) >= 90 ? '#ef4444' : (disco?.porcentaje ?? 0) >= 70 ? '#f59e0b' : '#10b981' },
+                { label: 'Libre', valor: libreMb, color: '#e5e7eb' },
+              ]}
+            />
+          </div>
+
+          <div className="mt-3 space-y-1.5 text-sm">
+            <div className="flex justify-between"><span className="text-gray-400">Usado</span><b className="tabular-nums">{mb(disco?.usado_mb)}</b></div>
+            <div className="flex justify-between"><span className="text-gray-400">Total del plan</span><b className="tabular-nums">{mb(disco?.total_mb)}</b></div>
+            <div className="flex justify-between"><span className="text-gray-400 flex items-center gap-1"><IconMusic width={13} height={13} /> Canciones</span><b className="tabular-nums">{disco?.archivos ?? 0}</b></div>
+          </div>
+
+          {(disco?.porcentaje ?? 0) >= 90 && (
+            <div className="mt-3 text-xs rounded-xl px-3 py-2 text-red-600 bg-red-50 dark:bg-red-500/10">
+              Casi sin espacio. Borra canciones que no uses o pide una ampliación.
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Audiencia por hora */}
