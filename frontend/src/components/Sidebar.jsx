@@ -35,13 +35,17 @@ const MENUS = {
   // Cliente de VIDEO: mismo panel, otro contenido
   cliente_video: [
     { seccion: 'Mi Canal', items: [
-      { label: 'Dashboard', icon: IconDashboard, to: '/cliente' },
-      { label: 'Videos', icon: IconPlaylist, to: '/cliente/videos' },
+      { label: 'Inicio', icon: IconDashboard, to: '/cliente' },
+      { label: 'Gestionar videos', icon: IconMusic, to: '/cliente/videos' },
+      { label: 'Playlist', icon: IconPlaylist, to: '/cliente/playlist' },
+    ]},
+    { seccion: 'Difusión', items: [
+      { label: 'Reproductor', icon: IconRadio, to: '/cliente/reproductor' },
+      { label: 'Enlaces', icon: IconShare, to: '/cliente/enlaces' },
+      { label: 'Conectar (en vivo)', icon: IconMic, to: '/cliente/conectar' },
     ]},
     { seccion: 'Cuenta', items: [
       { label: 'Configuración', icon: IconSettings, to: '/cliente/configuracion' },
-    ]},
-    { seccion: 'Ayuda', items: [
       { label: 'Aprende', icon: IconMic, to: '/cliente/aprende' },
     ]},
   ],

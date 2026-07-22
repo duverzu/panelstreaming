@@ -24,7 +24,12 @@ import ClienteReproductor from './pages/cliente/Reproductor';
 import ClienteRedes from './pages/cliente/Redes';
 import ClienteConectar from './pages/cliente/Conectar';
 import ClienteConfiguracion from './pages/cliente/Configuracion';
-import ClienteVideo from './pages/cliente/Video';
+import VideoInicio from './pages/cliente/video/Inicio';
+import VideoGestionar from './pages/cliente/video/Gestionar';
+import VideoPlaylist from './pages/cliente/video/Playlist';
+import VideoReproductor from './pages/cliente/video/Reproductor';
+import VideoEnlaces from './pages/cliente/video/Enlaces';
+import VideoConectar from './pages/cliente/video/Conectar';
 
 /** Ruta protegida por rol. */
 function Protected({ role, children }) {
@@ -38,10 +43,18 @@ function homeDe(role) {
   return role === 'admin' ? '/admin' : role === 'reseller' ? '/reseller' : '/cliente';
 }
 
-/** El inicio del cliente depende de si su servicio es de audio o de video. */
+/** Estas páginas existen para audio y para video: se elige según el tipo. */
 function InicioCliente() {
   const { user } = useAuth();
-  return user?.tipo === 'video' ? <ClienteVideo /> : <ClienteDashboard />;
+  return user?.tipo === 'video' ? <VideoInicio /> : <ClienteDashboard />;
+}
+function ReproductorCliente() {
+  const { user } = useAuth();
+  return user?.tipo === 'video' ? <VideoReproductor /> : <ClienteReproductor />;
+}
+function ConectarCliente() {
+  const { user } = useAuth();
+  return user?.tipo === 'video' ? <VideoConectar /> : <ClienteConectar />;
 }
 
 export default function App() {
@@ -80,13 +93,16 @@ export default function App() {
       <Route path="/cliente" element={<Protected role="cliente"><Layout /></Protected>}>
         {/* El cliente de video ve su canal; el de audio, su radio */}
         <Route index element={<InicioCliente />} />
-        <Route path="videos" element={<ClienteVideo />} />
+        <Route path="videos" element={<VideoGestionar />} />
+        <Route path="playlist" element={<VideoPlaylist />} />
+        {/* reproductor/conectar del cliente de video comparten ruta con los de audio abajo */}
         <Route path="musica" element={<ClienteMusica />} />
         <Route path="playlists" element={<ClientePlaylists />} />
         <Route path="autodj" element={<ClienteAutoDJ />} />
-        <Route path="reproductor" element={<ClienteReproductor />} />
+        <Route path="reproductor" element={<ReproductorCliente />} />
         <Route path="redes" element={<ClienteRedes />} />
-        <Route path="conectar" element={<ClienteConectar />} />
+        <Route path="conectar" element={<ConectarCliente />} />
+        <Route path="enlaces" element={<VideoEnlaces />} />
         <Route path="estadisticas" element={<ClienteEstadisticas />} />
         <Route path="aprende" element={<Aprende />} />
         <Route path="configuracion" element={<ClienteConfiguracion />} />
