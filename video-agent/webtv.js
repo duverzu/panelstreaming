@@ -21,6 +21,7 @@ const { spawn, execFile } = require('child_process');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
+const listas = require('./listas');
 
 const FFMPEG = process.env.FFMPEG || 'ffmpeg';
 const FFPROBE = process.env.FFPROBE || 'ffprobe';
@@ -96,24 +97,32 @@ async function escribirLista(dirVideos, destino) {
     archivos = (await fsp.readdir(dirVideos)).filter((f) => VIDEO.test(f));
   } catch (_) { /* carpeta inexistente */ }
 
-  // Orden de emisión: si el cliente guardó una playlist (orden.json en la
-  // carpeta de la cuenta), se respeta ese orden y se emiten SOLO esos videos;
-  // los que no estén en la lista se añaden al final. Sin playlist, orden
-  // numérico natural por nombre (01-, 02-…).
-  const ordenPath = path.join(path.dirname(dirVideos), 'orden.json');
-  let orden = null;
-  try { orden = JSON.parse(await fsp.readFile(ordenPath, 'utf8')); } catch (_) {}
+  // Orden de emisión, por prioridad:
+  //  1) listas.json → la lista que toca por horario o la lista activa
+  //  2) orden.json  → una sola lista ordenada (compatibilidad nivel 1)
+  //  3) orden numérico natural por nombre
+  const dirCuenta = path.dirname(dirVideos);
+  let seleccion = 'todos';
+  const datosListas = await listas.leer(dirCuenta);
+  const hayListas = Object.keys(datosListas.listas || {}).length > 0;
 
-  if (Array.isArray(orden) && orden.length) {
-    const existentes = new Set(archivos);
-    const enOrden = orden.filter((f) => existentes.has(f));   // solo los que aún existen
-    const resto = archivos.filter((f) => !orden.includes(f)); // videos nuevos al final
-    archivos = [...enOrden, ...resto];
+  if (hayListas) {
+    const r = listas.listaActual(datosListas, archivos, new Date());
+    archivos = r.videos;
+    seleccion = r.id;
   } else {
-    archivos.sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+    let orden = null;
+    try { orden = JSON.parse(await fsp.readFile(path.join(dirCuenta, 'orden.json'), 'utf8')); } catch (_) {}
+    if (Array.isArray(orden) && orden.length) {
+      const existentes = new Set(archivos);
+      archivos = [...orden.filter((f) => existentes.has(f)), ...archivos.filter((f) => !orden.includes(f))];
+      seleccion = 'orden';
+    } else {
+      archivos.sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+    }
   }
 
-  if (archivos.length === 0) return { total: 0, ruta: null };
+  if (archivos.length === 0) return { total: 0, ruta: null, seleccion };
 
   // Formato del demuxer `concat`: una línea por archivo, con la ruta entre
   // comillas simples y las comillas internas escapadas.
@@ -123,7 +132,7 @@ async function escribirLista(dirVideos, destino) {
   });
 
   await fsp.writeFile(destino, lineas.join('\n') + '\n', 'utf8');
-  return { total: archivos.length, ruta: destino, archivos };
+  return { total: archivos.length, ruta: destino, archivos, seleccion };
 }
 
 /** Firma técnica de un video (para saber si la lista es uniforme). */
@@ -184,14 +193,14 @@ async function iniciar(user, { dirCuenta, puertoRtmp, host = '127.0.0.1' }) {
 
   const dirVideos = path.join(dirCuenta, 'uploads');
   const lista = path.join(dirCuenta, 'playlist.txt');
-  const { total, archivos } = await escribirLista(dirVideos, lista);
+  const { total, archivos, seleccion } = await escribirLista(dirVideos, lista);
   if (!total) return { ok: false, error: 'La cuenta no tiene videos para emitir' };
 
   // Si los videos no son uniformes, se normalizan al vuelo (como hacía VDO)
   const modo = (await esUniforme(archivos, dirVideos)) ? 'copy' : 'transcode';
 
   const destino = `rtmp://${host}:${puertoRtmp}/${user}stream/play`;
-  const registro = { reinicios: 0, desde: new Date(), total, parar: false, modo };
+  const registro = { reinicios: 0, desde: new Date(), total, parar: false, modo, seleccion, dirCuenta, puertoRtmp, host };
 
   const lanzar = () => {
     const proceso = spawn(FFMPEG, argumentos(lista, destino, modo));
@@ -251,4 +260,29 @@ function estado(user) {
 
 const todos = () => Object.fromEntries([...canales.keys()].map((u) => [u, estado(u)]));
 
-module.exports = { iniciar, detener, recargar, estado, todos, restaurar, escribirLista, argumentos };
+/**
+ * Planificador: cada minuto revisa, por cada canal, si la lista que debería
+ * emitir AHORA (según la programación por horario) cambió respecto a la que
+ * está emitiendo. Si cambió, reinicia el canal con la nueva lista.
+ */
+let planTimer = null;
+function iniciarPlanificador() {
+  if (planTimer) return;
+  planTimer = setInterval(async () => {
+    for (const [user, r] of canales) {
+      try {
+        const datos = await listas.leer(r.dirCuenta);
+        if (!Object.keys(datos.listas || {}).length) continue;  // sin listas, nada que planificar
+        let disp = [];
+        try { disp = (await fsp.readdir(path.join(r.dirCuenta, 'uploads'))).filter((f) => VIDEO.test(f)); } catch (_) {}
+        const { id } = listas.listaActual(datos, disp, new Date());
+        if (id !== r.seleccion) {
+          console.log(`[webtv] ${user}: cambia de lista (${r.seleccion} → ${id})`);
+          await recargar(user, { dirCuenta: r.dirCuenta, puertoRtmp: r.puertoRtmp, host: r.host });
+        }
+      } catch (e) { console.error(`[webtv] planificador ${user}:`, e.message); }
+    }
+  }, 60000);
+}
+
+module.exports = { iniciar, detener, recargar, estado, todos, restaurar, iniciarPlanificador, escribirLista, argumentos };

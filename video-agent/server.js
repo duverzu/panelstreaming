@@ -21,6 +21,7 @@ const readline = require('readline');
 const claves = require('./claves');
 const webtv = require('./webtv');
 const { crearCuenta, eliminarConfig } = require('./crear');
+const listas = require('./listas');
 const fsp2 = require('fs/promises');
 const normalizar = require('./normalizar');
 const subida = require('./subida');
@@ -381,6 +382,68 @@ app.post('/cuentas/:user/clave/activar', wrap(async (req, res) => {
  * en segundo plano. Al terminar, reinicia el canal en modo copy si estaba
  * al aire. La emisión NO se corta durante el proceso.
  */
+// ==================================================================
+//  LISTAS y PROGRAMACIÓN por horario
+// ==================================================================
+
+async function dirDe(user) {
+  const c = (await cuentas()).find((x) => x.user === user);
+  return c?.dir || null;
+}
+/** Aplica el cambio de lista en vivo si el canal está al aire. */
+async function refrescarCanal(user) {
+  const c = (await cuentas()).find((x) => x.user === user);
+  if (c && webtv.estado(user).emitiendo) {
+    const p = await puertosDe(user);
+    if (p.rtmp) await webtv.recargar(user, { dirCuenta: c.dir, puertoRtmp: p.rtmp });
+  }
+}
+
+app.get('/cuentas/:user/listas', wrap(async (req, res) => {
+  const dir = await dirDe(req.params.user);
+  if (!dir) return res.status(404).json({ error: 'Cuenta no encontrada' });
+  const datos = await listas.leer(dir);
+  let disp = [];
+  try { disp = (await fsp2.readdir(path.join(dir, 'uploads'))).filter((f) => /\.(mp4|mkv|mov|webm|flv)$/i.test(f)); } catch (_) {}
+  res.json({ ...datos, emitiendo_ahora: listas.listaActual(datos, disp, new Date()).id });
+}));
+app.post('/cuentas/:user/listas', wrap(async (req, res) => {
+  const dir = await dirDe(req.params.user);
+  if (!dir) return res.status(404).json({ error: 'Cuenta no encontrada' });
+  res.status(201).json(await listas.crear(dir, req.body?.nombre));
+}));
+app.put('/cuentas/:user/listas/:id', wrap(async (req, res) => {
+  const dir = await dirDe(req.params.user);
+  if (!dir) return res.status(404).json({ error: 'Cuenta no encontrada' });
+  let r = true;
+  if (req.body?.nombre !== undefined) r = await listas.renombrar(dir, req.params.id, req.body.nombre);
+  if (Array.isArray(req.body?.videos)) r = await listas.fijarVideos(dir, req.params.id, req.body.videos);
+  if (!r) return res.status(404).json({ error: 'Lista no encontrada' });
+  await refrescarCanal(req.params.user);
+  res.json(r);
+}));
+app.delete('/cuentas/:user/listas/:id', wrap(async (req, res) => {
+  const dir = await dirDe(req.params.user);
+  if (!dir) return res.status(404).json({ error: 'Cuenta no encontrada' });
+  const ok = await listas.borrar(dir, req.params.id);
+  await refrescarCanal(req.params.user);
+  res.json({ ok });
+}));
+app.post('/cuentas/:user/activa', wrap(async (req, res) => {
+  const dir = await dirDe(req.params.user);
+  if (!dir) return res.status(404).json({ error: 'Cuenta no encontrada' });
+  const ok = await listas.marcarActiva(dir, req.body?.id || null);
+  await refrescarCanal(req.params.user);
+  res.json({ ok });
+}));
+app.put('/cuentas/:user/programacion', wrap(async (req, res) => {
+  const dir = await dirDe(req.params.user);
+  if (!dir) return res.status(404).json({ error: 'Cuenta no encontrada' });
+  const guardadas = await listas.fijarProgramacion(dir, req.body?.programacion || []);
+  await refrescarCanal(req.params.user);
+  res.json({ ok: true, programacion: guardadas });
+}));
+
 /**
  * PUT /cuentas/:user/orden — guarda el orden de emisión (playlist) del cliente.
  * body: { orden: ["02-intro.mp4", "01-nota.mp4", ...] }
@@ -522,6 +585,7 @@ app.listen(PORT, HOST, () => {
   console.log(`🎬 Agente de video escuchando en ${HOST}:${PORT}`);
   // Reencender los canales 24/7 que estaban al aire (sobrevive reinicios)
   webtv.restaurar().catch((e) => console.error('[webtv] restaurar:', e.message));
+  webtv.iniciarPlanificador();   // cambia de lista sola según la programación por horario
   if (HOST !== '127.0.0.1') console.warn('   ⚠️  Expuesto fuera del servidor: asegúrate de tener firewall');
   console.log(`   Cuentas en: ${BASE}   ·   Config nginx: ${CONF_DIR}`);
   if (!TOKEN) console.warn('   ⚠️  Falta AGENT_TOKEN: el agente rechazará todas las peticiones');
