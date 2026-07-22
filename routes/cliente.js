@@ -583,6 +583,43 @@ router.post('/video/ticket', requireCliente, wrap(async (req, res) => {
 }));
 
 
+
+// ---- Listas y programación del canal de video ----
+async function nodoVideo(req) {
+  const cliente = await getCliente(req);
+  const ctx = await nodoDe(cliente);
+  return ctx ? { ctx, user: cliente.short_name } : null;
+}
+
+router.get('/video/listas', requireCliente, wrap(async (req, res) => {
+  const n = await nodoVideo(req);
+  if (!n) return res.status(400).json({ error: 'Tu cuenta no es de video' });
+  const d = await n.ctx.nodo.listas(n.user);
+  res.json(d || { listas: {}, programacion: [], activa: null });
+}));
+router.post('/video/listas', requireCliente, wrap(async (req, res) => {
+  const n = await nodoVideo(req); if (!n) return res.status(400).json({ error: 'No es de video' });
+  res.status(201).json(await n.ctx.nodo.crearLista(n.user, req.body?.nombre));
+}));
+router.put('/video/listas/:id', requireCliente, wrap(async (req, res) => {
+  const n = await nodoVideo(req); if (!n) return res.status(400).json({ error: 'No es de video' });
+  const r = await n.ctx.nodo.editarLista(n.user, req.params.id, req.body || {});
+  if (!r) return res.status(502).json({ error: 'No se pudo guardar' });
+  res.json(r);
+}));
+router.delete('/video/listas/:id', requireCliente, wrap(async (req, res) => {
+  const n = await nodoVideo(req); if (!n) return res.status(400).json({ error: 'No es de video' });
+  res.json(await n.ctx.nodo.borrarLista(n.user, req.params.id));
+}));
+router.post('/video/activa', requireCliente, wrap(async (req, res) => {
+  const n = await nodoVideo(req); if (!n) return res.status(400).json({ error: 'No es de video' });
+  res.json(await n.ctx.nodo.activarLista(n.user, req.body?.id || null));
+}));
+router.put('/video/programacion', requireCliente, wrap(async (req, res) => {
+  const n = await nodoVideo(req); if (!n) return res.status(400).json({ error: 'No es de video' });
+  res.json(await n.ctx.nodo.programar(n.user, req.body?.programacion || []));
+}));
+
 /** PUT /cliente/video/orden — el cliente reordena su playlist. */
 router.put('/video/orden', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);

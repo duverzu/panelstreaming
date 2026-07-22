@@ -73,6 +73,14 @@ function crearCliente(baseURL, token) {
       catch (e) { return fallo(`borrar(${user})`, e) || { ok: false }; }
     },
 
+    /** Listas + programación de la cuenta. */
+    listas:      (user) => api.get(`/cuentas/${encodeURIComponent(user)}/listas`).then(r=>r.data).catch((e)=>fallo(`listas(${user})`,e)),
+    crearLista:  (user, nombre) => api.post(`/cuentas/${encodeURIComponent(user)}/listas`, { nombre }).then(r=>r.data).catch((e)=>fallo('crearLista',e)),
+    editarLista: (user, id, cambios) => api.put(`/cuentas/${encodeURIComponent(user)}/listas/${id}`, cambios).then(r=>r.data).catch((e)=>fallo('editarLista',e)),
+    borrarLista: (user, id) => api.delete(`/cuentas/${encodeURIComponent(user)}/listas/${id}`).then(r=>r.data).catch((e)=>fallo('borrarLista',e)||{ok:false}),
+    activarLista:(user, id) => api.post(`/cuentas/${encodeURIComponent(user)}/activa`, { id }).then(r=>r.data).catch((e)=>fallo('activarLista',e)),
+    programar:   (user, programacion) => api.put(`/cuentas/${encodeURIComponent(user)}/programacion`, { programacion }).then(r=>r.data).catch((e)=>fallo('programar',e)),
+
     /** Guarda el orden de emisión (playlist) del cliente. */
     guardarOrden: async (user, orden) => {
       try { return (await api.put(`/cuentas/${encodeURIComponent(user)}/orden`, { orden })).data; }
