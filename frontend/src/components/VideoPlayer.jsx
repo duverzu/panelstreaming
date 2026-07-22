@@ -27,7 +27,17 @@ export default function VideoPlayer({ src, poster }) {
           hls = new Hls({ liveDurationInfinity: true });
           hls.loadSource(src);
           hls.attachMedia(video);
-          hls.on(Hls.Events.ERROR, (_e, data) => { if (data.fatal) setError(true); });
+          // Si el canal se reinicia, sus segmentos viejos desaparecen y hls.js
+          // da error. En vez de quedarse en blanco, recarga el stream solo.
+          hls.on(Hls.Events.ERROR, (_e, data) => {
+            if (!data.fatal) return;
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              setError(false);
+              setTimeout(() => { if (!cancelado) hls.loadSource(src); }, 4000);
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              hls.recoverMediaError();
+            } else { setError(true); }
+          });
         } else { setError(true); }
       }).catch(() => setError(true));
     }
