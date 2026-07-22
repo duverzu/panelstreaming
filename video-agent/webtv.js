@@ -51,8 +51,23 @@ async function restaurar() {
   const users = Object.keys(datos);
   if (users.length) console.log(`[webtv] restaurando ${users.length} canal(es): ${users.join(', ')}`);
   for (const [user, o] of Object.entries(datos)) {
+    // Si un ffmpeg de una ejecución anterior sigue empujando a este canal,
+    // matarlo antes de arrancar el nuevo (evita dos emisores por canal).
+    await matarHuerfanos(user).catch(() => {});
     await iniciar(user, o).catch((e) => console.error(`[webtv] no se pudo restaurar ${user}:`, e.message));
   }
+}
+
+/** Mata ffmpeg de ejecuciones previas que empujen a <user>stream/play. */
+function matarHuerfanos(user) {
+  return new Promise((resolve) => {
+    execFile('pgrep', ['-fx', `.*${user}stream/play.*`], (e, out) => {
+      const pids = String(out || '').trim().split(/\s+/).filter(Boolean);
+      for (const pid of pids) { try { process.kill(Number(pid), 'SIGTERM'); } catch (_) {} }
+      if (pids.length) console.log(`[webtv] ${user}: ${pids.length} emisor(es) huérfano(s) eliminados`);
+      setTimeout(resolve, 500);
+    });
+  });
 }
 
 const VIDEO = /\.(mp4|mkv|mov|webm|flv|ts)$/i;
