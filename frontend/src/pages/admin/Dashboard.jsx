@@ -1,62 +1,115 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api';
-import StatTile from '../../components/charts/StatTile';
 import DonutChart from '../../components/charts/DonutChart';
 import ServerStats from '../../components/ServerStats';
-import OverviewBar from '../../components/OverviewBar';
 import GuardianBanda from '../../components/GuardianBanda';
 import Player from '../../components/Player';
-import { IconUsers, IconRadio, IconChart, IconMic } from '../../icons';
+import { IconRadio } from '../../icons';
+
+/** GB legible: 850 GB, 2.4 TB… */
+function tam(gb) {
+  const n = Number(gb) || 0;
+  if (n >= 1024) return (n / 1024).toFixed(n >= 10240 ? 0 : 1) + ' TB';
+  return Math.round(n) + ' GB';
+}
+
+/** Celda de métrica dentro de un panel de servicio (sin card anidada). */
+function Metric({ label, value, hint, destacado }) {
+  return (
+    <div className={`rounded-xl px-3 py-3 ${destacado ? 'bg-brand-50 dark:bg-brand-500/10' : 'bg-gray-50 dark:bg-gray-950'}`}>
+      <div className="text-[11px] text-gray-400 uppercase tracking-wide">{label}</div>
+      <div className="mt-1 text-2xl font-bold tabular-nums">{value}</div>
+      {hint && <div className="text-[11px] text-gray-400 mt-0.5">{hint}</div>}
+    </div>
+  );
+}
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [clientes, setClientes] = useState([]);
+  const [banda, setBanda] = useState([]);
   const [monitorId, setMonitorId] = useState('');
 
   useEffect(() => {
     const load = () => {
       apiFetch('/admin/estadisticas').then(setStats).catch(() => {});
       apiFetch('/admin/clientes').then((c) => setClientes(c.clientes)).catch(() => {});
+      apiFetch('/admin/banda').then((d) => setBanda(d.servidores || [])).catch(() => {});
     };
     load();
     const id = setInterval(load, 15000);
     return () => clearInterval(id);
   }, []);
 
-  const conStream = clientes.filter((c) => c.url_streaming);
-  const monitor = conStream.find((c) => String(c.id) === String(monitorId)) || conStream[0];
+  // ── Separar por servicio ──
+  const audio = clientes.filter((c) => (c.tipo || 'audio') !== 'video');
+  const video = clientes.filter((c) => c.tipo === 'video');
+  const activos = (arr) => arr.filter((c) => c.activo).length;
 
-  const total = stats?.total_clientes ?? 0;
-  const activas = stats?.clientes_activos ?? 0;
+  const oyentes = stats?.oyentes_totales ?? 0;
   const alAire = stats?.al_aire ?? 0;
-  const donut = [
-    { label: 'Al aire', valor: alAire, color: '#10b981' },
-    { label: 'Fuera de aire', valor: Math.max(0, activas - alAire), color: '#94a3b8' },
-    { label: 'Suspendidas', valor: Math.max(0, total - activas), color: '#ef4444' },
-  ];
   const ranking = stats?.ranking || [];
   const maxOy = Math.max(1, ...ranking.map((r) => r.oyentes));
 
+  const nodosAudio = banda.filter((s) => (s.tipo || 'audio') !== 'video');
+  const nodosVideo = banda.filter((s) => s.tipo === 'video');
+  const transferAudio = nodosAudio.reduce((a, s) => a + (s.consumido_gb || 0), 0);
+  const transferVideo = nodosVideo.reduce((a, s) => a + (s.consumido_gb || 0), 0);
+
+  const conStream = audio.filter((c) => c.url_streaming);
+  const monitor = conStream.find((c) => String(c.id) === String(monitorId)) || conStream[0];
+
   return (
     <div className="space-y-6">
-      <OverviewBar />
+      {/* ═══ 1) GUARDIÁN DE BANDA — lo primero: salud de todos los nodos ═══ */}
+      <GuardianBanda />
 
-      {/* KPIs con gradiente */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatTile label="Oyentes en vivo" value={stats?.oyentes_totales ?? 0} icon={IconMic} color="brand" gradient hint="todas las radios" />
-        <StatTile label="Clientes" value={total} icon={IconUsers} color="blue" hint={`${activas} activos`} />
-        <StatTile label="Al aire" value={alAire} icon={IconRadio} color="violet" hint={`de ${stats?.estaciones ?? 0} estaciones`} />
-        <StatTile label="Estaciones" value={stats?.estaciones ?? 0} icon={IconChart} color="amber" hint="aprovisionadas" />
-      </div>
-
+      {/* ═══ 2) RESUMEN POR SERVICIO — audio y video, separaditos ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Dona: estado de radios */}
+        {/* ─── AUDIO ─── */}
         <div className="card p-5">
-          <h2 className="font-semibold mb-4">Estado de las radios</h2>
-          <DonutChart data={donut} centro="Radios" />
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold flex items-center gap-2">🎙️ Streaming Audio</h2>
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400">
+              {nodosAudio.length} nodo{nodosAudio.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Metric label="Oyentes en vivo" value={oyentes} hint="todas las radios" destacado />
+            <Metric label="Radios al aire" value={alAire} hint={`de ${audio.length} radios`} />
+            <Metric label="Clientes de audio" value={audio.length} hint={`${activos(audio)} activos`} />
+            <Metric label="Transferencia" value={tam(transferAudio)} hint="este mes" />
+          </div>
         </div>
 
-        {/* Ranking */}
+        {/* ─── VIDEO ─── */}
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold flex items-center gap-2">🎬 Streaming Video</h2>
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-fuchsia-50 dark:bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400">
+              {nodosVideo.length} nodo{nodosVideo.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Metric label="Viewers en vivo" value="—" hint="próximamente" />
+            <Metric label="Canales" value={video.length} hint={`${activos(video)} activos`} />
+            <Metric label="Clientes de video" value={video.length} hint={`${activos(video)} activos`} />
+            <Metric label="Transferencia" value={tam(transferVideo)} hint="este mes" />
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ 3) DETALLE AUDIO: dona de estado + ranking ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="card p-5">
+          <h2 className="font-semibold mb-4">Estado de las radios</h2>
+          <DonutChart centro="Radios" data={[
+            { label: 'Al aire', valor: alAire, color: '#10b981' },
+            { label: 'Fuera de aire', valor: Math.max(0, activos(audio) - alAire), color: '#94a3b8' },
+            { label: 'Suspendidas', valor: Math.max(0, audio.length - activos(audio)), color: '#ef4444' },
+          ]} />
+        </div>
+
         <div className="card p-5">
           <h2 className="font-semibold mb-4">Top radios por oyentes</h2>
           {ranking.length ? (
@@ -82,9 +135,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <GuardianBanda />
-
-      {/* VPS + Monitor */}
+      {/* ═══ 4) INFRAESTRUCTURA: VPS + monitor de radio ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ServerStats />
         <div className="card p-5">
