@@ -107,15 +107,23 @@ function firma(archivo) {
   });
 }
 
-/** ¿Todos los videos comparten firma? Entonces se puede emitir con -c copy. */
+/**
+ * ¿Todos los videos comparten firma? Entonces se puede emitir con -c copy.
+ * Un ffprobe que falla (null) NO cuenta como firma distinta: bajo carga
+ * alta (p.ej. restaurar tras un reinicio) algunos fallan transitoriamente,
+ * y contarlos como distintos forzaba transcode sin motivo. Se reintenta
+ * una vez y, si aun falla, se ignora ese archivo en la comparación.
+ */
 async function esUniforme(archivos, dir) {
   const firmas = new Set();
   for (const f of archivos) {
-    const s = await firma(path.join(dir, f));
-    firmas.add(s || 'desconocida');
+    let s = await firma(path.join(dir, f));
+    if (!s) s = await firma(path.join(dir, f));   // un reintento
+    if (!s) continue;                             // ffprobe falló: no decide
+    firmas.add(s);
     if (firmas.size > 1) return false;
   }
-  return firmas.size === 1;
+  return firmas.size === 1;   // al menos una firma leída y todas iguales
 }
 
 /**
