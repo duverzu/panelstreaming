@@ -197,16 +197,31 @@ function argumentos(lista, destinoRtmp, modo) {
 async function iniciar(user, { dirCuenta, puertoRtmp, host = '127.0.0.1' }) {
   if (canales.has(user)) return { ya: true, ...estado(user) };
 
+  // Reserva ATÓMICA del canal antes de cualquier await. escribirLista/esUniforme
+  // hacen ffprobe de todos los videos (lento); sin esta reserva, un segundo
+  // iniciar() concurrente pasaría el guard de arriba y arrancaría un SEGUNDO
+  // emisor que choca con el primero ("Already publishing"). Reservar aquí hace
+  // que el segundo llamado vea el canal ya tomado y se retire con ya:true.
+  const registro = { reinicios: 0, desde: new Date(), total: 0, parar: false, modo: 'copy', dirCuenta, puertoRtmp, host };
+  canales.set(user, registro);
+
   const dirVideos = path.join(dirCuenta, 'uploads');
   const lista = path.join(dirCuenta, 'playlist.txt');
-  const { total, archivos, seleccion } = await escribirLista(dirVideos, lista);
-  if (!total) return { ok: false, error: 'La cuenta no tiene videos para emitir' };
+  let total, archivos, seleccion;
+  try {
+    ({ total, archivos, seleccion } = await escribirLista(dirVideos, lista));
+    if (!total) { canales.delete(user); return { ok: false, error: 'La cuenta no tiene videos para emitir' }; }
+    // Si los videos no son uniformes, se normalizan al vuelo (como hacía VDO)
+    registro.modo = (await esUniforme(archivos, dirVideos)) ? 'copy' : 'transcode';
+  } catch (e) {
+    canales.delete(user);   // liberar la reserva si algo falló antes de arrancar
+    throw e;
+  }
+  registro.total = total;
+  registro.seleccion = seleccion;
 
-  // Si los videos no son uniformes, se normalizan al vuelo (como hacía VDO)
-  const modo = (await esUniforme(archivos, dirVideos)) ? 'copy' : 'transcode';
-
+  const modo = registro.modo;
   const destino = `rtmp://${host}:${puertoRtmp}/${user}stream/play`;
-  const registro = { reinicios: 0, desde: new Date(), total, parar: false, modo, seleccion, dirCuenta, puertoRtmp, host };
 
   const lanzar = () => {
     const t0 = Date.now();
@@ -242,7 +257,6 @@ async function iniciar(user, { dirCuenta, puertoRtmp, host = '127.0.0.1' }) {
   };
 
   lanzar();
-  canales.set(user, registro);
   opciones.set(user, { dirCuenta, puertoRtmp, host });
   await persistir();
   return { ok: true, videos: total, modo, destino };
