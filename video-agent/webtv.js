@@ -135,11 +135,17 @@ async function escribirLista(dirVideos, destino) {
   return { total: archivos.length, ruta: destino, archivos, seleccion };
 }
 
-/** Firma técnica de un video (para saber si la lista es uniforme). */
+/**
+ * Firma técnica de un video (para saber si la lista es uniforme).
+ * Incluye VIDEO y AUDIO: -c copy con el demuxer concat exige que TODOS los
+ * archivos compartan también los parámetros de audio (códec, tasa, canales).
+ * Ignorar el audio hacía que una lista con audio disparejo eligiera 'copy' y
+ * el ffmpeg se cayera a los pocos segundos en bucle.
+ */
 function firma(archivo) {
   return new Promise((resolve) => {
-    execFile(FFPROBE, ['-v', 'error', '-select_streams', 'v:0',
-      '-show_entries', 'stream=codec_name,width,height,r_frame_rate',
+    execFile(FFPROBE, ['-v', 'error',
+      '-show_entries', 'stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels',
       '-of', 'csv=p=0', archivo], (err, out) => resolve(err ? null : out.trim()));
   });
 }
@@ -203,7 +209,8 @@ async function iniciar(user, { dirCuenta, puertoRtmp, host = '127.0.0.1' }) {
   const registro = { reinicios: 0, desde: new Date(), total, parar: false, modo, seleccion, dirCuenta, puertoRtmp, host };
 
   const lanzar = () => {
-    const proceso = spawn(FFMPEG, argumentos(lista, destino, modo));
+    const t0 = Date.now();
+    const proceso = spawn(FFMPEG, argumentos(lista, destino, registro.modo));
     registro.proceso = proceso;
 
     proceso.stderr.on('data', (d) => {
@@ -214,7 +221,22 @@ async function iniciar(user, { dirCuenta, puertoRtmp, host = '127.0.0.1' }) {
     proceso.on('exit', (codigo) => {
       if (registro.parar) return;                 // lo apagamos nosotros
       registro.reinicios++;
-      console.error(`[webtv:${user}] ffmpeg terminó (${codigo}); reintentando en ${REINTENTO_MS / 1000}s`);
+      const vivioMs = Date.now() - t0;
+
+      // Si en modo copy el proceso se cae enseguida varias veces seguidas, los
+      // videos no son de verdad compatibles con copia directa (audio distinto,
+      // extradata, timestamps del bucle…). Escalamos a transcode, que acepta
+      // cualquier mezcla: mejor gastar CPU que dejar el canal caído.
+      if (registro.modo === 'copy') {
+        registro.fallosCopy = vivioMs < 15000 ? (registro.fallosCopy || 0) + 1 : 0;
+        if (registro.fallosCopy >= 2) {
+          console.error(`[webtv:${user}] copy inestable (${registro.fallosCopy} caídas rápidas); cambio a transcode`);
+          registro.modo = 'transcode';
+          registro.fallosCopy = 0;
+        }
+      }
+
+      console.error(`[webtv:${user}] ffmpeg terminó (${codigo}); reintentando en ${REINTENTO_MS / 1000}s (modo ${registro.modo})`);
       registro.timer = setTimeout(lanzar, REINTENTO_MS);
     });
   };
@@ -241,7 +263,8 @@ function detener(user) {
 
 /** Vuelve a leer la carpeta y reinicia: se usa al subir o borrar un video. */
 async function recargar(user, opciones) {
-  detener(user);
+  detener(user);                       // SIGTERM al emisor actual
+  await matarHuerfanos(user).catch(() => {});  // asegura que no queden dos empujando a la vez
   return iniciar(user, opciones);
 }
 
