@@ -58,14 +58,27 @@ async function restaurar() {
   }
 }
 
-/** Mata ffmpeg de ejecuciones previas que empujen a <user>stream/play. */
+/**
+ * Mata ffmpeg de ejecuciones previas que empujen a <user>stream/play.
+ * Lee el cmdline de cada ffmpeg en vez de confiar en un patrón de pgrep
+ * (pgrep -fx no cazaba bien el destino rtmp): mas robusto.
+ */
 function matarHuerfanos(user) {
   return new Promise((resolve) => {
-    execFile('pgrep', ['-fx', `.*${user}stream/play.*`], (e, out) => {
+    execFile('pgrep', ['-x', 'ffmpeg'], (e, out) => {
       const pids = String(out || '').trim().split(/\s+/).filter(Boolean);
-      for (const pid of pids) { try { process.kill(Number(pid), 'SIGTERM'); } catch (_) {} }
-      if (pids.length) console.log(`[webtv] ${user}: ${pids.length} emisor(es) huérfano(s) eliminados`);
-      setTimeout(resolve, 500);
+      let matados = 0;
+      const mio = canales.get(user)?.proceso?.pid;
+      for (const pid of pids) {
+        if (Number(pid) === mio) continue;   // no matar el propio, por si acaso
+        let cmd = '';
+        try { cmd = fs.readFileSync(`/proc/${pid}/cmdline`).toString().replace(/\0/g, ' '); } catch { continue; }
+        if (cmd.includes(`${user}stream/play`)) {
+          try { process.kill(Number(pid), 'SIGKILL'); matados++; } catch (_) {}
+        }
+      }
+      if (matados) console.log(`[webtv] ${user}: ${matados} emisor(es) huérfano(s) eliminados`);
+      setTimeout(resolve, 700);
     });
   });
 }
