@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../../api';
 import { useAuth } from '../../auth';
 import Modal from '../../components/Modal';
@@ -16,6 +16,13 @@ const ESTADO_BADGE = {
 export default function AdminClientes() {
   const { impersonate } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const tipo = searchParams.get('tipo') === 'video' ? 'video' : 'audio';
+  const esVideo = tipo === 'video';
+  // Textos según el servicio (misma página para radios y canales de video)
+  const T = esVideo
+    ? { unidad: 'canal', crear: 'Crear canal', tituloModal: 'Crear nuevo canal', nombreLabel: 'Nombre del canal', ph: 'Mi Canal TV' }
+    : { unidad: 'radio', crear: 'Crear radio', tituloModal: 'Crear nueva radio', nombreLabel: 'Nombre de la radio', ph: 'Rock FM' };
 
   const [clientes, setClientes] = useState([]);
   const [planes, setPlanes] = useState([]);
@@ -61,7 +68,7 @@ export default function AdminClientes() {
     try {
       const r = await apiFetch('/admin/clientes/crear', { method: 'POST', body: JSON.stringify(form) });
       setMsg({ type: 'ok', text: `✅ Radio creada. Acceso → usuario: ${r.credenciales?.usuario} · contraseña: ${r.credenciales?.password}` });
-      setForm({ nombre_empresa: '', username: '', email: '', password: '', plan_id: planes[0]?.id || '' });
+      setForm({ nombre_empresa: '', username: '', email: '', password: '', plan_id: planes.find((p) => (p.tipo || 'audio') === tipo)?.id || '' });
       setUserTocado(false);
       setModalOpen(false);
       cargar();
@@ -128,16 +135,27 @@ export default function AdminClientes() {
     }
   }
 
+  // Solo los clientes y planes del servicio actual (audio | video)
+  const lista = clientes.filter((c) => (c.tipo || 'audio') === tipo);
+  const planesTipo = planes.filter((p) => (p.tipo || 'audio') === tipo);
+
+  // Al cambiar de servicio o cargar planes, el plan por defecto es del tipo correcto
+  useEffect(() => {
+    setForm((f) => (planesTipo.some((p) => String(p.id) === String(f.plan_id))
+      ? f : { ...f, plan_id: planesTipo[0]?.id || '' }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo, planes]);
+
   return (
     <div className="space-y-6">
       {/* Tabla de clientes */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold">Clientes <span className="text-gray-400 font-normal">({clientes.length})</span></h2>
+          <h2 className="font-semibold">Clientes de {T.unidad === 'radio' ? 'audio' : 'video'} <span className="text-gray-400 font-normal">({lista.length})</span></h2>
           <div className="flex items-center gap-2">
             <button onClick={cargar} className="btn-ghost !py-2 !px-3 text-xs"><IconRefresh width={15} height={15} /> Actualizar</button>
             <button onClick={() => { setMsg(null); setModalOpen(true); }} className="btn-primary !py-2 !px-3 text-xs">
-              <IconPlus width={15} height={15} /> Crear radio
+              <IconPlus width={15} height={15} /> {T.crear}
             </button>
           </div>
         </div>
@@ -155,10 +173,10 @@ export default function AdminClientes() {
             <tbody>
               {loading ? (
                 <tr><td colSpan="4" className="py-8 text-center text-gray-400">Cargando…</td></tr>
-              ) : clientes.length === 0 ? (
-                <tr><td colSpan="4" className="py-8 text-center text-gray-400">Sin clientes todavía</td></tr>
+              ) : lista.length === 0 ? (
+                <tr><td colSpan="4" className="py-8 text-center text-gray-400">Sin clientes de {esVideo ? 'video' : 'audio'} todavía</td></tr>
               ) : (
-                clientes.map((c) => {
+                lista.map((c) => {
                   const est = ESTADO_BADGE[estados[c.id]] || ESTADO_BADGE.offline;
                   const suspendido = estados[c.id] === 'suspendido' || !c.activo;
                   return (
@@ -181,15 +199,19 @@ export default function AdminClientes() {
                             <span className="text-xs text-gray-400 px-2">…</span>
                           ) : (
                             <>
-                              <IconBtn title="Iniciar / al aire" onClick={() => accion(c, 'iniciar')} hover="brand"><IconPlay width={14} height={14} /></IconBtn>
-                              <IconBtn title="Parar transmisión" onClick={() => accion(c, 'parar')} hover="amber"><IconStop width={13} height={13} /></IconBtn>
-                              {suspendido ? (
-                                <IconBtn title="Reactivar" onClick={() => accion(c, 'reactivar')} hover="brand"><IconPower width={14} height={14} /></IconBtn>
-                              ) : (
-                                <IconBtn title="Suspender" onClick={() => accion(c, 'suspender', `¿Suspender a "${c.nombre_empresa}"? Se apaga su radio y no podrá entrar.`)} hover="red"><IconPower width={14} height={14} /></IconBtn>
+                              {!esVideo && (
+                                <>
+                                  <IconBtn title="Iniciar / al aire" onClick={() => accion(c, 'iniciar')} hover="brand"><IconPlay width={14} height={14} /></IconBtn>
+                                  <IconBtn title="Parar transmisión" onClick={() => accion(c, 'parar')} hover="amber"><IconStop width={13} height={13} /></IconBtn>
+                                  {suspendido ? (
+                                    <IconBtn title="Reactivar" onClick={() => accion(c, 'reactivar')} hover="brand"><IconPower width={14} height={14} /></IconBtn>
+                                  ) : (
+                                    <IconBtn title="Suspender" onClick={() => accion(c, 'suspender', `¿Suspender a "${c.nombre_empresa}"? Se apaga su radio y no podrá entrar.`)} hover="red"><IconPower width={14} height={14} /></IconBtn>
+                                  )}
+                                  <IconBtn title="Re-aplicar límites del plan" onClick={() => reaplicarPlan(c)} hover="brand"><IconSliders width={14} height={14} /></IconBtn>
+                                  <IconBtn title="Agregar música de cortesía" onClick={() => agregarBiblioteca(c)} hover="brand"><IconMusic width={14} height={14} /></IconBtn>
+                                </>
                               )}
-                              <IconBtn title="Re-aplicar límites del plan" onClick={() => reaplicarPlan(c)} hover="brand"><IconSliders width={14} height={14} /></IconBtn>
-                              <IconBtn title="Agregar música de cortesía" onClick={() => agregarBiblioteca(c)} hover="brand"><IconMusic width={14} height={14} /></IconBtn>
                               <IconBtn title="Entrar al panel" onClick={() => entrar(c)} hover="brand"><IconEnter width={14} height={14} /></IconBtn>
                               <IconBtn title="Eliminar" onClick={() => borrar(c)} hover="red"><IconTrash width={14} height={14} /></IconBtn>
                             </>
@@ -206,11 +228,16 @@ export default function AdminClientes() {
       </div>
 
       {/* Modal crear cliente/radio */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Crear nueva radio">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={T.tituloModal}>
         <form onSubmit={crear} className="space-y-3">
+          {planesTipo.length === 0 && (
+            <div className="text-sm rounded-xl px-3 py-2 text-amber-700 bg-amber-50 dark:bg-amber-500/10">
+              No hay planes de {esVideo ? 'video' : 'audio'} todavía. Crea uno en <b>Planes</b> para poder dar de alta {esVideo ? 'canales' : 'radios'}.
+            </div>
+          )}
           <div>
-            <label className="label">Nombre de la radio</label>
-            <input className="input" value={form.nombre_empresa} onChange={setNombre} placeholder="Rock FM" required />
+            <label className="label">{T.nombreLabel}</label>
+            <input className="input" value={form.nombre_empresa} onChange={setNombre} placeholder={T.ph} required />
           </div>
           <div>
             <label className="label">Usuario de acceso</label>
@@ -228,8 +255,12 @@ export default function AdminClientes() {
           <div>
             <label className="label">Plan</label>
             <select className="input" value={form.plan_id} onChange={set('plan_id')} required>
-              {planes.map((p) => (
-                <option key={p.id} value={p.id}>{p.nombre} · {p.max_bitrate || '∞'} kbps · {p.max_oyentes} oyentes</option>
+              {planesTipo.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {esVideo
+                    ? `${p.nombre} · ${p.max_resolucion || '720p'} · ${p.espacio_mb ? Math.round(p.espacio_mb / 1024) + ' GB' : ''}`
+                    : `${p.nombre} · ${p.max_bitrate || '∞'} kbps · ${p.max_oyentes} oyentes`}
+                </option>
               ))}
             </select>
           </div>

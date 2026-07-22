@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth';
 import {
   IconDashboard, IconUsers, IconRadio, IconInvoice, IconChart,
@@ -6,17 +6,28 @@ import {
 } from '../icons';
 
 // `to` = ruta real (navegable). `soon` = aún no implementado (atenuado).
+// El super admin separa Audio y Video: las páginas se reusan con ?tipo=…
 const MENUS = {
   admin: [
-    { seccion: 'Gestión', items: [
+    { seccion: 'General', items: [
       { label: 'Dashboard', icon: IconDashboard, to: '/admin' },
-      { label: 'Clientes', icon: IconUsers, to: '/admin/clientes' },
-      { label: 'Revendedores', icon: IconShare, to: '/admin/revendedores' },
-      { label: 'Planes', icon: IconInvoice, to: '/admin/planes' },
     ]},
-    { seccion: 'Infraestructura', items: [
-      { label: 'Servidores', icon: IconServer, to: '/admin/servidores' },
+    { seccion: '🎙️ Streaming Audio', items: [
+      { label: 'Clientes', icon: IconUsers, to: '/admin/clientes?tipo=audio' },
+      { label: 'Revendedores', icon: IconShare, to: '/admin/revendedores' },
+      { label: 'Planes', icon: IconInvoice, to: '/admin/planes?tipo=audio' },
       { label: 'Estadísticas', icon: IconChart, to: '/admin/estadisticas' },
+      { label: 'Servidores', icon: IconServer, to: '/admin/servidores?tipo=audio' },
+    ]},
+    { seccion: '🎬 Streaming Video', items: [
+      { label: 'Clientes', icon: IconUsers, to: '/admin/clientes?tipo=video' },
+      { label: 'Planes', icon: IconInvoice, to: '/admin/planes?tipo=video' },
+      { label: 'Servidores', icon: IconServer, to: '/admin/servidores?tipo=video' },
+      { label: 'Revendedores', icon: IconShare, soon: true },
+      { label: 'Estadísticas', icon: IconChart, soon: true },
+      { label: 'Documentación', icon: IconInvoice, soon: true },
+    ]},
+    { seccion: 'Sistema', items: [
       { label: 'Documentación', icon: IconInvoice, to: '/admin/documentacion' },
       { label: 'API / Integración', icon: IconShare, to: '/admin/api' },
     ]},
@@ -74,9 +85,21 @@ const MENUS = {
 
 export default function Sidebar() {
   const { role, user } = useAuth();
+  const loc = useLocation();
   // Un cliente de video ve otro menú: las páginas de radio no le sirven
   const esVideo = role === 'cliente' && user?.tipo === 'video';
   const menu = (esVideo ? MENUS.cliente_video : MENUS[role]) || MENUS.admin;
+
+  // Activo teniendo en cuenta el ?tipo= (dos ítems pueden compartir ruta y
+  // diferenciarse solo por el tipo: Clientes de audio vs Clientes de video).
+  const esActivo = (to) => {
+    if (!to) return false;
+    const [path, query] = to.split('?');
+    if (loc.pathname !== path) return false;
+    const tActual = new URLSearchParams(loc.search).get('tipo');
+    const tItem = query ? new URLSearchParams(query).get('tipo') : null;
+    return tItem ? tActual === tItem : !tActual;
+  };
 
   const itemClass = (isActive) =>
     `w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
@@ -115,14 +138,11 @@ export default function Sidebar() {
                     </div>
                   );
                 }
+                const activo = esActivo(item.to);
                 return (
-                  <NavLink key={item.label} to={item.to} end className={({ isActive }) => itemClass(isActive)}>
-                    {({ isActive }) => (
-                      <>
-                        <Icon className={isActive ? 'text-brand-600 dark:text-brand-400' : ''} />
-                        <span className="flex-1 text-left">{item.label}</span>
-                      </>
-                    )}
+                  <NavLink key={item.label} to={item.to} end className={itemClass(activo)}>
+                    <Icon className={activo ? 'text-brand-600 dark:text-brand-400' : ''} />
+                    <span className="flex-1 text-left">{item.label}</span>
                   </NavLink>
                 );
               })}

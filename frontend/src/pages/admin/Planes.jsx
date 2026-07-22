@@ -1,14 +1,23 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import PlanesManager from '../../components/PlanesManager';
 import PlanesResellerManager from '../../components/PlanesResellerManager';
 
-const TABS = [
-  { id: 'radio', label: '📻 Planes de radio', hint: 'Plantilla de UNA estación (bitrate, oyentes, espacio)' },
-  { id: 'reseller', label: '🏪 Paquetes de revendedor', hint: 'Cupo total que puede vender un mayorista' },
-];
-
 export default function AdminPlanes() {
-  const [tab, setTab] = useState('radio');
+  const [searchParams] = useSearchParams();
+  const tipo = searchParams.get('tipo') === 'video' ? 'video' : 'audio';
+  const esVideo = tipo === 'video';
+  const [tab, setTab] = useState('planes');
+
+  // En video solo hay planes de canal; en audio, además, paquetes de revendedor.
+  const TABS = esVideo
+    ? [{ id: 'planes', label: '🎬 Planes de video', hint: 'Plantilla de un canal (resolución, espacio, 24/7)' }]
+    : [
+        { id: 'planes', label: '📻 Planes de radio', hint: 'Plantilla de UNA estación (bitrate, oyentes, espacio)' },
+        { id: 'reseller', label: '🏪 Paquetes de revendedor', hint: 'Cupo total que puede vender un mayorista' },
+      ];
+
+  const mostrarReseller = !esVideo && tab === 'reseller';
 
   return (
     <div className="space-y-5">
@@ -29,7 +38,7 @@ export default function AdminPlanes() {
         ))}
       </div>
 
-      {tab === 'radio' ? <PlanesManager base="/admin" /> : <PlanesResellerManager />}
+      {mostrarReseller ? <PlanesResellerManager /> : <PlanesManager base="/admin" filtroTipo={tipo} />}
     </div>
   );
 }

@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../../api';
 import CuentasVideo from '../../components/CuentasVideo';
 import Modal from '../../components/Modal';
 import { IconPlus, IconTrash, IconServer, IconRefresh } from '../../icons';
 
 export default function AdminServidores() {
+  const [searchParams] = useSearchParams();
+  const tipo = searchParams.get('tipo') === 'video' ? 'video' : 'audio';
+  const esVideo = tipo === 'video';
   const [servidores, setServidores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -21,7 +25,7 @@ export default function AdminServidores() {
   }
   useEffect(() => { cargar(); }, []);
 
-  function abrirCrear() { setEditId(null); setForm({ nombre: '', url: '', url_publica: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0, tipo: 'audio' }); setError(null); setOpen(true); }
+  function abrirCrear() { setEditId(null); setForm({ nombre: '', url: '', url_publica: '', api_key: '', capacidad_radios: 100, banda_mensual_gb: 0, tipo }); setError(null); setOpen(true); }
   function abrirEditar(s) { setEditId(s.id); setForm({ nombre: s.nombre, url: s.url, url_publica: s.url_publica || '', tipo: s.tipo || 'audio', api_key: '', capacidad_radios: s.capacidad_radios, banda_mensual_gb: s.banda_mensual_gb || 0 }); setError(null); setOpen(true); }
 
   async function guardar(e) {
@@ -47,23 +51,25 @@ export default function AdminServidores() {
     catch (e) { alert(e.message); }
   }
 
+  const lista = servidores.filter((s) => (s.tipo || 'audio') === tipo);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold flex items-center gap-2"><IconServer width={18} height={18} /> Servidores AzuraCast <span className="text-gray-400 font-normal">({servidores.length})</span></h2>
+        <h2 className="font-semibold flex items-center gap-2"><IconServer width={18} height={18} /> {esVideo ? 'Nodos de video' : 'Servidores AzuraCast'} <span className="text-gray-400 font-normal">({lista.length})</span></h2>
         <div className="flex items-center gap-2">
           <button onClick={cargar} className="btn-ghost !py-2 !px-3 text-xs"><IconRefresh width={15} height={15} /> Actualizar</button>
-          <button onClick={abrirCrear} className="btn-primary !py-2 !px-3 text-xs"><IconPlus width={15} height={15} /> Agregar servidor</button>
+          <button onClick={abrirCrear} className="btn-primary !py-2 !px-3 text-xs"><IconPlus width={15} height={15} /> {esVideo ? 'Agregar nodo' : 'Agregar servidor'}</button>
         </div>
       </div>
 
       {loading ? (
         <div className="card p-8 text-center text-gray-400">Cargando…</div>
-      ) : servidores.length === 0 ? (
-        <div className="card p-8 text-center text-gray-400">Aún no hay servidores. Las radios usan el servidor por defecto del sistema.</div>
+      ) : lista.length === 0 ? (
+        <div className="card p-8 text-center text-gray-400">{esVideo ? 'Aún no hay nodos de video. Agrega uno para alojar canales.' : 'Aún no hay servidores. Las radios usan el servidor por defecto del sistema.'}</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {servidores.map((s) => {
+          {lista.map((s) => {
             const pct = Math.min(100, Math.round((s.radios / (s.capacidad_radios || 1)) * 100));
             return (
               <div key={s.id} className="card p-5">
@@ -114,13 +120,9 @@ export default function AdminServidores() {
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? 'Editar servidor' : 'Agregar servidor'}>
         <form onSubmit={guardar} className="space-y-3">
           <div><label className="label">Nombre</label><input className="input" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Nodo 2" required /></div>
-          <div>
-            <label className="label">Tipo de servicio</label>
-            <select className="input" value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
-              <option value="audio">🎵 Audio — radios</option>
-              <option value="video">🎬 Video — streaming de video</option>
-            </select>
-            <p className="text-xs text-gray-400 mt-1">Las cuentas se crean en el servidor que corresponde a su plan.</p>
+          <div className="text-xs rounded-xl px-3 py-2 bg-gray-50 dark:bg-gray-950 text-gray-500">
+            Tipo: <b>{form.tipo === 'video' ? '🎬 Video — streaming de video' : '🎵 Audio — radios'}</b>
+            <span className="text-gray-400"> · definido por la sección del menú</span>
           </div>
           <div><label className="label">{form.tipo === 'video' ? 'URL del agente de video' : 'URL de AzuraCast'}</label><input className="input" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={form.tipo === 'video' ? 'http://147.93.112.161:3000' : 'https://server3.streaminghd.co'} required />
             <p className="text-xs text-gray-400 mt-1">Solo la usa el panel para hablar con la API. No se le muestra al cliente.</p></div>

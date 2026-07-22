@@ -18,7 +18,7 @@ const RESOLUCIONES = [
  * Gestor de planes reutilizable.
  * props: base = '/admin' | '/reseller' ; esRevendedor (los planes globales son de solo lectura)
  */
-export default function PlanesManager({ base = '/admin', esRevendedor = false }) {
+export default function PlanesManager({ base = '/admin', esRevendedor = false, filtroTipo = null }) {
   const [planes, setPlanes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -29,6 +29,9 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
 
   const editable = (p) => (esRevendedor ? p.reseller_id != null : true);
 
+  // Si la página está acotada a un servicio (audio | video), solo esos planes.
+  const visibles = filtroTipo ? planes.filter((p) => (p.tipo || 'audio') === filtroTipo) : planes;
+
   async function cargar() {
     setLoading(true);
     try { const { planes } = await apiFetch(`${base}/planes`); setPlanes(planes); }
@@ -36,7 +39,7 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
   }
   useEffect(() => { cargar(); }, [base]);
 
-  function abrirCrear() { setEditId(null); setForm(VACIO_AUDIO); setError(null); setOpen(true); }
+  function abrirCrear() { setEditId(null); setForm(filtroTipo === 'video' ? VACIO_VIDEO : VACIO_AUDIO); setError(null); setOpen(true); }
 
   /** Al cambiar el tipo se reajustan los valores por defecto, no los límites de audio. */
   function cambiarTipo(e) {
@@ -75,13 +78,13 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Planes <span className="text-gray-400 font-normal">({planes.length})</span></h2>
+        <h2 className="font-semibold">Planes <span className="text-gray-400 font-normal">({visibles.length})</span></h2>
         <button onClick={abrirCrear} className="btn-primary !py-2 !px-3 text-xs"><IconPlus width={15} height={15} /> Crear plan</button>
       </div>
 
       {loading ? (
         <div className="card p-8 text-center text-gray-400">Cargando…</div>
-      ) : planes.length === 0 ? (
+      ) : visibles.length === 0 ? (
         <div className="card p-10 text-center">
           <div className="text-3xl mb-2">📋</div>
           <p className="text-gray-500">{esRevendedor ? 'Aún no tienes planes. Crea tu primer plan para poder crear radios.' : 'Sin planes todavía'}</p>
@@ -89,7 +92,7 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {planes.map((p) => (
+          {visibles.map((p) => (
             <div key={p.id} className="card p-5">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
@@ -133,14 +136,16 @@ export default function PlanesManager({ base = '/admin', esRevendedor = false })
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? 'Editar plan' : 'Crear plan'}>
         <form onSubmit={guardar} className="space-y-3">
           <div><label className="label">Nombre</label><input className="input" value={form.nombre} onChange={set('nombre')} placeholder="Ej: Empresarial" required /></div>
-          <div>
-            <label className="label">Tipo de servicio</label>
-            <select className="input" value={form.tipo} onChange={cambiarTipo}>
-              <option value="audio">🎵 Audio — radio online</option>
-              <option value="video">🎬 Video — streaming de video</option>
-            </select>
-            <p className="text-xs text-gray-400 mt-1">Decide en qué servidor se crea la cuenta y qué ve el cliente en su panel.</p>
-          </div>
+          {!filtroTipo && (
+            <div>
+              <label className="label">Tipo de servicio</label>
+              <select className="input" value={form.tipo} onChange={cambiarTipo}>
+                <option value="audio">🎵 Audio — radio online</option>
+                <option value="video">🎬 Video — streaming de video</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Decide en qué servidor se crea la cuenta y qué ve el cliente en su panel.</p>
+            </div>
+          )}
           {form.tipo === 'video' ? (
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
