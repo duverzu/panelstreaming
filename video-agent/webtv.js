@@ -70,7 +70,7 @@ function matarHuerfanos(user) {
   });
 }
 
-const VIDEO = /\.(mp4|mkv|mov|webm|flv|ts)$/i;
+const VIDEO = /\.(mp4|mkv|mov|webm|flv)$/i;   // .ts NO: son fragmentos HLS, no videos
 
 /**
  * Arma el archivo de lista que consume ffmpeg.

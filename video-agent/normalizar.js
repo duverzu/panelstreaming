@@ -20,7 +20,7 @@ const RES = process.env.NORM_RES || '1280x720';
 const FPS = process.env.NORM_FPS || '30';
 const KBPS = process.env.NORM_KBPS || '2500';
 
-const VIDEO = /\.(mp4|mkv|mov|webm|flv|ts)$/i;
+const VIDEO = /\.(mp4|mkv|mov|webm|flv)$/i;
 
 // Trabajos en curso: user -> { total, hechos, actual, cancelar }
 const trabajos = new Map();

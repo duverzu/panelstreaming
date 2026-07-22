@@ -20,7 +20,7 @@ const SECRETO = process.env.AGENT_TOKEN || '';
 const HOME = process.env.HOME_BASE || '/home';
 const VENTANA_MS = Number(process.env.TICKET_MS || 30 * 60 * 1000); // 30 min para subir
 const MAX_BYTES = Number(process.env.SUBIDA_MAX_BYTES || 5 * 1024 * 1024 * 1024); // 5 GB
-const VIDEO = /\.(mp4|mkv|mov|webm|flv|ts)$/i;
+const VIDEO = /\.(mp4|mkv|mov|webm|flv)$/i;
 
 const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
