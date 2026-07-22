@@ -582,6 +582,19 @@ router.post('/video/ticket', requireCliente, wrap(async (req, res) => {
   res.json({ url: `${publica}${puerto ? ':' + puerto : ''}/_subir?ticket=${encodeURIComponent(t.ticket)}` });
 }));
 
+
+/** PUT /cliente/video/orden — el cliente reordena su playlist. */
+router.put('/video/orden', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  const ctx = await nodoDe(cliente);
+  if (!ctx) return res.status(400).json({ error: 'Tu cuenta no es de video' });
+  const orden = Array.isArray(req.body?.orden) ? req.body.orden : null;
+  if (!orden) return res.status(400).json({ error: 'Falta el orden' });
+  const r = await ctx.nodo.guardarOrden(cliente.short_name, orden);
+  if (!r?.ok) return res.status(502).json({ error: 'No se pudo guardar el orden' });
+  res.json({ ok: true });
+}));
+
 /** DELETE /cliente/video/:nombre — borra uno de sus videos. */
 router.delete('/video/:nombre', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);

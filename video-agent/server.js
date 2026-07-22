@@ -21,6 +21,7 @@ const readline = require('readline');
 const claves = require('./claves');
 const webtv = require('./webtv');
 const { crearCuenta, eliminarConfig } = require('./crear');
+const fsp2 = require('fs/promises');
 const normalizar = require('./normalizar');
 const subida = require('./subida');
 const { exec } = require('child_process');
@@ -380,6 +381,39 @@ app.post('/cuentas/:user/clave/activar', wrap(async (req, res) => {
  * en segundo plano. Al terminar, reinicia el canal en modo copy si estaba
  * al aire. La emisión NO se corta durante el proceso.
  */
+/**
+ * PUT /cuentas/:user/orden — guarda el orden de emisión (playlist) del cliente.
+ * body: { orden: ["02-intro.mp4", "01-nota.mp4", ...] }
+ */
+app.put('/cuentas/:user/orden', wrap(async (req, res) => {
+  const user = String(req.params.user);
+  const lista = await cuentas();
+  const c = lista.find((x) => x.user === user);
+  if (!c) return res.status(404).json({ error: 'Cuenta no encontrada' });
+
+  const orden = Array.isArray(req.body?.orden) ? req.body.orden.map(String) : null;
+  if (!orden) return res.status(400).json({ error: 'Falta el orden (lista de nombres)' });
+
+  const limpio = orden.map((f) => path.basename(f));   // a prueba de traversal
+  await fsp2.writeFile(path.join(c.dir, 'orden.json'), JSON.stringify(limpio, null, 2));
+
+  if (webtv.estado(user).emitiendo) {
+    const puertos = await puertosDe(user);
+    if (puertos.rtmp) await webtv.recargar(user, { dirCuenta: c.dir, puertoRtmp: puertos.rtmp });
+  }
+  res.json({ ok: true, videos: limpio.length });
+}));
+
+/** GET /cuentas/:user/orden — el orden guardado (o null). */
+app.get('/cuentas/:user/orden', wrap(async (req, res) => {
+  const lista = await cuentas();
+  const c = lista.find((x) => x.user === String(req.params.user));
+  if (!c) return res.status(404).json({ error: 'Cuenta no encontrada' });
+  let orden = null;
+  try { orden = JSON.parse(await fsp2.readFile(path.join(c.dir, 'orden.json'), 'utf8')); } catch (_) {}
+  res.json({ orden });
+}));
+
 app.post('/cuentas/:user/normalizar', wrap(async (req, res) => {
   const user = String(req.params.user);
   const lista = await cuentas();

@@ -73,6 +73,12 @@ function crearCliente(baseURL, token) {
       catch (e) { return fallo(`borrar(${user})`, e) || { ok: false }; }
     },
 
+    /** Guarda el orden de emisión (playlist) del cliente. */
+    guardarOrden: async (user, orden) => {
+      try { return (await api.put(`/cuentas/${encodeURIComponent(user)}/orden`, { orden })).data; }
+      catch (e) { return fallo(`orden(${user})`, e); }
+    },
+
     /** Datos para transmitir en vivo (servidor RTMP, clave). */
     conexion: async (user) => {
       try { return (await api.get(`/cuentas/${encodeURIComponent(user)}/conexion`)).data; }

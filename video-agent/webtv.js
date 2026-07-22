@@ -93,10 +93,25 @@ const VIDEO = /\.(mp4|mkv|mov|webm|flv)$/i;   // .ts NO: son fragmentos HLS, no 
 async function escribirLista(dirVideos, destino) {
   let archivos = [];
   try {
-    archivos = (await fsp.readdir(dirVideos))
-      .filter((f) => VIDEO.test(f))
-      .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+    archivos = (await fsp.readdir(dirVideos)).filter((f) => VIDEO.test(f));
   } catch (_) { /* carpeta inexistente */ }
+
+  // Orden de emisión: si el cliente guardó una playlist (orden.json en la
+  // carpeta de la cuenta), se respeta ese orden y se emiten SOLO esos videos;
+  // los que no estén en la lista se añaden al final. Sin playlist, orden
+  // numérico natural por nombre (01-, 02-…).
+  const ordenPath = path.join(path.dirname(dirVideos), 'orden.json');
+  let orden = null;
+  try { orden = JSON.parse(await fsp.readFile(ordenPath, 'utf8')); } catch (_) {}
+
+  if (Array.isArray(orden) && orden.length) {
+    const existentes = new Set(archivos);
+    const enOrden = orden.filter((f) => existentes.has(f));   // solo los que aún existen
+    const resto = archivos.filter((f) => !orden.includes(f)); // videos nuevos al final
+    archivos = [...enOrden, ...resto];
+  } else {
+    archivos.sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  }
 
   if (archivos.length === 0) return { total: 0, ruta: null };
 

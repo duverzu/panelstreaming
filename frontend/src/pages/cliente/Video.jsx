@@ -4,7 +4,7 @@ import { useAuth } from '../../auth';
 import StatTile from '../../components/charts/StatTile';
 import AreaChart from '../../components/charts/AreaChart';
 import DonutChart from '../../components/charts/DonutChart';
-import { IconServer, IconChart, IconPlaylist, IconTrash, IconCopy, IconCheck, IconPlus, IconMic, IconShare } from '../../icons';
+import { IconServer, IconChart, IconPlaylist, IconTrash, IconCopy, IconCheck, IconPlus, IconMic, IconShare, IconChevronDown } from '../../icons';
 
 function Copiable({ texto }) {
   const [ok, setOk] = useState(false);
@@ -23,9 +23,29 @@ export default function ClienteVideo() {
   const [error, setError] = useState(null);
   const [subiendo, setSubiendo] = useState(null);   // { nombre, pct }
   const inputRef = useRef(null);
+  const [orden, setOrden] = useState(null);   // reordenando localmente
+  const [guardandoOrden, setGuardandoOrden] = useState(false);
 
   function cargar() {
-    apiFetch('/cliente/video').then(setData).catch((e) => setError(e.message));
+    apiFetch('/cliente/video').then((d) => { setData(d); setOrden(null); }).catch((e) => setError(e.message));
+  }
+
+  // Lista de videos en el orden que se está editando (o el que viene del server)
+  const listaVideos = orden || (data?.videos || []).map((v) => v.nombre);
+
+  function mover(i, dir) {
+    const j = i + dir;
+    const arr = [...listaVideos];
+    if (j < 0 || j >= arr.length) return;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+    setOrden(arr);
+  }
+
+  async function guardarOrden() {
+    setGuardandoOrden(true);
+    try { await apiFetch('/cliente/video/orden', { method: 'PUT', body: JSON.stringify({ orden: listaVideos }) }); cargar(); }
+    catch (e) { alert(e.message); }
+    finally { setGuardandoOrden(false); }
   }
   useEffect(() => { cargar(); }, []);
 
@@ -189,21 +209,36 @@ else if(v.canPlayType('application/vnd.apple.mpegurl')){v.src=s;}})();</script>`
         {data.videos.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">Aún no has subido videos. Súbelos y tu canal los emitirá en bucle.</p>
         ) : (
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {data.videos.map((v) => (
-              <div key={v.nombre} className="flex items-center gap-3 py-2.5">
-                <span className="flex-1 min-w-0">
-                  <span className="text-sm truncate block">{v.nombre}</span>
-                  <span className="text-xs text-gray-400">
-                    {v.tam_mb >= 1024 ? (v.tam_mb / 1024).toFixed(1) + ' GB' : v.tam_mb + ' MB'} · {new Date(v.modificado).toLocaleDateString('es')}
-                  </span>
-                </span>
-                <button onClick={() => borrar(v.nombre)} title="Borrar" className="w-8 h-8 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-800 hover:border-red-400 hover:text-red-500 transition shrink-0">
-                  <IconTrash width={15} height={15} />
-                </button>
+          <>
+            <p className="text-xs text-gray-400 mb-2">Tu canal emite los videos en este orden, en bucle. Usa las flechas para reordenar.</p>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {listaVideos.map((nombre, i) => {
+                const v = (data.videos.find((x) => x.nombre === nombre)) || { nombre, tam_mb: 0 };
+                return (
+                  <div key={nombre} className="flex items-center gap-2 py-2.5">
+                    <span className="text-xs text-gray-400 w-6 text-right tabular-nums shrink-0">{i + 1}</span>
+                    <div className="flex flex-col shrink-0">
+                      <button onClick={() => mover(i, -1)} disabled={i === 0} className="text-gray-400 hover:text-brand-600 disabled:opacity-30 transition leading-none"><IconChevronDown width={14} height={14} className="rotate-180" /></button>
+                      <button onClick={() => mover(i, 1)} disabled={i === listaVideos.length - 1} className="text-gray-400 hover:text-brand-600 disabled:opacity-30 transition leading-none"><IconChevronDown width={14} height={14} /></button>
+                    </div>
+                    <span className="flex-1 min-w-0">
+                      <span className="text-sm truncate block">{v.nombre}</span>
+                      <span className="text-xs text-gray-400">{v.tam_mb >= 1024 ? (v.tam_mb / 1024).toFixed(1) + ' GB' : v.tam_mb + ' MB'}</span>
+                    </span>
+                    <button onClick={() => borrar(v.nombre)} title="Borrar" className="w-8 h-8 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-800 hover:border-red-400 hover:text-red-500 transition shrink-0">
+                      <IconTrash width={15} height={15} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {orden && (
+              <div className="flex gap-2 mt-3">
+                <button onClick={() => setOrden(null)} className="btn-ghost flex-1 text-sm">Cancelar</button>
+                <button onClick={guardarOrden} disabled={guardandoOrden} className="btn-primary flex-1 text-sm">{guardandoOrden ? 'Guardando…' : 'Guardar orden'}</button>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
 
