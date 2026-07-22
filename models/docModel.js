@@ -1,20 +1,29 @@
 /**
  * models/docModel.js — artículos de documentación / centro de ayuda.
+ * Cada artículo tiene una `audiencia`: 'audio' (clientes de radio), 'video'
+ * (clientes de streaming de video) o 'todos'. El cliente ve la suya + 'todos'.
  */
 const { query } = require('../config/database');
 
-/** Lista publicada (sin el contenido pesado). */
-async function findPublicadas() {
+/** Lista publicada (sin el contenido pesado), filtrada por audiencia. */
+async function findPublicadas(audiencia) {
+  const cond = audiencia ? "AND (audiencia = $1 OR audiencia = 'todos')" : '';
   const { rows } = await query(
-    `SELECT id, titulo, categoria, orden FROM documentacion
-      WHERE publicado = true ORDER BY categoria, orden, id`
+    `SELECT id, titulo, categoria, orden, audiencia FROM documentacion
+      WHERE publicado = true ${cond} ORDER BY categoria, orden, id`,
+    audiencia ? [audiencia] : []
   );
   return rows;
 }
 
-/** Todos (admin). */
-async function findAll() {
-  const { rows } = await query('SELECT id, titulo, categoria, orden, publicado, updated_at FROM documentacion ORDER BY categoria, orden, id');
+/** Todos (admin), opcionalmente acotado a una audiencia. */
+async function findAll(audiencia) {
+  const cond = audiencia ? 'WHERE audiencia = $1' : '';
+  const { rows } = await query(
+    `SELECT id, titulo, categoria, orden, publicado, audiencia, updated_at
+       FROM documentacion ${cond} ORDER BY categoria, orden, id`,
+    audiencia ? [audiencia] : []
+  );
   return rows;
 }
 
@@ -23,17 +32,17 @@ async function findById(id) {
   return rows[0] || null;
 }
 
-async function create({ titulo, categoria = 'General', contenido = '', orden = 0, publicado = true }) {
+async function create({ titulo, categoria = 'General', contenido = '', orden = 0, publicado = true, audiencia = 'audio' }) {
   const { rows } = await query(
-    `INSERT INTO documentacion (titulo, categoria, contenido, orden, publicado)
-     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [titulo, categoria, contenido, orden, publicado]
+    `INSERT INTO documentacion (titulo, categoria, contenido, orden, publicado, audiencia)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [titulo, categoria, contenido, orden, publicado, audiencia === 'video' || audiencia === 'todos' ? audiencia : 'audio']
   );
   return rows[0];
 }
 
 async function update(id, fields) {
-  const allowed = ['titulo', 'categoria', 'contenido', 'orden', 'publicado'];
+  const allowed = ['titulo', 'categoria', 'contenido', 'orden', 'publicado', 'audiencia'];
   const sets = [];
   const values = [];
   let i = 1;

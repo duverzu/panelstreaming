@@ -15,9 +15,10 @@ const docModel = require('../models/docModel');
 const router = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-/** GET /api/public/docs — lista de artículos publicados (sin contenido). */
+/** GET /api/public/docs?audiencia=audio|video — publicados (sin contenido). */
 router.get('/docs', wrap(async (req, res) => {
-  res.json({ docs: await docModel.findPublicadas() });
+  const audiencia = req.query.audiencia === 'video' ? 'video' : req.query.audiencia === 'audio' ? 'audio' : null;
+  res.json({ docs: await docModel.findPublicadas(audiencia) });
 }));
 
 /** GET /api/public/docs/:id — artículo completo (si está publicado). */

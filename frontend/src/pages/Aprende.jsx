@@ -1,19 +1,22 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../api';
+import { useAuth } from '../auth';
 import Markdown from '../components/Markdown';
 
 export default function Aprende() {
+  const { user } = useAuth();
+  const audiencia = user?.tipo === 'video' ? 'video' : 'audio';
   const [docs, setDocs] = useState([]);
   const [sel, setSel] = useState(null);
   const [contenido, setContenido] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch('/public/docs').then((d) => {
+    apiFetch('/public/docs?audiencia=' + audiencia).then((d) => {
       setDocs(d.docs);
       if (d.docs[0]) abrir(d.docs[0].id);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  }, [audiencia]);
 
   async function abrir(id) {
     setSel(id); setContenido(null);

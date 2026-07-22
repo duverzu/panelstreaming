@@ -75,6 +75,19 @@ router.post('/logout', requireAdmin, (req, res) => {
   res.json({ message: 'Sesión cerrada. Elimina el token en el cliente.' });
 });
 
+/** POST /admin/password — el super admin cambia su propia contraseña. */
+router.post('/password', requireAdmin, wrap(async (req, res) => {
+  const { actual, nueva } = req.body || {};
+  if (!actual || !nueva) return res.status(400).json({ error: 'Contraseña actual y nueva son requeridas' });
+  if (String(nueva).length < 8) return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 8 caracteres' });
+  const user = await userModel.findById(req.user.sub);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+  const ok = await bcrypt.compare(actual, user.password_hash);
+  if (!ok) return res.status(401).json({ error: 'La contraseña actual no es correcta' });
+  await userModel.updatePassword(user.id, await bcrypt.hash(nueva, 10));
+  res.json({ message: 'Contraseña actualizada ✅' });
+}));
+
 // ==================================================================
 //  GESTIÓN DE CLIENTES
 // ==================================================================
@@ -851,7 +864,8 @@ router.delete('/servidores/:id', requireAdmin, wrap(async (req, res) => {
 // ==================================================================
 
 router.get('/docs', requireAdmin, wrap(async (req, res) => {
-  res.json({ docs: await docModel.findAll() });
+  const audiencia = req.query.audiencia === 'video' ? 'video' : req.query.audiencia === 'audio' ? 'audio' : null;
+  res.json({ docs: await docModel.findAll(audiencia) });
 }));
 
 router.get('/docs/:id', requireAdmin, wrap(async (req, res) => {

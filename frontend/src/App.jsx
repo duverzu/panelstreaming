@@ -11,6 +11,7 @@ import AdminPlanes from './pages/admin/Planes';
 import AdminEstadisticas from './pages/admin/Estadisticas';
 import AdminRevendedores from './pages/admin/Revendedores';
 import AdminServidores from './pages/admin/Servidores';
+import AdminConfiguracion from './pages/admin/Configuracion';
 import ResellerDashboard from './pages/reseller/Dashboard';
 import ResellerClientes from './pages/reseller/Clientes';
 import ResellerPlanes from './pages/reseller/Planes';
@@ -76,6 +77,7 @@ export default function App() {
         <Route path="revendedores" element={<AdminRevendedores />} />
         <Route path="servidores" element={<AdminServidores />} />
         <Route path="documentacion" element={<AdminDocumentacion />} />
+        <Route path="configuracion" element={<AdminConfiguracion />} />
         <Route path="api" element={<AdminApiIntegracion />} />
         <Route path="estadisticas" element={<AdminEstadisticas />} />
       </Route>

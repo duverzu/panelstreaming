@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../../api';
 import Markdown from '../../components/Markdown';
 import { IconPlus, IconTrash } from '../../icons';
 
-const VACIO = { titulo: '', categoria: 'General', contenido: '', orden: 0, publicado: true };
+const VACIO = { titulo: '', categoria: 'General', contenido: '', orden: 0, publicado: true, audiencia: 'audio' };
 
 export default function AdminDocumentacion() {
+  const [searchParams] = useSearchParams();
+  const tipo = searchParams.get('tipo') === 'video' ? 'video' : 'audio';
+  const esVideo = tipo === 'video';
   const [docs, setDocs] = useState([]);
   const [editId, setEditId] = useState(null); // null = ninguno; 'nuevo' = crear
   const [form, setForm] = useState(VACIO);
@@ -16,12 +20,13 @@ export default function AdminDocumentacion() {
   const fileRef = useRef(null);
 
   async function cargar() {
-    const { docs } = await apiFetch('/admin/docs');
+    const { docs } = await apiFetch('/admin/docs?audiencia=' + tipo);
     setDocs(docs);
   }
-  useEffect(() => { cargar(); }, []);
+  // Al cambiar de audiencia (audio/video) recarga y cierra el editor abierto
+  useEffect(() => { cargar(); setEditId(null); /* eslint-disable-next-line */ }, [tipo]);
 
-  function nuevo() { setEditId('nuevo'); setForm(VACIO); setPreview(false); setMsg(null); }
+  function nuevo() { setEditId('nuevo'); setForm({ ...VACIO, audiencia: tipo }); setPreview(false); setMsg(null); }
   async function editar(id) {
     const { doc } = await apiFetch('/admin/docs/' + id);
     setForm({ titulo: doc.titulo, categoria: doc.categoria, contenido: doc.contenido, orden: doc.orden, publicado: doc.publicado });
@@ -66,6 +71,13 @@ export default function AdminDocumentacion() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+      <div className="lg:col-span-2">
+        <h2 className="font-semibold flex items-center gap-2">
+          {esVideo ? '🎬 Documentación de video' : '🎙️ Documentación de audio'}
+          <span className="text-xs font-normal text-gray-400">— la ven los clientes de {esVideo ? 'video' : 'audio'} en “Aprende”</span>
+        </h2>
+      </div>
+
       {/* Lista */}
       <div className="card p-4 h-fit">
         <button onClick={nuevo} className="btn-primary w-full text-sm mb-3"><IconPlus width={15} height={15} /> Nuevo artículo</button>
