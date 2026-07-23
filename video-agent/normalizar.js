@@ -11,11 +11,12 @@
  * reemplazan y se reinicia el canal en modo copy.
  * ------------------------------------------------------------------
  */
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const fsp = require('fs/promises');
 const path = require('path');
 
 const FFMPEG = process.env.FFMPEG || 'ffmpeg';
+const FFPROBE = process.env.FFPROBE || 'ffprobe';
 const RES = process.env.NORM_RES || '1280x720';
 const FPS = process.env.NORM_FPS || '30';
 const KBPS = process.env.NORM_KBPS || '2500';
@@ -108,6 +109,87 @@ async function cuenta(user, dirCuenta, onFin) {
   return { ok: true, iniciado: true, total: trabajo.total };
 }
 
+// ── Normalización automática AL SUBIR ────────────────────────────────
+// Con esto la cuenta se mantiene uniforme para siempre y el canal nunca se
+// cae a modo 'transcode' por un video que vino en otro formato.
+
+/** Lee los streams del archivo (null si ffprobe falla). */
+function analizar(archivo) {
+  return new Promise((resolve) => {
+    execFile(FFPROBE, ['-v', 'error', '-show_entries',
+      'stream=codec_type,codec_name,width,height,r_frame_rate', '-of', 'json', archivo],
+    (err, out) => {
+      if (err) return resolve(null);
+      try { resolve(JSON.parse(out).streams || []); } catch { resolve(null); }
+    });
+  });
+}
+
+/** ¿El archivo YA viene en el formato estándar? Entonces no se toca. */
+async function yaEstandar(archivo) {
+  const streams = await analizar(archivo);
+  if (!streams) return false;                 // no se pudo leer → normalizar por las dudas
+  const [W, H] = RES.split('x').map(Number);
+  const v = streams.find((s) => s.codec_type === 'video');
+  const a = streams.find((s) => s.codec_type === 'audio');
+  if (!v || v.codec_name !== 'h264' || v.width !== W || v.height !== H) return false;
+  const [n, d] = String(v.r_frame_rate || '0/1').split('/').map(Number);
+  if (!d || Math.round(n / d) !== Number(FPS)) return false;
+  return Boolean(a && a.codec_name === 'aac');
+}
+
+// Cola: se normaliza de a UN video a la vez en todo el nodo, para no robarle
+// CPU a las emisiones que están al aire.
+const cola = [];
+let ocupado = false;
+
+async function bombear() {
+  if (ocupado) return;
+  ocupado = true;
+  while (cola.length) {
+    try { await cola.shift()(); } catch (e) { console.error('[normalizar] tarea:', e.message); }
+  }
+  ocupado = false;
+}
+
+/**
+ * Normaliza UN video recién subido, en segundo plano.
+ * Si ya viene en el formato estándar no gasta CPU: llama a onFin enseguida.
+ * @param onFin callback({ok, normalizado, archivo}) cuando ya se puede emitir
+ */
+function alSubir(user, dirCuenta, nombre, onFin) {
+  cola.push(async () => {
+    const uploads = path.join(dirCuenta, 'uploads');
+    const origen = path.join(uploads, nombre);
+
+    if (await yaEstandar(origen)) {
+      console.log(`[normalizar] ${user}: ${nombre} ya está en formato estándar`);
+      if (onFin) onFin({ ok: true, normalizado: false, archivo: nombre });
+      return;
+    }
+
+    // Carpeta temporal propia (no la de la normalización de cuenta completa)
+    const tmp = path.join(uploads, '.tmp-subida');
+    await fsp.mkdir(tmp, { recursive: true });
+    const base = nombre.replace(/\.[^.]+$/, '') + '.mp4';
+    const destino = path.join(tmp, base);
+
+    const ok = await unVideo(origen, destino);
+    let archivoFinal = nombre;
+    if (ok) {
+      try {
+        await fsp.rename(destino, path.join(uploads, base));
+        if (base !== nombre) await fsp.unlink(origen).catch(() => {});
+        archivoFinal = base;
+      } catch (e) { console.error('[normalizar] reemplazo:', e.message); }
+    }
+    await fsp.unlink(destino).catch(() => {});   // por si quedó a medias
+    console.log(`[normalizar] ${user}: ${nombre} → ${ok ? archivoFinal : 'falló, se deja el original'}`);
+    if (onFin) onFin({ ok, normalizado: ok, archivo: archivoFinal });
+  });
+  bombear();
+}
+
 function cancelar(user) {
   const t = trabajos.get(user);
   if (t) t.cancelar = true;
@@ -126,4 +208,4 @@ function estado(user) {
 
 const todos = () => Object.fromEntries([...trabajos.keys()].map((u) => [u, estado(u)]));
 
-module.exports = { cuenta, cancelar, estado, todos };
+module.exports = { cuenta, cancelar, estado, todos, alSubir, yaEstandar };

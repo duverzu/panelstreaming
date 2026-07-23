@@ -544,14 +544,33 @@ app.post('/subir', (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No se recibió ningún video (formatos: mp4, mkv, mov, webm, flv)' });
 
     // Si el canal está al aire, reiniciarlo para que incluya el nuevo video
+    const recargarCanal = async () => {
+      try {
+        const lista = await cuentas();
+        const c = lista.find((x) => x.user === user);
+        if (c && webtv.estado(user).emitiendo) {
+          const puertos = await puertosDe(user);
+          if (puertos.rtmp) await webtv.recargar(user, { dirCuenta: c.dir, puertoRtmp: puertos.rtmp });
+        }
+      } catch (e) { console.error('[subir] reinicio canal:', e.message); }
+    };
+
+    // Se normaliza ANTES de meterlo a la emisión: así la cuenta queda uniforme
+    // y el canal sigue en modo 'copy' (CPU casi cero, calidad original) en vez
+    // de caer a conversión permanente por un video con otro formato.
+    // Si ya viene en el formato estándar, no gasta CPU y recarga enseguida.
     try {
       const lista = await cuentas();
       const c = lista.find((x) => x.user === user);
-      if (c && webtv.estado(user).emitiendo) {
-        const puertos = await puertosDe(user);
-        if (puertos.rtmp) await webtv.recargar(user, { dirCuenta: c.dir, puertoRtmp: puertos.rtmp });
+      if (c && process.env.NORMALIZAR_AL_SUBIR !== '0') {
+        normalizar.alSubir(user, c.dir, req.file.filename, recargarCanal);
+      } else {
+        await recargarCanal();
       }
-    } catch (e) { console.error('[subir] reinicio canal:', e.message); }
+    } catch (e) {
+      console.error('[subir] normalizar:', e.message);
+      await recargarCanal();
+    }
 
     res.status(201).json({ ok: true, archivo: req.file.filename, bytes: req.file.size });
   });
