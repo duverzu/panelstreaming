@@ -41,6 +41,19 @@ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).cat
 /** Cliente AzuraCast del servidor de esa radio. */
 const azDe = (cliente) => azuracast.paraServidorId(cliente?.servidor_id);
 
+/**
+ * Nodo de video del cliente (null si no es de video). La cuenta en el nodo se
+ * identifica con el short_name del cliente, igual que en el panel del cliente.
+ */
+async function nodoVideoDe(cliente) {
+  if (!cliente || cliente.tipo !== 'video' || !cliente.servidor_id) return null;
+  const s = await servidorModel.findById(cliente.servidor_id);
+  if (!s || s.tipo !== 'video') return null;
+  return { nodo: videoNode.crearCliente(s.url, s.api_key), user: cliente.short_name };
+}
+
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
 /** Formatea bytes a algo legible (B/KB/MB/GB/TB). */
 function humanBytes(n) {
   const u = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -176,8 +189,31 @@ router.post('/clientes/:id/impersonar', requireAdmin, wrap(async (req, res) => {
 router.get('/clientes/estados', requireAdmin, wrap(async (req, res) => {
   const clientes = await clienteModel.findAllWithEmail();
   const estados = {};
+
+  // Canales de video: se consulta UNA vez por nodo (el agente devuelve todas
+  // sus cuentas con al_aire), no una petición por cliente.
+  const idsNodos = [...new Set(clientes.filter((c) => c.tipo === 'video' && c.activo && c.servidor_id).map((c) => c.servidor_id))];
+  const porNodo = new Map();
+  await Promise.all(idsNodos.map(async (sid) => {
+    try {
+      const s = await servidorModel.findById(sid);
+      if (!s || s.tipo !== 'video') return;
+      const lista = await videoNode.crearCliente(s.url, s.api_key).cuentas();
+      porNodo.set(sid, new Map((lista || []).map((x) => [x.user, x])));
+    } catch (_) { /* nodo caído → queda 'error' abajo */ }
+  }));
+
   await Promise.all(clientes.map(async (c) => {
     if (!c.activo) { estados[c.id] = 'suspendido'; return; }
+
+    if (c.tipo === 'video') {
+      const mapa = porNodo.get(c.servidor_id);
+      if (!mapa) { estados[c.id] = 'error'; return; }
+      const cuenta = mapa.get(c.short_name);
+      estados[c.id] = !cuenta ? 'sin-estacion' : cuenta.al_aire ? 'online' : 'offline';
+      return;
+    }
+
     if (!c.azuracast_station_id) { estados[c.id] = 'sin-estacion'; return; }
     try {
       const az = await azDe(c);
@@ -202,14 +238,44 @@ router.post('/clientes/:id/reaplicar-plan', requireAdmin, wrap(async (req, res) 
   res.json({ message: 'Límites del plan re-aplicados ✅' });
 }));
 
-/** POST /admin/clientes/:id/iniciar — pone la estación al aire (restart). */
+/** POST /admin/clientes/:id/iniciar — pone al aire: estación (audio) o canal 24/7 (video). */
 router.post('/clientes/:id/iniciar', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+  const v = await nodoVideoDe(cliente);
+  if (v) {
+    const r = await v.nodo.emision(v.user, true);
+    if (!r) return res.status(502).json({ error: 'El nodo de video no respondió' });
+    if (r.ok === false) return res.status(400).json({ error: r.error || 'No se pudo iniciar el canal' });
+    return res.json({ message: 'Canal al aire ✅', ...r });
+  }
+
   if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
   const az = await azDe(cliente);
   await az.restartStation(cliente.azuracast_station_id);
   res.json({ message: 'Estación al aire ✅' });
+}));
+
+/** POST /admin/clientes/:id/reiniciar — apaga y vuelve a encender la emisión. */
+router.post('/clientes/:id/reiniciar', requireAdmin, wrap(async (req, res) => {
+  const cliente = await clienteModel.findById(Number(req.params.id));
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+  const v = await nodoVideoDe(cliente);
+  if (v) {
+    await v.nodo.emision(v.user, false);
+    await esperar(3000);                      // deja que el emisor libere el stream
+    const r = await v.nodo.emision(v.user, true);
+    if (!r) return res.status(502).json({ error: 'El nodo de video no respondió' });
+    if (r.ok === false) return res.status(400).json({ error: r.error || 'No se pudo reiniciar el canal' });
+    return res.json({ message: 'Canal reiniciado ✅', ...r });
+  }
+
+  if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
+  const az = await azDe(cliente);
+  await az.restartStation(cliente.azuracast_station_id);
+  res.json({ message: 'Estación reiniciada ✅' });
 }));
 
 /** POST /admin/clientes/:id/biblioteca — copia la música de cortesía a la estación. */
@@ -227,6 +293,14 @@ router.post('/clientes/:id/biblioteca', requireAdmin, wrap(async (req, res) => {
 router.post('/clientes/:id/parar', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+  const v = await nodoVideoDe(cliente);
+  if (v) {
+    const r = await v.nodo.emision(v.user, false);
+    if (!r) return res.status(502).json({ error: 'El nodo de video no respondió' });
+    return res.json({ message: 'Canal detenido ✅', ...r });
+  }
+
   if (!cliente.azuracast_station_id) return res.status(400).json({ error: 'El cliente no tiene estación' });
   const az = await azDe(cliente);
   await az.stopStation(cliente.azuracast_station_id);
@@ -238,6 +312,13 @@ router.post('/clientes/:id/suspender', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   await clienteModel.update(cliente.id, { activo: false });
+
+  const v = await nodoVideoDe(cliente);
+  if (v) {
+    try { await v.nodo.emision(v.user, false); } catch (_) {}
+    return res.json({ message: 'Cliente suspendido ✅ (canal apagado)' });
+  }
+
   if (cliente.azuracast_station_id) {
     const az = await azDe(cliente);
     try { await az.updateStation(cliente.azuracast_station_id, { is_enabled: false }); } catch (_) {}
@@ -251,6 +332,13 @@ router.post('/clientes/:id/reactivar', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
   await clienteModel.update(cliente.id, { activo: true });
+
+  const v = await nodoVideoDe(cliente);
+  if (v) {
+    try { await v.nodo.emision(v.user, true); } catch (_) {}
+    return res.json({ message: 'Cliente reactivado ✅ (canal al aire)' });
+  }
+
   if (cliente.azuracast_station_id) {
     const az = await azDe(cliente);
     try { await az.updateStation(cliente.azuracast_station_id, { is_enabled: true }); } catch (_) {}

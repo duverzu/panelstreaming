@@ -199,15 +199,17 @@ export default function AdminClientes() {
                             <span className="text-xs text-gray-400 px-2">…</span>
                           ) : (
                             <>
+                              {/* Control de emisión: sirve para radio (AzuraCast) y para canal de video (nodo) */}
+                              <IconBtn title={esVideo ? 'Iniciar canal 24/7' : 'Iniciar / al aire'} onClick={() => accion(c, 'iniciar')} hover="brand"><IconPlay width={14} height={14} /></IconBtn>
+                              <IconBtn title={esVideo ? 'Detener canal' : 'Parar transmisión'} onClick={() => accion(c, 'parar')} hover="amber"><IconStop width={13} height={13} /></IconBtn>
+                              <IconBtn title={esVideo ? 'Reiniciar canal' : 'Reiniciar estación'} onClick={() => accion(c, 'reiniciar')} hover="brand"><IconRefresh width={14} height={14} /></IconBtn>
+                              {suspendido ? (
+                                <IconBtn title="Reactivar" onClick={() => accion(c, 'reactivar')} hover="brand"><IconPower width={14} height={14} /></IconBtn>
+                              ) : (
+                                <IconBtn title="Suspender" onClick={() => accion(c, 'suspender', `¿Suspender a "${c.nombre_empresa}"? Se apaga su ${esVideo ? 'canal' : 'radio'} y no podrá entrar.`)} hover="red"><IconPower width={14} height={14} /></IconBtn>
+                              )}
                               {!esVideo && (
                                 <>
-                                  <IconBtn title="Iniciar / al aire" onClick={() => accion(c, 'iniciar')} hover="brand"><IconPlay width={14} height={14} /></IconBtn>
-                                  <IconBtn title="Parar transmisión" onClick={() => accion(c, 'parar')} hover="amber"><IconStop width={13} height={13} /></IconBtn>
-                                  {suspendido ? (
-                                    <IconBtn title="Reactivar" onClick={() => accion(c, 'reactivar')} hover="brand"><IconPower width={14} height={14} /></IconBtn>
-                                  ) : (
-                                    <IconBtn title="Suspender" onClick={() => accion(c, 'suspender', `¿Suspender a "${c.nombre_empresa}"? Se apaga su radio y no podrá entrar.`)} hover="red"><IconPower width={14} height={14} /></IconBtn>
-                                  )}
                                   <IconBtn title="Re-aplicar límites del plan" onClick={() => reaplicarPlan(c)} hover="brand"><IconSliders width={14} height={14} /></IconBtn>
                                   <IconBtn title="Agregar música de cortesía" onClick={() => agregarBiblioteca(c)} hover="brand"><IconMusic width={14} height={14} /></IconBtn>
                                 </>
