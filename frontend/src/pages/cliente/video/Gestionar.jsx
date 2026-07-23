@@ -27,7 +27,14 @@ export default function VideoGestionar() {
   const trabajando = useRef(false);
   const colaRef = useRef([]);                  // espejo de `cola` para leer el estado más reciente
 
-  const actualizar = (updater) => setCola((c) => { const n = updater(c); colaRef.current = n; return n; });
+  // El espejo se actualiza AL INSTANTE (no dentro del updater de setCola, que
+  // React ejecuta más tarde): si no, procesar() no ve el archivo recién
+  // encolado y la subida se queda en "en cola…" para siempre.
+  const actualizar = (updater) => {
+    const n = updater(colaRef.current);
+    colaRef.current = n;
+    setCola(n);
+  };
 
   // ---- Cola de subida ---------------------------------------------------
   function encolar(fileList) {
