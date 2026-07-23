@@ -230,7 +230,16 @@ async function iniciar(user, { dirCuenta, puertoRtmp, host = '127.0.0.1' }) {
 
     proceso.stderr.on('data', (d) => {
       const txt = String(d).trim();
-      if (txt) console.error(`[webtv:${user}]`, txt.slice(0, 200));
+      if (!txt) return;
+      // Ruido conocido del bucle en modo copia: al saltar de un video a otro el
+      // audio trae timestamps levemente desordenados y ffmpeg los corrige solo
+      // ("changing to N"). Se cuentan pero no se imprimen: si no, sepultan los
+      // errores de verdad en el log.
+      if (/Non-monotonic DTS|changing to \d+/i.test(txt)) {
+        registro.avisosDts = (registro.avisosDts || 0) + 1;
+        return;
+      }
+      console.error(`[webtv:${user}]`, txt.slice(0, 200));
     });
 
     proceso.on('exit', (codigo) => {
@@ -291,6 +300,7 @@ function estado(user) {
     modo: r.modo,
     desde: r.desde,
     reinicios: r.reinicios,
+    avisos_dts: r.avisosDts || 0,   // corregidos solos por ffmpeg, informativo
     pid: r.proceso?.pid || null,
   };
 }
