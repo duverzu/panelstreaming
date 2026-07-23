@@ -3,7 +3,18 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../../api';
 import { useAuth } from '../../auth';
 import Modal from '../../components/Modal';
+import Copiable from '../../components/Copiable';
 import { IconPlay, IconStop, IconPower, IconEnter, IconTrash, IconPlus, IconRefresh, IconMusic, IconSliders } from '../../icons';
+
+/** Icono de llave (accesos), inline para no tocar el set de iconos. */
+function IconLlave({ width = 14, height = 14 }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="15" r="4" /><path d="M10.85 12.15 19 4M18 5l2 2M15 8l2 2" />
+    </svg>
+  );
+}
 
 const ESTADO_BADGE = {
   online: { txt: 'Al aire', cls: 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400', dot: 'bg-brand-500 animate-pulse' },
@@ -35,6 +46,12 @@ export default function AdminClientes() {
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+
+  // Modal de accesos del cliente
+  const [accesos, setAccesos] = useState(null);       // cliente con el modal abierto
+  const [datos, setDatos] = useState(null);           // datos traídos del backend
+  const [nuevaPass, setNuevaPass] = useState(null);   // clave recién generada (se ve una vez)
+  const [generando, setGenerando] = useState(false);
 
   async function cargar() {
     setLoading(true);
@@ -135,6 +152,41 @@ export default function AdminClientes() {
     }
   }
 
+  async function verAccesos(c) {
+    setAccesos(c); setDatos(null); setNuevaPass(null);
+    try { setDatos(await apiFetch(`/admin/clientes/${c.id}/accesos`)); }
+    catch (e) { setDatos({ error: e.message }); }
+  }
+
+  async function generarPassword() {
+    if (!confirm('Se generará una contraseña NUEVA para el cliente; la anterior dejará de funcionar. ¿Continuar?')) return;
+    setGenerando(true);
+    try {
+      const r = await apiFetch(`/admin/clientes/${accesos.id}/password`, { method: 'POST' });
+      setNuevaPass(r.password);
+    } catch (e) { alert(e.message); }
+    finally { setGenerando(false); }
+  }
+
+  /** Texto listo para pegarle al cliente por WhatsApp/correo. */
+  function mensajeCliente() {
+    if (!datos) return '';
+    const L = [`Hola! Estos son los accesos de "${datos.nombre_empresa}":`, '',
+      `PANEL: ${window.location.origin}`,
+      `Usuario: ${datos.usuario || '—'}`,
+      `Contraseña: ${nuevaPass || '(la que ya tienes)'}`];
+    if (datos.tipo === 'video' && datos.video) {
+      L.push('', 'TRANSMITIR EN VIVO (OBS / vMix):', `Servidor: ${datos.video.servidor_rtmp}`, `Clave: ${datos.video.clave}`);
+    } else if (datos.audio) {
+      L.push('', 'TRANSMITIR EN VIVO (encoder / DJ):');
+      if (datos.audio.dj_puerto) L.push(`Puerto: ${datos.audio.dj_puerto}`);
+      if (datos.audio.dj_usuario) L.push(`Usuario: ${datos.audio.dj_usuario}`);
+      if (datos.audio.dj_password) L.push(`Contraseña: ${datos.audio.dj_password}`);
+      if (datos.audio.url_streaming) L.push('', `Escucha tu radio: ${datos.audio.url_streaming}`);
+    }
+    return L.join('\n');
+  }
+
   // Solo los clientes y planes del servicio actual (audio | video)
   const lista = clientes.filter((c) => (c.tipo || 'audio') === tipo);
   const planesTipo = planes.filter((p) => (p.tipo || 'audio') === tipo);
@@ -214,6 +266,7 @@ export default function AdminClientes() {
                                   <IconBtn title="Agregar música de cortesía" onClick={() => agregarBiblioteca(c)} hover="brand"><IconMusic width={14} height={14} /></IconBtn>
                                 </>
                               )}
+                              <IconBtn title="Ver accesos (usuario y datos de conexión)" onClick={() => verAccesos(c)} hover="brand"><IconLlave width={14} height={14} /></IconBtn>
                               <IconBtn title="Entrar al panel" onClick={() => entrar(c)} hover="brand"><IconEnter width={14} height={14} /></IconBtn>
                               <IconBtn title="Eliminar" onClick={() => borrar(c)} hover="red"><IconTrash width={14} height={14} /></IconBtn>
                             </>
@@ -277,6 +330,78 @@ export default function AdminClientes() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal de ACCESOS del cliente */}
+      <Modal open={!!accesos} onClose={() => setAccesos(null)} title={`Accesos · ${accesos?.nombre_empresa || ''}`}>
+        {!datos ? (
+          <p className="text-sm text-gray-400 py-6 text-center">Cargando…</p>
+        ) : datos.error ? (
+          <div className="text-sm rounded-xl px-3 py-2 text-red-600 bg-red-50 dark:bg-red-500/10">{datos.error}</div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <div className="label">Panel del cliente</div>
+              <Copiable texto={window.location.origin} />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div><div className="label">Usuario</div><Copiable texto={datos.usuario || '—'} /></div>
+              <div><div className="label">Email</div><Copiable texto={datos.email || '—'} mono={false} /></div>
+            </div>
+
+            {/* Contraseña del panel: no es recuperable (hash) */}
+            <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-3">
+              <div className="label">Contraseña del panel</div>
+              {nuevaPass ? (
+                <>
+                  <Copiable texto={nuevaPass} />
+                  <p className="text-[11px] text-brand-600 dark:text-brand-400 mt-1.5">⚠️ Cópiala ahora: no se vuelve a mostrar.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-400 mb-2">
+                    Por seguridad se guarda encriptada y <b>no se puede recuperar</b>. Si el cliente la perdió, genera una nueva.
+                  </p>
+                  <button onClick={generarPassword} disabled={generando} className="btn-ghost !py-1.5 !px-2.5 text-xs disabled:opacity-60">
+                    {generando ? 'Generando…' : '🔑 Generar contraseña nueva'}
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Datos de transmisión según el servicio */}
+            {datos.tipo === 'video' ? (
+              datos.video ? (
+                <div className="space-y-2">
+                  <div className="label">Transmitir en vivo (OBS / vMix)</div>
+                  <Copiable texto={datos.video.servidor_rtmp} />
+                  <Copiable texto={datos.video.clave} />
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">No se pudieron leer los datos de conexión del nodo de video.</p>
+              )
+            ) : (
+              <div className="space-y-2">
+                <div className="label">Transmitir en vivo (encoder / DJ)</div>
+                {datos.audio?.dj_usuario && <Copiable texto={`Usuario: ${datos.audio.dj_usuario}`} />}
+                {datos.audio?.dj_password && <Copiable texto={`Clave: ${datos.audio.dj_password}`} />}
+                {datos.audio?.dj_puerto && <Copiable texto={`Puerto: ${datos.audio.dj_puerto}`} />}
+                {!datos.audio?.dj_usuario && <p className="text-xs text-gray-400">Esta radio aún no tiene datos de DJ guardados.</p>}
+                {datos.audio?.url_streaming && (
+                  <>
+                    <div className="label" style={{ marginTop: 10 }}>URL de escucha</div>
+                    <Copiable texto={datos.audio.url_streaming} />
+                  </>
+                )}
+              </div>
+            )}
+
+            <button onClick={() => navigator.clipboard?.writeText(mensajeCliente())} className="btn-primary w-full text-sm">
+              📋 Copiar mensaje listo para enviar
+            </button>
+          </div>
+        )}
       </Modal>
 
       {msg && msg.type === 'ok' && (

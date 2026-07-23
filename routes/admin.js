@@ -347,6 +347,55 @@ router.post('/clientes/:id/reactivar', requireAdmin, wrap(async (req, res) => {
   res.json({ message: 'Cliente reactivado ✅' });
 }));
 
+/**
+ * GET /admin/clientes/:id/accesos — todo lo que se le puede enviar al cliente.
+ * OJO: la contraseña del PANEL no viaja aquí porque se guarda con hash bcrypt
+ * (no es recuperable). Para eso está POST /clientes/:id/password, que genera
+ * una nueva y la muestra una sola vez.
+ */
+router.get('/clientes/:id/accesos', requireAdmin, wrap(async (req, res) => {
+  const cliente = await clienteModel.findById(Number(req.params.id));
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  const user = await userModel.findById(cliente.user_id);
+  const tipo = cliente.tipo || 'audio';
+
+  const salida = {
+    nombre_empresa: cliente.nombre_empresa,
+    tipo,
+    usuario: user?.username || null,
+    email: user?.email || null,
+    password_recuperable: false,   // se guarda con hash, no se puede leer
+  };
+
+  if (tipo === 'video') {
+    const v = await nodoVideoDe(cliente);
+    salida.video = v ? await v.nodo.conexion(v.user) : null;
+  } else {
+    salida.audio = {
+      url_streaming: cliente.url_streaming || null,
+      dj_puerto: cliente.dj_puerto || null,
+      dj_usuario: cliente.dj_usuario || null,
+      dj_password: cliente.dj_password || null,
+    };
+  }
+  res.json(salida);
+}));
+
+/**
+ * POST /admin/clientes/:id/password — genera una contraseña nueva para el
+ * panel del cliente y la devuelve UNA vez (para copiársela y enviársela).
+ */
+router.post('/clientes/:id/password', requireAdmin, wrap(async (req, res) => {
+  const cliente = await clienteModel.findById(Number(req.params.id));
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+  const nueva = req.body?.password || crypto.randomBytes(6).toString('hex');
+  if (String(nueva).length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+  await userModel.updatePassword(cliente.user_id, await bcrypt.hash(String(nueva), 10));
+  const user = await userModel.findById(cliente.user_id);
+  res.json({ message: 'Contraseña actualizada ✅', usuario: user?.username, password: nueva });
+}));
+
 router.get('/clientes/:id/estacion', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
