@@ -17,7 +17,9 @@ const DIRS = [
   process.env.CONF_DIR || '/opt/nginx-panel/conf',
 ];
 
-const BLOQUE = `
+const AGENTE = process.env.PUERTO_AGENTE || '3000';
+
+const OPTIONS_BLOQUE = `
         # Preflight CORS de la subida (la barra de progreso lo hace obligatorio)
         if ($request_method = OPTIONS) {
             add_header 'Access-Control-Allow-Origin' '*' always;
@@ -28,6 +30,20 @@ const BLOQUE = `
             add_header 'Content-Type' 'text/plain';
             return 204;
         }
+`;
+
+// Cuentas viejas (migradas de VDO) que nunca tuvieron la subida directa:
+// hay que agregarles la location entera, no solo el preflight.
+const LOCATION_COMPLETA = `
+    # --- Subida directa del navegador al agente (archivos grandes) ---
+    location /_subir {${OPTIONS_BLOQUE}
+        proxy_pass http://127.0.0.1:${AGENTE}/subir;
+        proxy_request_buffering off;      # pasa el archivo directo, sin bufferear GB
+        proxy_http_version 1.1;
+        proxy_read_timeout 3600s;         # subidas largas
+        client_max_body_size 0;           # sin límite de nginx (lo pone el agente)
+        add_header 'Access-Control-Allow-Origin' '*' always;
+    }
 `;
 
 let parcheados = 0;
@@ -46,16 +62,27 @@ for (const dir of DIRS) {
     let txt;
     try { txt = fs.readFileSync(ruta, 'utf8'); } catch { continue; }
 
-    if (!txt.includes('location /_subir')) { saltados++; continue; }
     if (txt.includes('$request_method = OPTIONS')) {
       console.log(`  ya estaba: ${f}`);
       saltados++;
       continue;
     }
 
+    let nuevo;
+    if (txt.includes('location /_subir')) {
+      // Ya tiene la subida: solo le falta responder el preflight
+      nuevo = txt.replace(/location \/_subir\s*\{/, (m) => m + OPTIONS_BLOQUE);
+    } else {
+      // Cuenta vieja sin subida directa: se le agrega la location completa
+      // justo antes de la llave que cierra el bloque server { }
+      const cierre = txt.lastIndexOf('}');
+      if (cierre === -1) { console.log(`  ⚠️ sin bloque server: ${f}`); saltados++; continue; }
+      nuevo = txt.slice(0, cierre) + LOCATION_COMPLETA + txt.slice(cierre);
+    }
+
     // Respaldo antes de tocar nada
     fs.writeFileSync(ruta + '.bak', txt);
-    fs.writeFileSync(ruta, txt.replace(/location \/_subir \s*\{/, (m) => m + BLOQUE));
+    fs.writeFileSync(ruta, nuevo);
     console.log(`  parcheado: ${f}   (respaldo en ${f}.bak)`);
     parcheados++;
   }
