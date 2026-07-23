@@ -41,6 +41,20 @@ server {
 
     # --- Subida directa del navegador al agente (archivos grandes) ---
     location /_subir {
+        # El panel vive en otro dominio, así que esta subida es cross-origin.
+        # Al usar barra de progreso (listener en xhr.upload) deja de ser una
+        # "simple request" y el navegador manda un OPTIONS antes del POST.
+        # Hay que responderlo AQUÍ: si llega al agente, no contesta CORS.
+        if ($request_method = OPTIONS) {
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'POST, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'Content-Type, Authorization, Range' always;
+            add_header 'Access-Control-Max-Age' 86400 always;
+            add_header 'Content-Length' 0;
+            add_header 'Content-Type' 'text/plain';
+            return 204;
+        }
+
         proxy_pass http://127.0.0.1:{{PUERTO_AGENTE}}/subir;
         proxy_request_buffering off;      # pasa el archivo directo, sin bufferear GB
         proxy_http_version 1.1;
@@ -49,6 +63,7 @@ server {
         add_header 'Access-Control-Allow-Origin' '*' always;
     }
 }
-# Los add_header 'always' de cada location ya ponen CORS en todas las
-# respuestas. No hace falta un bloque OPTIONS aparte: pedir segmentos HLS
-# con Range es una "simple request" y no dispara preflight.
+# Los add_header 'always' de cada location ponen CORS en las respuestas.
+# Pedir segmentos HLS con Range es una "simple request" y no dispara preflight;
+# la SUBIDA sí lo dispara (por la barra de progreso) y por eso /_subir tiene
+# su bloque OPTIONS.
