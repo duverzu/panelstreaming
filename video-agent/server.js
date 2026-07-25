@@ -262,6 +262,10 @@ app.get('/cuentas/:user/consumo', wrap(async (req, res) => {
 //  VIVO — nginx pregunta aquí antes de dejar transmitir
 // ==================================================================
 
+// Reanudaciones del 24/7 pendientes, por cuenta. Se cancelan si el vivo
+// reconecta antes del plazo (evita que el 24/7 reviva en medio del directo).
+const reanudar24_7 = new Map();
+
 /**
  * POST /rtmp/publicar — lo llama nginx (on_publish) cuando alguien conecta
  * su encoder. El cliente publica en la aplicación `<user>live` usando SU
@@ -296,6 +300,11 @@ app.post('/rtmp/publicar', wrap(async (req, res) => {
   // stream ('Already publishing' en nginx-rtmp) y la transmisión se corta.
   // Al terminar el vivo (/rtmp/fin) se reenciende el 24/7.
   try {
+    // Cancelar una reanudación pendiente: el vivo sigue en el aire, así que el
+    // 24/7 NO debe revivir (esto pasaba al reconectar el encoder).
+    const pend = reanudar24_7.get(user);
+    if (pend) { clearTimeout(pend); reanudar24_7.delete(user); }
+
     if (webtv.estado(user).emitiendo) {
       webtv.detener(user);
       console.log(`[rtmp] ${user}: 24/7 en pausa mientras dura el vivo`);
@@ -312,9 +321,13 @@ app.post('/rtmp/fin', wrap(async (req, res) => {
   if (!user) return;
   console.log(`[rtmp] ${user}: terminó la transmisión en vivo`);
 
-  // Vuelve la emisión 24/7. Se espera un momento por si el encoder tuvo un
-  // corte breve y reconecta enseguida (evita apagar/prender en cascada).
-  setTimeout(async () => {
+  // Vuelve la emisión 24/7, pero con espera: si el encoder reconecta enseguida
+  // (corte breve), el /rtmp/publicar cancela este temporizador y el 24/7 NO
+  // revive en medio del vivo. Guardamos el timer por cuenta para poder cancelarlo.
+  const anterior = reanudar24_7.get(user);
+  if (anterior) clearTimeout(anterior);
+  reanudar24_7.set(user, setTimeout(async () => {
+    reanudar24_7.delete(user);
     try {
       if (webtv.estado(user).emitiendo) return;      // ya volvió por otra vía
       const lista = await cuentas();
@@ -325,7 +338,7 @@ app.post('/rtmp/fin', wrap(async (req, res) => {
         console.log(`[rtmp] ${user}: 24/7 reanudado`);
       }
     } catch (e) { console.error('[rtmp] reanudar 24/7:', e.message); }
-  }, 4000);
+  }, 6000));
 }));
 
 
