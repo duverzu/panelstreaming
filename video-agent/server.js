@@ -290,14 +290,42 @@ app.post('/rtmp/publicar', wrap(async (req, res) => {
   }
 
   console.log(`[rtmp] ${user}: al aire desde ${req.body?.addr}`);
+
+  // El vivo TOMA el canal: apagamos la emisión 24/7 para que su ffmpeg deje de
+  // empujar a <user>hybrid/play. Si no, el vivo y el 24/7 pelean por el mismo
+  // stream ('Already publishing' en nginx-rtmp) y la transmisión se corta.
+  // Al terminar el vivo (/rtmp/fin) se reenciende el 24/7.
+  try {
+    if (webtv.estado(user).emitiendo) {
+      webtv.detener(user);
+      console.log(`[rtmp] ${user}: 24/7 en pausa mientras dura el vivo`);
+    }
+  } catch (e) { console.error('[rtmp] pausar 24/7:', e.message); }
+
   res.status(200).end();
 }));
 
 /** POST /rtmp/fin — nginx avisa que la transmisión terminó (on_publish_done). */
 app.post('/rtmp/fin', wrap(async (req, res) => {
   const user = String(req.body?.app || '').replace(/live$/, '');
-  if (user) console.log(`[rtmp] ${user}: terminó la transmisión en vivo`);
-  res.status(200).end();
+  res.status(200).end();          // no hacemos esperar a nginx
+  if (!user) return;
+  console.log(`[rtmp] ${user}: terminó la transmisión en vivo`);
+
+  // Vuelve la emisión 24/7. Se espera un momento por si el encoder tuvo un
+  // corte breve y reconecta enseguida (evita apagar/prender en cascada).
+  setTimeout(async () => {
+    try {
+      if (webtv.estado(user).emitiendo) return;      // ya volvió por otra vía
+      const lista = await cuentas();
+      const c = lista.find((x) => x.user === user);
+      const puertos = await puertosDe(user);
+      if (c && puertos.rtmp) {
+        await webtv.iniciar(user, { dirCuenta: c.dir, puertoRtmp: Number(puertos.rtmp) });
+        console.log(`[rtmp] ${user}: 24/7 reanudado`);
+      }
+    } catch (e) { console.error('[rtmp] reanudar 24/7:', e.message); }
+  }, 4000);
 }));
 
 
