@@ -46,12 +46,23 @@ async function persistir() {
 }
 
 /** Reenciende al arrancar los canales que estaban al aire (tras un reinicio). */
-async function restaurar() {
+async function restaurar(hayVivo) {
   let datos = {};
   try { datos = JSON.parse(await fsp.readFile(ESTADO_FILE, 'utf8')); } catch { return; }
   const users = Object.keys(datos);
   if (users.length) console.log(`[webtv] restaurando ${users.length} canal(es): ${users.join(', ')}`);
   for (const [user, o] of Object.entries(datos)) {
+    // Si la cuenta está EN VIVO ahora mismo (p.ej. el agente reinició durante
+    // un directo), NO arrancar el 24/7: pelearían por hybrid/play. Volverá solo
+    // cuando el vivo termine (on_publish_done).
+    if (hayVivo) {
+      try {
+        if (await hayVivo(user, o.dirCuenta)) {
+          console.log(`[webtv] ${user}: en vivo ahora, no se arranca el 24/7`);
+          continue;
+        }
+      } catch (_) { /* si no se puede saber, se arranca normal */ }
+    }
     // Si un ffmpeg de una ejecución anterior sigue empujando a este canal,
     // matarlo antes de arrancar el nuevo (evita dos emisores por canal).
     await matarHuerfanos(user).catch(() => {});

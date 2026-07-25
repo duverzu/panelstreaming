@@ -644,7 +644,12 @@ app.use((err, req, res, next) => {
 app.listen(PORT, HOST, () => {
   console.log(`🎬 Agente de video escuchando en ${HOST}:${PORT}`);
   // Reencender los canales 24/7 que estaban al aire (sobrevive reinicios)
-  webtv.restaurar().catch((e) => console.error('[webtv] restaurar:', e.message));
+  // Al restaurar, no arrancar el 24/7 de una cuenta que está EN VIVO ahora
+  // (el HLS del vivo sigue vivo aunque el agente haya reiniciado).
+  const hayVivo = async (user, dir) => {
+    try { return (await estaAlAire(dir)).fuente === 'live-streaming'; } catch { return false; }
+  };
+  webtv.restaurar(hayVivo).catch((e) => console.error('[webtv] restaurar:', e.message));
   webtv.iniciarPlanificador();   // cambia de lista sola según la programación por horario
   if (HOST !== '127.0.0.1') console.warn('   ⚠️  Expuesto fuera del servidor: asegúrate de tener firewall');
   console.log(`   Cuentas en: ${BASE}   ·   Config nginx: ${CONF_DIR}`);
