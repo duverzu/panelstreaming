@@ -27,9 +27,9 @@ function getSecret(role) {
  * @param {'admin'|'cliente'} role
  * @param {object} [extra] - datos extra a incluir (ej: cliente_id)
  */
-function generateToken(userId, role, extra = {}) {
+function generateToken(userId, role, extra = {}, opts = {}) {
   const payload = { sub: userId, role, ...extra };
-  return jwt.sign(payload, getSecret(role), { expiresIn: EXPIRES_IN });
+  return jwt.sign(payload, getSecret(role), { expiresIn: opts.expiresIn || EXPIRES_IN });
 }
 
 /**

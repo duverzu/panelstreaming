@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './auth';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import SSO from './pages/SSO';
 import Aprende from './pages/Aprende';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminDocumentacion from './pages/admin/Documentacion';
@@ -68,6 +69,9 @@ export default function App() {
         path="/login"
         element={token ? <Navigate to={home} replace /> : <Login />}
       />
+
+      {/* Entrada por SSO desde el panel de facturación (canjea el token corto) */}
+      <Route path="/sso" element={<SSO />} />
 
       {/* Panel Admin */}
       <Route path="/admin" element={<Protected role="admin"><Layout /></Protected>}>

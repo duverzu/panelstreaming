@@ -25,6 +25,7 @@ const servidorModel = require('../models/servidorModel');
 const userModel = require('../models/userModel');
 const azuracast = require('../services/azuracast');
 const { agregarOyentes } = require('../services/stats');
+const { generateToken } = require('../services/auth');
 
 const router = express.Router();
 router.use(apiKeyAuth);
@@ -293,6 +294,25 @@ router.post('/servicios/:id/reactivar', wrap(async (req, res) => {
     try { await az.restartStation(c.azuracast_station_id); } catch (_) {}
   }
   res.json({ ok: true, message: 'Servicio reactivado' });
+}));
+
+/**
+ * POST /api/provision/servicios/:id/login — SSO: genera un enlace de acceso
+ * de un solo uso para entrar al panel del cliente desde el panel de facturación
+ * (como el "Login to Panel" de WHMCS).
+ *
+ * Seguridad: el token va en el FRAGMENTO de la URL (#), vive 5 minutos, y solo
+ * sirve para canjearse por una sesión (no es la sesión en sí). No se entrega
+ * para cuentas suspendidas.
+ */
+router.post('/servicios/:id/login', wrap(async (req, res) => {
+  const c = await clienteModel.findById(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Servicio no encontrado' });
+  if (!c.activo) return res.status(403).json({ error: 'Servicio suspendido: reactívalo antes de entrar' });
+
+  const token = generateToken(c.user_id, 'cliente', { cliente_id: c.id, sso: true }, { expiresIn: '5m' });
+  const base = String(process.env.PANEL_URL || '').replace(/\/$/, '');
+  res.json({ ok: true, url: `${base}/sso#t=${token}`, expira_en: '5 minutos' });
 }));
 
 /** POST /api/provision/servicios/:id/plan — cambia el plan (ChangePackage). */

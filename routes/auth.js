@@ -14,12 +14,16 @@ const bcrypt = require('bcryptjs');
 const userModel = require('../models/userModel');
 const clienteModel = require('../models/clienteModel');
 const resellerModel = require('../models/resellerModel');
-const { generateToken } = require('../services/auth');
+const { generateToken, verifyToken } = require('../services/auth');
+const rateLimit = require('../middleware/rateLimit');
 
 const router = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-router.post('/login', wrap(async (req, res) => {
+// Máx 10 intentos por usuario por minuto (freno a la fuerza bruta de claves).
+const limiteLogin = rateLimit({ max: 10, ventanaMs: 60000, clave: (req) => (req.body?.usuario || req.body?.email || req.ip) });
+
+router.post('/login', limiteLogin, wrap(async (req, res) => {
   // Se entra con USUARIO. Se acepta `email` por compatibilidad con cuentas viejas
   // (solo funciona si ese correo tiene una única cuenta; si tiene varias radios
   // el correo es ambiguo y debe usar su usuario).
@@ -75,6 +79,37 @@ router.post('/login', wrap(async (req, res) => {
       cliente_id: cliente.id,
       nombre_empresa: cliente.nombre_empresa,
       tipo: cliente.tipo || 'audio',
+    },
+  });
+}));
+
+/**
+ * POST /api/auth/sso — canjea un token SSO corto (generado por el panel de
+ * facturación vía /api/provision/servicios/:id/login) por una sesión normal
+ * de cliente. El token corto vive pocos minutos y solo sirve para esto.
+ */
+router.post('/sso', rateLimit({ max: 30, ventanaMs: 60000 }), wrap(async (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ error: 'token requerido' });
+
+  let payload;
+  try { payload = verifyToken(token, 'cliente'); }
+  catch { return res.status(401).json({ error: 'Enlace inválido o vencido. Pide uno nuevo.' }); }
+  if (!payload.sso) return res.status(401).json({ error: 'Token no válido para inicio de sesión' });
+
+  const cliente = await clienteModel.findById(payload.cliente_id);
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  if (!cliente.activo) return res.status(403).json({ error: 'Cuenta desactivada. Reactívala para entrar.' });
+  const user = await userModel.findById(cliente.user_id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+  const sesion = generateToken(cliente.user_id, 'cliente', { cliente_id: cliente.id });
+  res.json({
+    token: sesion,
+    role: 'cliente',
+    user: {
+      id: user.id, username: user.username, email: user.email, role: 'cliente',
+      cliente_id: cliente.id, nombre_empresa: cliente.nombre_empresa, tipo: cliente.tipo || 'audio',
     },
   });
 }));

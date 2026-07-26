@@ -34,6 +34,15 @@ export function AuthProvider({ children }) {
     setSession({ token: null, role: null, user: null, impersonating: false });
   }
 
+  /** SSO: canjea un token corto (del panel de facturación) por una sesión. */
+  async function ssoLogin(token) {
+    const data = await apiFetch('/auth/sso', { method: 'POST', body: JSON.stringify({ token }) });
+    store.clearBackup();
+    store.setSession({ token: data.token, role: data.role, user: data.user });
+    setSession({ token: data.token, role: data.role, user: data.user, impersonating: false });
+    return data.role;
+  }
+
   /** Admin o revendedor entra al panel de un cliente para revisar. */
   async function impersonate(clienteId) {
     const base = store.getRole() === 'reseller' ? '/reseller' : '/admin';
@@ -63,7 +72,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthCtx.Provider value={{ ...session, login, logout, impersonate, impersonateReseller, stopImpersonating }}>
+    <AuthCtx.Provider value={{ ...session, login, logout, ssoLogin, impersonate, impersonateReseller, stopImpersonating }}>
       {children}
     </AuthCtx.Provider>
   );
