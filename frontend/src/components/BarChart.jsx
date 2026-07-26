@@ -10,7 +10,7 @@ export default function BarChart({ data = [], height = 160, unidad = '' }) {
   const conDatos = data.some((d) => d.valor > 0);
 
   if (!conDatos) {
-    return <div className="grid place-items-center text-sm text-gray-400" style={{ height }}>Sin oyentes registrados todavía</div>;
+    return <div className="grid place-items-center text-sm text-gray-400" style={{ height }}>Sin consumo registrado todavía</div>;
   }
 
   return (
