@@ -79,7 +79,11 @@ async function muestrear() {
  * VPS (lo mismo que factura Hostinger), no una estimación por oyentes.
  */
 async function muestrearVideo(s) {
-  const nodo = videoNode.crearCliente(s.url, s.api_key);
+  // findAllConUso NO trae api_key (su salida va al navegador). Para hablar con
+  // el agente hace falta el token → se lee con findById (solo backend).
+  const full = await servidorModel.findById(s.id);
+  if (!full || !full.api_key) return;
+  const nodo = videoNode.crearCliente(full.url, full.api_key);
   const red = await nodo.redNodo();
   if (!red || typeof red.tx_bytes !== 'number') return;   // nodo caído o sin dato
 
