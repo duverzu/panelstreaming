@@ -420,9 +420,26 @@ router.get('/servicios/:id', wrap(async (req, res) => {
   const c = await clienteModel.findById(Number(req.params.id));
   if (!c) return res.status(404).json({ error: 'Servicio no encontrado' });
   const { oyentes_totales, al_aire } = await agregarOyentes([c]);
+
+  // URL pública (vitrina/marca blanca): la que se comparte para escuchar.
+  let url_publica = null;
+  if (c.servidor_id && c.short_name) {
+    const s = await servidorModel.findById(c.servidor_id);
+    const base = s && (s.url_publica || s.url);
+    if (base) url_publica = `${String(base).replace(/\/$/, '')}/public/${c.short_name}`;
+  }
+
   res.json({
-    ok: true, servicio_id: c.id, nombre: c.nombre_empresa, plan: c.plan,
-    activo: c.activo, al_aire: al_aire > 0, oyentes: oyentes_totales, url_streaming: c.url_streaming,
+    ok: true,
+    servicio_id: c.id,
+    nombre: c.nombre_empresa,
+    plan: c.plan,
+    activo: c.activo,                 // false = suspendido → usar /reactivar
+    al_aire: al_aire > 0,
+    oyentes: oyentes_totales,
+    url_streaming: c.url_streaming,   // enlace directo del stream (para players)
+    url_publica,                      // página pública para compartir (vitrina)
+    short_name: c.short_name,
   });
 }));
 
