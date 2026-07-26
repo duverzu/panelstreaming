@@ -635,6 +635,28 @@ app.delete('/cuentas/:user/videos/:nombre', wrap(async (req, res) => {
   res.json(r);
 }));
 
+/**
+ * GET /nodo/red — contador de tráfico de la(s) interfaz(es) de red del nodo,
+ * en bytes acumulados desde el arranque (como el "Ancho de banda" de Hostinger).
+ * El Guardián de banda del panel lo muestrea cada pocos minutos y registra el
+ * delta, así el VPS de video aparece en el medidor igual que los de audio.
+ */
+app.get('/nodo/red', wrap(async (req, res) => {
+  const txt = await fsp.readFile('/proc/net/dev', 'utf8');
+  let rx = 0, tx = 0, iface = null;
+  for (const linea of txt.split('\n')) {
+    // iface: rx_bytes (7 campos rx) ... tx_bytes ...
+    const m = linea.match(/^\s*([^:]+):\s*(\d+)(?:\s+\d+){7}\s+(\d+)/);
+    if (!m) continue;
+    const nombre = m[1].trim();
+    if (nombre === 'lo') continue;                 // ignora loopback
+    rx += Number(m[2]);
+    tx += Number(m[3]);
+    if (!iface) iface = nombre;
+  }
+  res.json({ ok: true, iface, rx_bytes: rx, tx_bytes: tx });
+}));
+
 app.use((req, res) => res.status(404).json({ error: `Ruta no encontrada: ${req.method} ${req.path}` }));
 app.use((err, req, res, next) => {
   console.error('[agente]', err.message);

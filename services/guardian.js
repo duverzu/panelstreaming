@@ -14,6 +14,10 @@ const consumoModel = require('../models/consumoModel');
 const consumoClienteModel = require('../models/consumoClienteModel');
 const clienteModel = require('../models/clienteModel');
 const azuracast = require('./azuracast');
+const videoNode = require('./videoNode');
+
+// Última lectura del contador de red por nodo de video (para calcular el delta).
+const ultimaRed = new Map();
 
 const BITRATE_KBPS = Number(process.env.BANDA_BITRATE_KBPS || 128); // promedio estimado
 const INTERVALO_MS = Number(process.env.BANDA_INTERVALO_MS || 5 * 60 * 1000); // 5 min
@@ -31,9 +35,12 @@ async function muestrear() {
 
   for (const s of servidores) {
     if (!s.activo) continue;
-    // Los nodos de video NO hablan el API de AzuraCast: se miden aparte.
-    // Sin este filtro, agregar un nodo de video llenaría el log de errores.
-    if (s.tipo && s.tipo !== 'audio') continue;
+    // Los nodos de video NO hablan el API de AzuraCast: se miden por su
+    // contador de red (bytes reales servidos por el nodo), no por oyentes.
+    if (s.tipo && s.tipo !== 'audio') {
+      await muestrearVideo(s).catch((e) => console.error('[guardian] video', s.nombre, e.message));
+      continue;
+    }
     try {
       const az = await azuracast.paraServidorId(s.id);
       const np = await az.getNowPlayingAll();
@@ -64,6 +71,26 @@ async function muestrear() {
       console.error('[guardian]', s.nombre, e.message);
     }
   }
+}
+
+/**
+ * Muestra el consumo de un nodo de VIDEO leyendo su contador de red y
+ * registrando el delta desde la última muestra. Es tráfico REAL servido por el
+ * VPS (lo mismo que factura Hostinger), no una estimación por oyentes.
+ */
+async function muestrearVideo(s) {
+  const nodo = videoNode.crearCliente(s.url, s.api_key);
+  const red = await nodo.redNodo();
+  if (!red || typeof red.tx_bytes !== 'number') return;   // nodo caído o sin dato
+
+  const prev = ultimaRed.get(s.id);
+  ultimaRed.set(s.id, red.tx_bytes);
+  if (prev == null) return;                                // primera muestra: fija la base
+
+  // Delta normal; si el contador bajó (el nodo se reinició) contamos desde 0.
+  let delta = red.tx_bytes - prev;
+  if (delta < 0) delta = red.tx_bytes;
+  if (delta > 0) await consumoModel.registrar(s.id, delta);
 }
 
 function iniciar() {

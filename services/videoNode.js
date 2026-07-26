@@ -45,6 +45,11 @@ function crearCliente(baseURL, token) {
       try { return (await api.get('/health')).data; } catch (e) { return fallo('salud', e); }
     },
 
+    /** Contador de tráfico de red del nodo (bytes acumulados desde el arranque). */
+    redNodo: async () => {
+      try { return (await api.get('/nodo/red')).data; } catch (e) { return fallo('redNodo', e); }
+    },
+
     /** Cuentas del nodo con su espacio, videos y si están al aire. */
     cuentas: async () => {
       try { return (await api.get('/cuentas')).data?.cuentas || []; } catch (e) { return fallo('cuentas', e) || []; }
