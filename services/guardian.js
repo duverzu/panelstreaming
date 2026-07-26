@@ -94,6 +94,9 @@ async function muestrearVideo(s) {
 }
 
 function iniciar() {
+  // Una muestra al arrancar fija de inmediato la base de los nodos de video
+  // (así el primer dato aparece a la siguiente muestra, no dos intervalos después).
+  muestrear().catch((e) => console.error('[guardian]', e.message));
   setInterval(() => muestrear().catch((e) => console.error('[guardian]', e.message)), INTERVALO_MS);
   console.log(`🛡️  Guardián de banda activo (muestra cada ${INTERVALO_MS / 60000} min, ~${BITRATE_KBPS} kbps)`);
 }
