@@ -529,11 +529,12 @@ router.get('/video', requireCliente, wrap(async (req, res) => {
   if (!ctx) return res.status(400).json({ error: 'Tu cuenta no es de video' });
 
   const user = cliente.short_name;
-  const [detalle, consumo, conexion, plan] = await Promise.all([
+  const [detalle, consumo, conexion, plan, vw] = await Promise.all([
     ctx.nodo.cuenta(user),
     ctx.nodo.consumo(user, 30),
     ctx.nodo.conexion(user),
     planModel.findByNombre(cliente.plan),
+    ctx.nodo.viewers(),
   ]);
   if (!detalle) return res.status(502).json({ error: 'No se pudo consultar tu canal ahora mismo. Intenta en un momento.' });
 
@@ -544,6 +545,7 @@ router.get('/video', requireCliente, wrap(async (req, res) => {
   res.json({
     nombre: cliente.nombre_empresa,
     al_aire: detalle.al_aire,
+    viewers: vw?.cuentas?.[user] || 0,     // espectadores en vivo ahora
     videos: (detalle.videos || []).map((v) => ({
       nombre: v.nombre, tam_mb: +(v.bytes / 1048576).toFixed(1), modificado: v.modificado,
     })),

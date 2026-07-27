@@ -641,6 +641,55 @@ app.delete('/cuentas/:user/videos/:nombre', wrap(async (req, res) => {
  * El Guardián de banda del panel lo muestrea cada pocos minutos y registra el
  * delta, así el VPS de video aparece en el medidor igual que los de audio.
  */
+// ── Espectadores en vivo (HLS) ─────────────────────────────────────
+// Un espectador pide el .m3u8 y sus segmentos .ts cada pocos segundos.
+// Contamos IPs únicas que pidieron HLS en los últimos `ventana` segundos.
+function tiempoDeLinea(linea) {
+  const m = linea.match(/\[(\d{2})\/(\w{3})\/(\d{4}):(\d{2}):(\d{2}):(\d{2})\s+([+-]\d{2})(\d{2})\]/);
+  if (!m) return null;
+  const mes = MESES[m[2]];
+  if (mes === undefined) return null;
+  const iso = `${m[3]}-${String(mes + 1).padStart(2, '0')}-${m[1]}T${m[4]}:${m[5]}:${m[6]}${m[7]}:${m[8]}`;
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? null : t;
+}
+
+async function viewersDeLog(archivo, ventanaSeg = 60) {
+  let fd;
+  try {
+    const st = await fsp.stat(archivo);
+    const inicio = Math.max(0, st.size - 512 * 1024);   // últimos 512 KB alcanzan para 1 min
+    const buf = Buffer.alloc(st.size - inicio);
+    fd = await fsp.open(archivo, 'r');
+    await fd.read(buf, 0, buf.length, inicio);
+    const corte = Date.now() - ventanaSeg * 1000;
+    const ips = new Set();
+    for (const linea of buf.toString('utf8').split('\n')) {
+      if (!linea.includes('.m3u8') && !linea.includes('.ts')) continue;   // solo HLS
+      const t = tiempoDeLinea(linea);
+      if (t === null || t < corte) continue;
+      const ip = linea.split(' ')[0];
+      if (ip && ip !== '127.0.0.1') ips.add(ip);
+    }
+    return ips.size;
+  } catch { return 0; }
+  finally { if (fd) await fd.close().catch(() => {}); }
+}
+
+/** GET /viewers — espectadores en vivo por cuenta (IPs únicas de HLS, últimos 60s). */
+app.get('/viewers', wrap(async (req, res) => {
+  const ventana = Math.min(300, Math.max(15, Number(req.query.ventana) || 60));
+  const lista = await cuentas();
+  const porCuenta = {};
+  let total = 0;
+  await Promise.all(lista.map(async (c) => {
+    const n = await viewersDeLog(path.join(c.dir, 'logs', 'access.log'), ventana);
+    porCuenta[c.user] = n;
+    total += n;
+  }));
+  res.json({ ok: true, ventana, total, cuentas: porCuenta });
+}));
+
 app.get('/nodo/red', wrap(async (req, res) => {
   const txt = await fsp.readFile('/proc/net/dev', 'utf8');
   let rx = 0, tx = 0, iface = null;

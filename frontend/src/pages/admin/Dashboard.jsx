@@ -28,6 +28,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [clientes, setClientes] = useState([]);
   const [banda, setBanda] = useState([]);
+  const [videoViewers, setVideoViewers] = useState(null);
   const [monitorId, setMonitorId] = useState('');
 
   useEffect(() => {
@@ -35,6 +36,7 @@ export default function AdminDashboard() {
       apiFetch('/admin/estadisticas').then(setStats).catch(() => {});
       apiFetch('/admin/clientes').then((c) => setClientes(c.clientes)).catch(() => {});
       apiFetch('/admin/banda').then((d) => setBanda(d.servidores || [])).catch(() => {});
+      apiFetch('/admin/video/viewers').then(setVideoViewers).catch(() => {});
     };
     load();
     const id = setInterval(load, 15000);
@@ -91,7 +93,7 @@ export default function AdminDashboard() {
             </span>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Metric label="Viewers en vivo" value="—" hint="próximamente" />
+            <Metric label="Viewers en vivo" value={videoViewers?.total ?? 0} hint="todos los canales" destacado />
             <Metric label="Canales" value={video.length} hint={`${activos(video)} activos`} />
             <Metric label="Clientes de video" value={video.length} hint={`${activos(video)} activos`} />
             <Metric label="Transferencia" value={tam(transferVideo)} hint="este mes" />

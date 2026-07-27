@@ -492,6 +492,35 @@ router.get('/estadisticas', requireAdmin, wrap(async (req, res) => {
   res.json({ ...s, oyentes_totales, al_aire, ranking });
 }));
 
+/**
+ * GET /admin/video/viewers — espectadores en vivo de video: total, por canal y
+ * por nodo. Consulta cada nodo de video UNA vez (el agente devuelve todas sus
+ * cuentas), y cruza con los clientes para nombrarlos.
+ */
+router.get('/video/viewers', requireAdmin, wrap(async (req, res) => {
+  const clientes = (await clienteModel.findAllWithEmail()).filter((c) => c.tipo === 'video' && c.servidor_id);
+  const idsNodos = [...new Set(clientes.map((c) => c.servidor_id))];
+
+  const porNodo = new Map();
+  await Promise.all(idsNodos.map(async (sid) => {
+    try {
+      const s = await servidorModel.findById(sid);
+      if (!s || s.tipo !== 'video') return;
+      const r = await videoNode.crearCliente(s.url, s.api_key).viewers();
+      porNodo.set(sid, r?.cuentas || {});
+    } catch (_) { /* nodo caído */ }
+  }));
+
+  let total = 0;
+  const canales = clientes.map((c) => {
+    const n = porNodo.get(c.servidor_id)?.[c.short_name] || 0;
+    total += n;
+    return { cliente_id: c.id, nombre: c.nombre_empresa, short_name: c.short_name, viewers: n, activo: c.activo };
+  }).sort((a, b) => b.viewers - a.viewers);
+
+  res.json({ total, canales, nodos_consultados: porNodo.size });
+}));
+
 router.get('/estadisticas/cliente/:id', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });

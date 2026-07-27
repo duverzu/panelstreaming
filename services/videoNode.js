@@ -50,6 +50,11 @@ function crearCliente(baseURL, token) {
       try { return (await api.get('/nodo/red')).data; } catch (e) { return fallo('redNodo', e); }
     },
 
+    /** Espectadores en vivo por cuenta (IPs únicas de HLS en los últimos ~60s). */
+    viewers: async () => {
+      try { return (await api.get('/viewers')).data; } catch (e) { return fallo('viewers', e); }
+    },
+
     /** Cuentas del nodo con su espacio, videos y si están al aire. */
     cuentas: async () => {
       try { return (await api.get('/cuentas')).data?.cuentas || []; } catch (e) { return fallo('cuentas', e) || []; }

@@ -3,7 +3,7 @@ import StatTile from '../../../components/charts/StatTile';
 import DonutChart from '../../../components/charts/DonutChart';
 import AreaChart from '../../../components/charts/AreaChart';
 import VideoPlayer from '../../../components/VideoPlayer';
-import { IconServer, IconChart, IconPlaylist } from '../../../icons';
+import { IconServer, IconChart, IconPlaylist, IconMic } from '../../../icons';
 import { useVideo, gb } from './useVideo';
 
 export default function VideoInicio() {
@@ -51,9 +51,10 @@ export default function VideoInicio() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatTile label="Viewers en vivo" value={data.viewers ?? 0} icon={IconMic} color="brand" hint="ahora mismo" gradient />
         <StatTile label="Videos" value={data.videos.length} icon={IconPlaylist} color="violet" />
-        <StatTile label="Transferencia" value={`${data.consumo?.total_gb ?? 0} GB`} icon={IconChart} color="blue" hint="este mes" gradient />
+        <StatTile label="Transferencia" value={`${data.consumo?.total_gb ?? 0} GB`} icon={IconChart} color="blue" hint="este mes" />
         <StatTile label="Estado" value={data.al_aire ? 'Al aire' : 'Pausa'} icon={IconServer} color={data.al_aire ? 'brand' : 'amber'} />
       </div>
 

@@ -24,9 +24,9 @@ const MENUS = {
       { label: 'Clientes', icon: IconUsers, to: '/admin/clientes?tipo=video' },
       { label: 'Planes', icon: IconInvoice, to: '/admin/planes?tipo=video' },
       { label: 'Servidores', icon: IconServer, to: '/admin/servidores?tipo=video' },
+      { label: 'Estadísticas', icon: IconChart, to: '/admin/video/estadisticas' },
       { label: 'Documentación', icon: IconInvoice, to: '/admin/documentacion?tipo=video' },
       { label: 'Revendedores', icon: IconShare, soon: true },
-      { label: 'Estadísticas', icon: IconChart, soon: true },
     ]},
     { seccion: 'Sistema', items: [
       { label: 'Configuración', icon: IconSettings, to: '/admin/configuracion' },
