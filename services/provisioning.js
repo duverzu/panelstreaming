@@ -100,6 +100,11 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
   // 2b) Límites del plan
   try { await aplicarLimitesPlan(station.id, plan, az); } catch (e) { console.error('[provision] límites:', e.message); }
 
+  // 2c) Marca blanca: el texto que se ve en vivo (cuando el DJ no manda título)
+  // debe ser la radio, no "AzuraCast is Live!". backend_config se fusiona.
+  try { await az.updateStation(station.id, { backend_config: { live_broadcast_text: nombre_empresa } }); }
+  catch (e) { console.error('[provision] texto vivo:', e.message); }
+
   // 3) Cuenta DJ
   const dj = {};
   let djMount = '/';

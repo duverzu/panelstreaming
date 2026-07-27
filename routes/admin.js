@@ -88,6 +88,26 @@ router.post('/logout', requireAdmin, (req, res) => {
   res.json({ message: 'Sesión cerrada. Elimina el token en el cliente.' });
 });
 
+/**
+ * POST /admin/marca-blanca — pone el texto en vivo (live_broadcast_text) al
+ * nombre de cada radio, para que cuando el DJ transmita sin metadata NO salga
+ * "AzuraCast is Live!" en las apps. Solo actualiza config (sin reiniciar); se
+ * aplica al siguiente reinicio de cada estación.
+ */
+router.post('/marca-blanca', requireAdmin, wrap(async (req, res) => {
+  const clientes = await clienteModel.findAllWithEmail();
+  let ok = 0, fallos = 0;
+  for (const c of clientes) {
+    if (!c.azuracast_station_id || (c.tipo && c.tipo !== 'audio')) continue;
+    try {
+      const az = await azDe(c);
+      await az.updateStation(c.azuracast_station_id, { backend_config: { live_broadcast_text: c.nombre_empresa } });
+      ok++;
+    } catch (e) { console.error('[marca-blanca]', c.nombre_empresa, e.message); fallos++; }
+  }
+  res.json({ message: `Marca blanca aplicada a ${ok} radio(s)${fallos ? `, ${fallos} con error` : ''} ✅`, ok, fallos });
+}));
+
 /** POST /admin/password — el super admin cambia su propia contraseña. */
 router.post('/password', requireAdmin, wrap(async (req, res) => {
   const { actual, nueva } = req.body || {};

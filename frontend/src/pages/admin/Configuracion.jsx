@@ -8,7 +8,16 @@ export default function AdminConfiguracion() {
   const [form, setForm] = useState({ actual: '', nueva: '', repetir: '' });
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [marca, setMarca] = useState(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  async function aplicarMarca() {
+    setMarca({ cargando: true });
+    try {
+      const r = await apiFetch('/admin/marca-blanca', { method: 'POST' });
+      setMarca({ msg: r.message });
+    } catch (e) { setMarca({ msg: e.message, error: true }); }
+  }
 
   async function cambiar(e) {
     e.preventDefault();
@@ -50,6 +59,23 @@ export default function AdminConfiguracion() {
           {msg && <div className={`text-sm rounded-xl px-3 py-2 ${msg.type === 'ok' ? 'text-brand-700 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-400' : 'text-red-600 bg-red-50 dark:bg-red-500/10'}`}>{msg.text}</div>}
           <button className="btn-primary" disabled={saving}>{saving ? 'Guardando…' : 'Cambiar contraseña'}</button>
         </form>
+      </div>
+
+      {/* Marca blanca del metadata en vivo */}
+      <div className="card p-5">
+        <h2 className="font-semibold mb-1">Marca blanca (metadata en vivo)</h2>
+        <p className="text-sm text-gray-400 mb-3">
+          Cuando un DJ transmite sin enviar el título de la canción, las apps muestran
+          <b> "AzuraCast is Live!"</b>. Esto pone el <b>nombre de cada radio</b> en su lugar.
+          Las radios nuevas ya nacen así; esto lo aplica a <b>todas las existentes</b>.
+        </p>
+        <button onClick={aplicarMarca} disabled={marca?.cargando} className="btn-primary text-sm disabled:opacity-60">
+          {marca?.cargando ? 'Aplicando…' : 'Aplicar a todas las radios'}
+        </button>
+        {marca?.msg && (
+          <div className={`mt-3 text-sm rounded-xl px-3 py-2 ${marca.error ? 'text-red-600 bg-red-50 dark:bg-red-500/10' : 'text-brand-700 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-400'}`}>{marca.msg}</div>
+        )}
+        <p className="text-[11px] text-gray-400 mt-2">Se aplica al siguiente reinicio de cada estación (o reinicia la radio en Clientes para verlo ya).</p>
       </div>
 
       {/* Opciones futuras */}
