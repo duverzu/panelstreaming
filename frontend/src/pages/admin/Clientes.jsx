@@ -319,14 +319,14 @@ export default function AdminClientes() {
               ))}
             </select>
           </div>
-          <p className="text-xs text-gray-400">Se creará su estación en AzuraCast con los límites del plan y quedará al aire.</p>
+          <p className="text-xs text-gray-400">{esVideo ? 'Se creará su canal en el nodo de video con los límites del plan.' : 'Se creará su estación en AzuraCast con los límites del plan y quedará al aire.'}</p>
           {msg && msg.type === 'err' && (
             <div className="text-sm rounded-xl px-3 py-2 text-red-600 bg-red-50 dark:bg-red-500/10">{msg.text}</div>
           )}
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={() => setModalOpen(false)} className="btn-ghost flex-1">Cancelar</button>
             <button className="btn-primary flex-1" disabled={saving}>
-              <IconPlus width={16} height={16} /> {saving ? 'Creando…' : 'Crear radio'}
+              <IconPlus width={16} height={16} /> {saving ? 'Creando…' : T.crear}
             </button>
           </div>
         </form>

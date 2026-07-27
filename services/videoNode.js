@@ -56,6 +56,11 @@ function crearCliente(baseURL, token) {
     },
 
     /** Cuentas del nodo con su espacio, videos y si están al aire. */
+    /** Crea una cuenta nueva en el nodo (asigna puertos y genera su nginx). */
+    crearCuenta: async (user, opts = {}) => {
+      try { return (await api.post('/cuentas', { user, ...opts })).data; } catch (e) { return fallo(`crearCuenta(${user})`, e); }
+    },
+
     cuentas: async () => {
       try { return (await api.get('/cuentas')).data?.cuentas || []; } catch (e) { return fallo('cuentas', e) || []; }
     },

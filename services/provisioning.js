@@ -13,6 +13,7 @@ const clienteModel = require('../models/clienteModel');
 const planModel = require('../models/planModel');
 const servidorModel = require('../models/servidorModel');
 const azuracast = require('./azuracast');
+const videoNode = require('./videoNode');
 const biblioteca = require('./biblioteca');
 const publico = require('./publico');
 
@@ -87,6 +88,43 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
   // 1) Usuario
   const password_hash = await bcrypt.hash(password, 10);
   const user = await userModel.create({ username: usuario, email, password_hash, role: 'cliente' });
+
+  // ── VIDEO: la cuenta vive en el NODO de video, no en AzuraCast ──
+  // El nodo asigna puertos y genera su nginx; no hay "estación" AzuraCast.
+  if (tipo === 'video') {
+    const nodo = videoNode.crearCliente(servidor.url, servidor.api_key);
+    let info;
+    try {
+      info = await nodo.crearCuenta(usuario);
+      if (!info || info.ok === false) throw new Error(info?.error || 'el nodo de video no respondió');
+    } catch (e) {
+      await userModel.deleteById(user.id);   // deshacer el usuario si el nodo falla
+      throw err('No se pudo crear el canal de video: ' + e.message, 502);
+    }
+
+    const puertos = info.puertos || {};
+    const conexion = await nodo.conexion(usuario).catch(() => null);   // datos de vivo (clave RTMP)
+    const base = `${baseUrlPublica}${puertos.http ? ':' + puertos.http : ''}`;
+    const url_streaming = `${base}/hybrid/play.m3u8`;                  // el canal que ve el público
+
+    const cliente = await clienteModel.create({
+      user_id: user.id, nombre_empresa, plan: plan.nombre,
+      azuracast_station_id: null, url_streaming, reseller_id,
+      servidor_id, short_name: usuario, tipo: 'video',
+    });
+
+    return {
+      cliente: { ...cliente, email, username: usuario, servidor_url: baseUrlPublica },
+      credenciales: { usuario, email, password },
+      video: {
+        canal: url_streaming,
+        servidor_rtmp: conexion?.servidor_rtmp || null,
+        clave: conexion?.clave || null,
+        puerto_http: puertos.http || null,
+        puerto_rtmp: puertos.rtmp || null,
+      },
+    };
+  }
 
   // 2) Estación (en el servidor elegido)
   let station;
