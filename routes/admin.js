@@ -28,6 +28,7 @@ const { generateToken } = require('../services/auth');
 // generateToken se usa también para emitir tokens de cliente al impersonar
 const azuracast = require('../services/azuracast');
 const videoNode = require('../services/videoNode');
+const migracion = require('../services/migracion');
 const authFactory = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
 
@@ -106,6 +107,27 @@ router.post('/marca-blanca', requireAdmin, wrap(async (req, res) => {
     } catch (e) { console.error('[marca-blanca]', c.nombre_empresa, e.message); fallos++; }
   }
   res.json({ message: `Marca blanca aplicada a ${ok} radio(s)${fallos ? `, ${fallos} con error` : ''} ✅`, ok, fallos });
+}));
+
+/**
+ * POST /admin/migracion/importar — crea estaciones EN LOTE en un servidor de
+ * audio, preservando puerto/mount/clave source (migración desde Centova sin que
+ * el cliente cambie su URL). Correr SIEMPRE contra el servidor NUEVO.
+ * body: { servidor_id, plan_id?, reseller_id?, cuentas: [{usuario,titulo,puerto,mount,source_password,max_oyentes,max_bitrate,email?,password?}] }
+ */
+router.post('/migracion/importar', requireAdmin, wrap(async (req, res) => {
+  const { servidor_id, plan_id, reseller_id, cuentas } = req.body || {};
+  if (!Array.isArray(cuentas) || !cuentas.length) return res.status(400).json({ error: 'Envía "cuentas" (lista no vacía)' });
+
+  const servidor = servidor_id ? await servidorModel.findById(Number(servidor_id)) : null;
+  if (!servidor || (servidor.tipo && servidor.tipo !== 'audio')) {
+    return res.status(400).json({ error: 'servidor_id de audio inválido' });
+  }
+  const az = azuracast.crearCliente(servidor.url, servidor.api_key);
+  const plan = plan_id ? await planModel.findById(Number(plan_id)) : null;
+
+  const r = await migracion.importarLote({ az, servidor, plan, reseller_id: reseller_id || null }, cuentas);
+  res.json(r);
 }));
 
 /** POST /admin/password — el super admin cambia su propia contraseña. */
