@@ -179,6 +179,40 @@ router.put('/media/:id/playlists', requireCliente, wrap(async (req, res) => {
   res.json({ message: 'Playlists actualizadas ✅' });
 }));
 
+/**
+ * PUT /cliente/media/playlists-lote — agrega o quita UNA playlist a MUCHAS
+ * canciones de una vez. Evita ir pista por pista.
+ * body: { media_ids: [id...], playlist_id, accion: 'agregar' | 'quitar' }
+ * Si media_ids viene vacío o falta, aplica a TODA la música ('todas').
+ */
+router.put('/media/playlists-lote', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
+  const stationId = cliente.azuracast_station_id;
+  const { playlist_id, accion = 'agregar' } = req.body || {};
+  const plId = Number(playlist_id);
+  if (!plId) return res.status(400).json({ error: 'Falta playlist_id' });
+
+  const az = await azDe(cliente);
+  const archivos = await az.listMedia(stationId);           // trae cada archivo con sus playlists
+  const seleccion = Array.isArray(req.body?.media_ids) && req.body.media_ids.length
+    ? new Set(req.body.media_ids.map(Number))
+    : null;                                                 // null = todas
+
+  let ok = 0, fallos = 0;
+  for (const f of archivos || []) {
+    if (seleccion && !seleccion.has(f.id)) continue;
+    const actuales = (f.playlists || []).map((p) => p.id);
+    const nuevos = accion === 'quitar'
+      ? actuales.filter((id) => id !== plId)
+      : [...new Set([...actuales, plId])];
+    if (nuevos.length === actuales.length && accion !== 'quitar') continue;   // ya la tenía
+    try { await az.setFilePlaylists(stationId, f.id, nuevos); ok++; }
+    catch (e) { console.error('[media-lote]', f.id, e.message); fallos++; }
+  }
+  res.json({ message: `${accion === 'quitar' ? 'Quitadas' : 'Agregadas'} ${ok} canción(es)${fallos ? `, ${fallos} con error` : ''} ✅`, ok, fallos });
+}));
+
 // ==================================================================
 //  PLAYLISTS
 // ==================================================================

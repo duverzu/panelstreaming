@@ -9,7 +9,31 @@ export default function ClienteMusica() {
   const [subiendo, setSubiendo] = useState(false);
   const [destino, setDestino] = useState(''); // playlist destino de la subida
   const [msg, setMsg] = useState(null);
+  const [sel, setSel] = useState(() => new Set());   // canciones seleccionadas (para lote)
+  const [aplicando, setAplicando] = useState(false);
   const inputRef = useRef(null);
+
+  function toggle(id) {
+    setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleTodos() {
+    setSel((s) => (s.size === media.length ? new Set() : new Set(media.map((m) => m.id))));
+  }
+
+  /** Agrega o quita una playlist a las canciones seleccionadas (o a todas). */
+  async function aplicarLote(playlist_id, accion, todas = false) {
+    if (!playlist_id) return;
+    setAplicando(true); setMsg(null);
+    try {
+      const body = { playlist_id: Number(playlist_id), accion };
+      if (!todas) body.media_ids = [...sel];
+      const r = await apiFetch('/cliente/media/playlists-lote', { method: 'PUT', body: JSON.stringify(body) });
+      setMsg({ type: 'ok', text: r.message });
+      setSel(new Set());
+      cargar();
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setAplicando(false); }
+  }
 
   async function cargar() {
     setLoading(true);
@@ -110,6 +134,38 @@ export default function ClienteMusica() {
           </button>
         </div>
 
+        {/* Barra de acciones en lote — evita ir pista por pista */}
+        {media.length > 0 && playlists.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-3 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-950 text-sm">
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" checked={sel.size === media.length && media.length > 0} onChange={toggleTodos} />
+              <span className="text-gray-500">{sel.size ? `${sel.size} seleccionada(s)` : 'Seleccionar todo'}</span>
+            </label>
+
+            {sel.size > 0 ? (
+              <>
+                <select disabled={aplicando} value="" onChange={(e) => { aplicarLote(e.target.value, 'agregar'); e.target.value = ''; }}
+                  className="input !w-auto !py-1 text-xs">
+                  <option value="">＋ Agregar a playlist…</option>
+                  {playlists.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+                <select disabled={aplicando} value="" onChange={(e) => { aplicarLote(e.target.value, 'quitar'); e.target.value = ''; }}
+                  className="input !w-auto !py-1 text-xs">
+                  <option value="">− Quitar de playlist…</option>
+                  {playlists.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </>
+            ) : (
+              <select disabled={aplicando} value="" onChange={(e) => { aplicarLote(e.target.value, 'agregar', true); e.target.value = ''; }}
+                className="input !w-auto !py-1 text-xs ml-auto">
+                <option value="">⚡ Agregar TODA mi música a…</option>
+                {playlists.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+            )}
+            {aplicando && <span className="text-xs text-gray-400">Aplicando…</span>}
+          </div>
+        )}
+
         {loading ? (
           <p className="py-8 text-center text-gray-400">Cargando…</p>
         ) : media.length === 0 ? (
@@ -117,7 +173,8 @@ export default function ClienteMusica() {
         ) : (
           <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
             {media.map((m) => (
-              <div key={m.id} className="flex items-center gap-3 py-3">
+              <div key={m.id} className={`flex items-center gap-3 py-3 ${sel.has(m.id) ? 'bg-brand-50/40 dark:bg-brand-500/5 -mx-2 px-2 rounded-lg' : ''}`}>
+                <input type="checkbox" checked={sel.has(m.id)} onChange={() => toggle(m.id)} className="shrink-0" />
                 <div className="w-9 h-9 shrink-0 rounded-lg bg-gray-100 dark:bg-gray-800 grid place-items-center text-gray-400">
                   <IconMusic width={16} height={16} />
                 </div>
