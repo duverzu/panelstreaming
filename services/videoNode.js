@@ -55,6 +55,11 @@ function crearCliente(baseURL, token) {
       try { return (await api.get('/viewers')).data; } catch (e) { return fallo('viewers', e); }
     },
 
+    /** Estado del reenvío a Facebook de una cuenta. */
+    restream: (user) => api.get(`/cuentas/${encodeURIComponent(user)}/restream`).then((r) => r.data).catch((e) => fallo(`restream(${user})`, e)),
+    /** Configura/enciende el reenvío a Facebook. body: { facebook_key?, encender } */
+    configurarRestream: (user, body) => api.put(`/cuentas/${encodeURIComponent(user)}/restream`, body).then((r) => r.data).catch((e) => fallo(`configurarRestream(${user})`, e)),
+
     /** Cuentas del nodo con su espacio, videos y si están al aire. */
     /** Crea una cuenta nueva en el nodo (asigna puertos y genera su nginx). */
     crearCuenta: async (user, opts = {}) => {

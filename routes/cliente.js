@@ -627,6 +627,29 @@ async function nodoVideo(req) {
   return ctx ? { ctx, user: cliente.short_name } : null;
 }
 
+/** GET /cliente/video/restream — estado del reenvío a Facebook (si el plan lo permite). */
+router.get('/video/restream', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  const ctx = await nodoDe(cliente);
+  if (!ctx) return res.status(400).json({ error: 'Tu cuenta no es de video' });
+  const plan = await planModel.findByNombre(cliente.plan);
+  if (!plan?.permite_restream) return res.json({ permite: false });
+  const r = await ctx.nodo.restream(cliente.short_name);
+  res.json({ permite: true, ...(r || {}) });
+}));
+
+/** PUT /cliente/video/restream — guarda la clave y enciende/apaga. body: { facebook_key?, encender } */
+router.put('/video/restream', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  const ctx = await nodoDe(cliente);
+  if (!ctx) return res.status(400).json({ error: 'Tu cuenta no es de video' });
+  const plan = await planModel.findByNombre(cliente.plan);
+  if (!plan?.permite_restream) return res.status(403).json({ error: 'Tu plan no incluye reenvío a redes sociales.' });
+  const r = await ctx.nodo.configurarRestream(cliente.short_name, { facebook_key: req.body?.facebook_key, encender: req.body?.encender });
+  if (!r) return res.status(502).json({ error: 'El nodo de video no respondió' });
+  res.json(r);
+}));
+
 router.get('/video/listas', requireCliente, wrap(async (req, res) => {
   const n = await nodoVideo(req);
   if (!n) return res.status(400).json({ error: 'Tu cuenta no es de video' });

@@ -20,6 +20,7 @@ const path = require('path');
 const readline = require('readline');
 const claves = require('./claves');
 const webtv = require('./webtv');
+const restream = require('./restream');
 const { crearCuenta, eliminarConfig } = require('./crear');
 const listas = require('./listas');
 const fsp2 = require('fs/promises');
@@ -690,6 +691,28 @@ app.get('/viewers', wrap(async (req, res) => {
   res.json({ ok: true, ventana, total, cuentas: porCuenta });
 }));
 
+/** GET /cuentas/:user/restream — estado del reenvío a Facebook. */
+app.get('/cuentas/:user/restream', wrap(async (req, res) => {
+  res.json(await restream.ver(String(req.params.user)));
+}));
+
+/**
+ * PUT /cuentas/:user/restream — configura/enciende el reenvío a Facebook.
+ * body: { facebook_key?, encender }
+ */
+app.put('/cuentas/:user/restream', wrap(async (req, res) => {
+  const user = String(req.params.user);
+  const lista = await cuentas();
+  if (!lista.find((x) => x.user === user)) return res.status(404).json({ error: 'Cuenta no encontrada' });
+  const puertoRtmp = (await puertosDe(user)).rtmp;
+  const r = await restream.configurar(user, {
+    facebook_key: req.body?.facebook_key,
+    activo: req.body?.encender !== false,
+    puertoRtmp,
+  });
+  res.json({ ok: true, ...r });
+}));
+
 app.get('/nodo/red', wrap(async (req, res) => {
   const txt = await fsp.readFile('/proc/net/dev', 'utf8');
   let rx = 0, tx = 0, iface = null;
@@ -722,6 +745,8 @@ app.listen(PORT, HOST, () => {
   };
   webtv.restaurar(hayVivo).catch((e) => console.error('[webtv] restaurar:', e.message));
   webtv.iniciarPlanificador();   // cambia de lista sola según la programación por horario
+  // Reanuda los restream a Facebook que estaban activos
+  restream.restaurar(async (user) => (await puertosDe(user)).rtmp).catch((e) => console.error('[restream] restaurar:', e.message));
   if (HOST !== '127.0.0.1') console.warn('   ⚠️  Expuesto fuera del servidor: asegúrate de tener firewall');
   console.log(`   Cuentas en: ${BASE}   ·   Config nginx: ${CONF_DIR}`);
   if (!TOKEN) console.warn('   ⚠️  Falta AGENT_TOKEN: el agente rechazará todas las peticiones');
