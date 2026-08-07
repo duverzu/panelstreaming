@@ -337,7 +337,7 @@ router.post('/anuncio-hora/probar', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Tu radio no está lista aún.' });
   const cfg = await anuncioHora.verConfig(cliente.id);
-  const r = await anuncioHora.anunciarEn(cliente, { saludo: cfg.con_saludo ? 'Atención' : null });
+  const r = await anuncioHora.anunciarEn(cliente, { saludo: cfg.con_saludo ? 'Atención' : null, ciudad: cfg.ciudad, con_clima: cfg.con_clima });
   if (!r.ok) return res.status(502).json({ error: r.error || 'No se pudo generar el anuncio' });
   res.json({ message: `Sonando: «${r.texto}» 🔊` });
 }));

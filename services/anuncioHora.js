@@ -45,6 +45,40 @@ function textoHora(fecha, { saludo } = {}) {
   return saludo ? `${saludo}. ${base}` : base;
 }
 
+// ---- Clima (Open-Meteo, gratis, sin API key) ---------------------
+const CIELO = {   // códigos WMO → descripción en español (resumen)
+  0: 'despejado', 1: 'mayormente despejado', 2: 'parcialmente nublado', 3: 'nublado',
+  45: 'con niebla', 48: 'con niebla', 51: 'con llovizna', 53: 'con llovizna', 55: 'con llovizna',
+  61: 'con lluvia', 63: 'con lluvia', 65: 'con lluvia fuerte', 71: 'con nieve', 80: 'con chubascos',
+  81: 'con chubascos', 82: 'con chubascos fuertes', 95: 'con tormenta', 96: 'con tormenta', 99: 'con tormenta',
+};
+const geoCache = new Map();   // ciudad -> {lat, lon, nombre}
+
+async function geocodificar(ciudad) {
+  if (geoCache.has(ciudad)) return geoCache.get(ciudad);
+  const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(ciudad)}&count=1&language=es`);
+  const d = await r.json();
+  const g = d?.results?.[0];
+  const val = g ? { lat: g.latitude, lon: g.longitude, nombre: g.name } : null;
+  geoCache.set(ciudad, val);
+  return val;
+}
+
+/** "26 grados en Cali, cielo despejado" (o null si no se pudo). */
+async function climaTexto(ciudad) {
+  if (!ciudad) return null;
+  try {
+    const g = await geocodificar(ciudad);
+    if (!g) return null;
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${g.lat}&longitude=${g.lon}&current=temperature_2m,weather_code`);
+    const d = await r.json();
+    const t = Math.round(d?.current?.temperature_2m);
+    if (Number.isNaN(t)) return null;
+    const cielo = CIELO[d?.current?.weather_code];
+    return `${t} grados en ${g.nombre}${cielo ? `, ${cielo}` : ''}`;
+  } catch (e) { console.error('[anuncio] clima:', e.message); return null; }
+}
+
 // ---- Voz (TTS) ----------------------------------------------------
 /** Genera el MP3 de un texto. Devuelve un Buffer. */
 async function generarVoz(texto) {
@@ -75,12 +109,16 @@ async function playlistAnuncios(az, stationId) {
 }
 
 /** Genera la hora y la pone a sonar en una estación. */
-async function anunciarEn(cliente, { skip = true, saludo = null } = {}) {
+async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, con_clima = false } = {}) {
   const az = await azuracast.paraServidorId(cliente.servidor_id);
   const stationId = cliente.azuracast_station_id;
   if (!stationId) return { ok: false, error: 'sin estación' };
 
-  const texto = textoHora(new Date(), { saludo });
+  let texto = textoHora(new Date(), { saludo });
+  if (con_clima && ciudad) {
+    const clima = await climaTexto(ciudad);
+    if (clima) texto += `. Ahora mismo ${clima}`;
+  }
   const mp3 = await generarVoz(texto);
   const nombre = `anuncio-hora-${cliente.id}.mp3`;               // se sobreescribe cada vez
 
@@ -95,16 +133,19 @@ async function anunciarEn(cliente, { skip = true, saludo = null } = {}) {
 
 // ---- Config (tabla anuncio_hora) ---------------------------------
 async function verConfig(clienteId) {
-  const { rows } = await query('SELECT cliente_id, activo, cada_min, con_saludo FROM anuncio_hora WHERE cliente_id = $1', [clienteId]);
-  return rows[0] || { cliente_id: clienteId, activo: false, cada_min: 60, con_saludo: false };
+  const { rows } = await query('SELECT cliente_id, activo, cada_min, con_saludo, ciudad, con_clima FROM anuncio_hora WHERE cliente_id = $1', [clienteId]);
+  return rows[0] || { cliente_id: clienteId, activo: false, cada_min: 60, con_saludo: false, ciudad: null, con_clima: false };
 }
-async function guardarConfig(clienteId, { activo, cada_min, con_saludo }) {
+async function guardarConfig(clienteId, { activo, cada_min, con_saludo, ciudad, con_clima }) {
   const cada = [15, 30, 60].includes(Number(cada_min)) ? Number(cada_min) : 60;
+  const ciu = ciudad !== undefined ? (String(ciudad || '').trim().slice(0, 120) || null) : undefined;
   await query(
-    `INSERT INTO anuncio_hora (cliente_id, activo, cada_min, con_saludo, updated_at)
-     VALUES ($1,$2,$3,$4, now())
-     ON CONFLICT (cliente_id) DO UPDATE SET activo = $2, cada_min = $3, con_saludo = $4, updated_at = now()`,
-    [clienteId, Boolean(activo), cada, Boolean(con_saludo)]
+    `INSERT INTO anuncio_hora (cliente_id, activo, cada_min, con_saludo, ciudad, con_clima, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6, now())
+     ON CONFLICT (cliente_id) DO UPDATE SET
+       activo = $2, cada_min = $3, con_saludo = $4,
+       ciudad = COALESCE($5, anuncio_hora.ciudad), con_clima = $6, updated_at = now()`,
+    [clienteId, Boolean(activo), cada, Boolean(con_saludo), ciu ?? null, Boolean(con_clima)]
   );
   return verConfig(clienteId);
 }
@@ -121,12 +162,12 @@ async function tick() {
   if (slot === ultimoSlot) return;
 
   try {
-    const { rows } = await query('SELECT cliente_id, cada_min, con_saludo FROM anuncio_hora WHERE activo = true');
+    const { rows } = await query('SELECT cliente_id, cada_min, con_saludo, ciudad, con_clima FROM anuncio_hora WHERE activo = true');
     for (const cfg of rows) {
       if (min % cfg.cada_min !== 0) continue;       // no toca en esta franja
       const cliente = await clienteModel.findById(cfg.cliente_id);
       if (!cliente?.azuracast_station_id || cliente.tipo === 'video' || !cliente.activo) continue;
-      anunciarEn(cliente, { saludo: cfg.con_saludo ? 'Atención' : null })
+      anunciarEn(cliente, { saludo: cfg.con_saludo ? 'Atención' : null, ciudad: cfg.ciudad, con_clima: cfg.con_clima })
         .then((r) => console.log(`[anuncio] ${cliente.nombre_empresa}: ${r.texto || r.error}`))
         .catch((e) => console.error(`[anuncio] ${cliente.nombre_empresa}:`, e.message));
     }

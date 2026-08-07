@@ -147,6 +147,9 @@ CREATE TABLE IF NOT EXISTS anuncio_hora (
   con_saludo BOOLEAN NOT NULL DEFAULT false,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Clima en el anuncio de la hora: ciudad + si se incluye la temperatura.
+ALTER TABLE anuncio_hora ADD COLUMN IF NOT EXISTS ciudad    VARCHAR(120);
+ALTER TABLE anuncio_hora ADD COLUMN IF NOT EXISTS con_clima BOOLEAN NOT NULL DEFAULT false;
 
 -- Dueño del plan: NULL = plan global (del admin); si no, es de un revendedor.
 ALTER TABLE planes ADD COLUMN IF NOT EXISTS reseller_id INTEGER REFERENCES resellers(id) ON DELETE CASCADE;
