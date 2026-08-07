@@ -114,6 +114,13 @@ try {
   console.error('[guardian] no se pudo iniciar:', e.message);
 }
 
+// ---- "Da la hora" (anuncio de hora programado) -------------------
+try {
+  require('./services/anuncioHora').iniciar();
+} catch (e) {
+  console.error('[anuncio-hora] no se pudo iniciar:', e.message);
+}
+
 // ---- Arranque -----------------------------------------------------
 app.listen(PORT, () => {
   console.log(`\n🎙️  Panel Radio Backend en http://localhost:${PORT}`);

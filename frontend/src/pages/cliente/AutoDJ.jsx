@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api';
 import { IconSliders } from '../../icons';
+import AnuncioHora from '../../components/AnuncioHora';
 
 const CROSSFADE = [
   { id: 'normal', titulo: 'Normal', desc: 'Mezcla suave entre canciones' },
@@ -33,7 +34,8 @@ export default function ClienteAutoDJ() {
   if (f === null) return <p className="py-10 text-center text-gray-400">Cargando…</p>;
 
   return (
-    <form onSubmit={guardar} className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-6">
+    <form onSubmit={guardar} className="space-y-6">
       <div className="card p-5 space-y-5">
         <h2 className="font-semibold flex items-center gap-2"><IconSliders width={18} height={18} /> Transiciones (crossfade)</h2>
 
@@ -80,5 +82,8 @@ export default function ClienteAutoDJ() {
       )}
       <button className="btn-primary" disabled={saving}>{saving ? 'Guardando…' : 'Guardar cambios'}</button>
     </form>
+
+    <AnuncioHora />
+    </div>
   );
 }

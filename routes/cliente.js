@@ -16,6 +16,7 @@ const userModel = require('../models/userModel');
 const clienteModel = require('../models/clienteModel');
 const { generateToken } = require('../services/auth');
 const azuracast = require('../services/azuracast');
+const anuncioHora = require('../services/anuncioHora');
 const publico = require('../services/publico');
 const planModel = require('../models/planModel');
 const consumoClienteModel = require('../models/consumoClienteModel');
@@ -316,6 +317,31 @@ router.get('/estadisticas', requireCliente, wrap(async (req, res) => {
  * La banda sale del Guardián (muestreo de oyentes × bitrate) y el disco de la
  * cuota real de AzuraCast. Es lo que pinta los gráficos del dashboard.
  */
+// ── "Da la hora" (anuncio de hora) ──
+router.get('/anuncio-hora', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.json({ disponible: false });
+  const cfg = await anuncioHora.verConfig(cliente.id);
+  res.json({ disponible: true, ...cfg, ejemplo: anuncioHora.textoHora(new Date(), { saludo: cfg.con_saludo ? 'Atención' : null }) });
+}));
+
+router.put('/anuncio-hora', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Tu radio no está lista aún.' });
+  const cfg = await anuncioHora.guardarConfig(cliente.id, req.body || {});
+  res.json({ message: 'Anuncio de hora actualizado ✅', ...cfg });
+}));
+
+/** POST /cliente/anuncio-hora/probar — lanza el anuncio ahora mismo (prueba). */
+router.post('/anuncio-hora/probar', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Tu radio no está lista aún.' });
+  const cfg = await anuncioHora.verConfig(cliente.id);
+  const r = await anuncioHora.anunciarEn(cliente, { saludo: cfg.con_saludo ? 'Atención' : null });
+  if (!r.ok) return res.status(502).json({ error: r.error || 'No se pudo generar el anuncio' });
+  res.json({ message: `Sonando: «${r.texto}» 🔊` });
+}));
+
 router.get('/consumo', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   const plan = await planModel.findByNombre(cliente?.plan);

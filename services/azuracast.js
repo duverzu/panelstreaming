@@ -47,6 +47,9 @@ function crearCliente(baseURL, apiKey) {
   const updateStreamer = async (id, sid, data) => { try { return (await api.put(`/station/${id}/streamer/${sid}`, data)).data; } catch (e) { handleError(`updateStreamer(${id}/${sid})`, e); } };
   const restartStation = async (id) => { try { return (await api.post(`/station/${id}/restart`)).data; } catch (e) { handleError(`restartStation(${id})`, e); } };
   const skipSong = async (id) => { try { return (await api.post(`/station/${id}/backend/skip`)).data; } catch (e) { handleError(`skipSong(${id})`, e); } };
+  // Encola una canción para que suene (por su unique_id o request_id). Se usa
+  // para inyectar el anuncio de la hora recién generado.
+  const request = async (id, reqId) => { try { return (await api.post(`/station/${id}/request/${reqId}`)).data; } catch (e) { handleError(`request(${id})`, e); } };
   const stopStation = async (id) => { try { await api.post(`/station/${id}/frontend/stop`); await api.post(`/station/${id}/backend/stop`); return { stopped: true }; } catch (e) { handleError(`stopStation(${id})`, e); } };
   const getStationStatus = async (id) => { try { return (await api.get(`/station/${id}/status`)).data; } catch (e) { handleError(`getStationStatus(${id})`, e); } };
   const listMedia = async (id) => { try { return (await api.get(`/station/${id}/files`)).data; } catch (e) { handleError(`listMedia(${id})`, e); } };
@@ -72,7 +75,7 @@ function crearCliente(baseURL, apiKey) {
     baseURL, apiKey, api,
     getStation, getStationAdmin, getNowPlaying, getNowPlayingAll, createStation, updateStation, deleteStation,
     getMounts, createMount, updateMount, createStreamer, getStreamers, updateStreamer,
-    restartStation, skipSong, stopStation, getStationStatus,
+    restartStation, skipSong, request, stopStation, getStationStatus,
     listMedia, uploadMedia, deleteMedia, setFilePlaylists,
     getPlaylists, createPlaylist, updatePlaylist, deletePlaylist,
     getWebhooks, createWebhook, updateWebhook, deleteWebhook,

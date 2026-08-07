@@ -139,6 +139,15 @@ CREATE TABLE IF NOT EXISTS documentacion (
 -- Audiencia del artículo: 'audio' (radios), 'video' (canales) o 'todos'.
 ALTER TABLE documentacion ADD COLUMN IF NOT EXISTS audiencia VARCHAR(10) NOT NULL DEFAULT 'audio';
 
+-- "Da la hora" (anuncio de hora tipo Zara/RadioBOSS) por radio.
+CREATE TABLE IF NOT EXISTS anuncio_hora (
+  cliente_id INTEGER PRIMARY KEY REFERENCES clientes(id) ON DELETE CASCADE,
+  activo     BOOLEAN NOT NULL DEFAULT false,
+  cada_min   INTEGER NOT NULL DEFAULT 60,   -- 60=cada hora, 30=media, 15=cuarto
+  con_saludo BOOLEAN NOT NULL DEFAULT false,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Dueño del plan: NULL = plan global (del admin); si no, es de un revendedor.
 ALTER TABLE planes ADD COLUMN IF NOT EXISTS reseller_id INTEGER REFERENCES resellers(id) ON DELETE CASCADE;
 
