@@ -9,6 +9,7 @@ export default function AdminConfiguracion() {
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
   const [marca, setMarca] = useState(null);
+  const [alerta, setAlerta] = useState(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   async function aplicarMarca() {
@@ -17,6 +18,14 @@ export default function AdminConfiguracion() {
       const r = await apiFetch('/admin/marca-blanca', { method: 'POST' });
       setMarca({ msg: r.message });
     } catch (e) { setMarca({ msg: e.message, error: true }); }
+  }
+
+  async function probarAlertas() {
+    setAlerta({ cargando: true });
+    try {
+      const r = await apiFetch('/admin/monitor/probar', { method: 'POST' });
+      setAlerta({ msg: r.message });
+    } catch (e) { setAlerta({ msg: e.message, error: true }); }
   }
 
   async function cambiar(e) {
@@ -59,6 +68,22 @@ export default function AdminConfiguracion() {
           {msg && <div className={`text-sm rounded-xl px-3 py-2 ${msg.type === 'ok' ? 'text-brand-700 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-400' : 'text-red-600 bg-red-50 dark:bg-red-500/10'}`}>{msg.text}</div>}
           <button className="btn-primary" disabled={saving}>{saving ? 'Guardando…' : 'Cambiar contraseña'}</button>
         </form>
+      </div>
+
+      {/* Alertas por Telegram */}
+      <div className="card p-5">
+        <h2 className="font-semibold mb-1">🔔 Alertas (Telegram)</h2>
+        <p className="text-sm text-gray-400 mb-3">
+          El monitor vigila tus servidores 24/7 y te avisa por Telegram si una radio/canal se cae,
+          un servidor no responde o la banda se acerca al tope. Configúralo con
+          <b> TELEGRAM_BOT_TOKEN</b> y <b>TELEGRAM_CHAT_ID</b> en el <b>.env</b> del servidor, y prueba aquí.
+        </p>
+        <button onClick={probarAlertas} disabled={alerta?.cargando} className="btn-primary text-sm disabled:opacity-60">
+          {alerta?.cargando ? 'Enviando…' : 'Enviar alerta de prueba'}
+        </button>
+        {alerta?.msg && (
+          <div className={`mt-3 text-sm rounded-xl px-3 py-2 ${alerta.error ? 'text-red-600 bg-red-50 dark:bg-red-500/10' : 'text-brand-700 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-400'}`}>{alerta.msg}</div>
+        )}
       </div>
 
       {/* Marca blanca del metadata en vivo */}

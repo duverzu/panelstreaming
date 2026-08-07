@@ -121,6 +121,13 @@ try {
   console.error('[anuncio-hora] no se pudo iniciar:', e.message);
 }
 
+// ---- Monitor de alertas (Telegram) -------------------------------
+try {
+  require('./services/monitor').iniciar();
+} catch (e) {
+  console.error('[monitor] no se pudo iniciar:', e.message);
+}
+
 // ---- Arranque -----------------------------------------------------
 app.listen(PORT, () => {
   console.log(`\n🎙️  Panel Radio Backend en http://localhost:${PORT}`);

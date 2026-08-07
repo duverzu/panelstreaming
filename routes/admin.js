@@ -130,6 +130,13 @@ router.post('/migracion/importar', requireAdmin, wrap(async (req, res) => {
   res.json(r);
 }));
 
+/** POST /admin/monitor/probar — envía una alerta de prueba a Telegram. */
+router.post('/monitor/probar', requireAdmin, wrap(async (req, res) => {
+  const r = await require('../services/monitor').probar();
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ message: r.message });
+}));
+
 /** POST /admin/password — el super admin cambia su propia contraseña. */
 router.post('/password', requireAdmin, wrap(async (req, res) => {
   const { actual, nueva } = req.body || {};
