@@ -181,4 +181,4 @@ function iniciar() {
   console.log('⏰ Anuncio de hora activo (revisa cada 15s las franjas configuradas)');
 }
 
-module.exports = { iniciar, verConfig, guardarConfig, anunciarEn, textoHora };
+module.exports = { iniciar, verConfig, guardarConfig, anunciarEn, textoHora, generarVoz, climaTexto };

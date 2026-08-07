@@ -71,6 +71,7 @@ const MENUS = {
       { label: 'Ajustes y hora', icon: IconSliders, to: '/cliente/autodj' },
       { label: 'Música', icon: IconMusic, to: '/cliente/musica' },
       { label: 'Playlists', icon: IconPlaylist, to: '/cliente/playlists' },
+      { label: 'Cuñas', icon: IconMic, to: '/cliente/cunas' },
     ]},
     { seccion: 'Difusión', items: [
       { label: 'Reproductor', icon: IconRadio, to: '/cliente/reproductor' },

@@ -151,6 +151,21 @@ CREATE TABLE IF NOT EXISTS anuncio_hora (
 ALTER TABLE anuncio_hora ADD COLUMN IF NOT EXISTS ciudad    VARCHAR(120);
 ALTER TABLE anuncio_hora ADD COLUMN IF NOT EXISTS con_clima BOOLEAN NOT NULL DEFAULT false;
 
+-- Cuñas / anuncios programados: mensajes propios (voz TTS o audio subido) que
+-- suenan a horas fijas. media_id = el archivo en AzuraCast que se reproduce.
+CREATE TABLE IF NOT EXISTS cunas (
+  id         SERIAL PRIMARY KEY,
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+  nombre     VARCHAR(120) NOT NULL,
+  tipo       VARCHAR(10)  NOT NULL DEFAULT 'texto',   -- 'texto' (voz) | 'audio' (subido)
+  texto      TEXT,
+  media_id   VARCHAR(100),                            -- id del media en AzuraCast
+  horas      JSONB NOT NULL DEFAULT '[]',             -- ["08:00","12:00","20:00"]
+  activo     BOOLEAN NOT NULL DEFAULT true,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_cunas_cliente ON cunas(cliente_id);
+
 -- Dueño del plan: NULL = plan global (del admin); si no, es de un revendedor.
 ALTER TABLE planes ADD COLUMN IF NOT EXISTS reseller_id INTEGER REFERENCES resellers(id) ON DELETE CASCADE;
 

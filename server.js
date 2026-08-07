@@ -121,6 +121,13 @@ try {
   console.error('[anuncio-hora] no se pudo iniciar:', e.message);
 }
 
+// ---- Cuñas / anuncios programados --------------------------------
+try {
+  require('./services/cunas').iniciar();
+} catch (e) {
+  console.error('[cunas] no se pudo iniciar:', e.message);
+}
+
 // ---- Monitor de alertas (Telegram) -------------------------------
 try {
   require('./services/monitor').iniciar();

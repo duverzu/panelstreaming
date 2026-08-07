@@ -17,6 +17,7 @@ const clienteModel = require('../models/clienteModel');
 const { generateToken } = require('../services/auth');
 const azuracast = require('../services/azuracast');
 const anuncioHora = require('../services/anuncioHora');
+const cunas = require('../services/cunas');
 const publico = require('../services/publico');
 const planModel = require('../models/planModel');
 const consumoClienteModel = require('../models/consumoClienteModel');
@@ -340,6 +341,42 @@ router.post('/anuncio-hora/probar', requireCliente, wrap(async (req, res) => {
   const r = await anuncioHora.anunciarEn(cliente, { saludo: cfg.con_saludo ? 'Atención' : null, ciudad: cfg.ciudad, con_clima: cfg.con_clima });
   if (!r.ok) return res.status(502).json({ error: r.error || 'No se pudo generar el anuncio' });
   res.json({ message: `Sonando: «${r.texto}» 🔊` });
+}));
+
+// ── Cuñas / anuncios programados ──
+router.get('/cunas', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.json({ disponible: false, cunas: [] });
+  res.json({ disponible: true, cunas: await cunas.listar(cliente.id) });
+}));
+
+router.post('/cunas', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Tu radio no está lista aún.' });
+  const id = await cunas.guardar(cliente, req.body || {});
+  res.json({ message: 'Cuña guardada ✅', id });
+}));
+
+router.post('/cunas/:id/audio', requireCliente, upload.single('archivo'), wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Tu radio no está lista aún.' });
+  if (!req.file) return res.status(400).json({ error: 'No se recibió el audio (MP3).' });
+  await cunas.subirAudio(cliente, Number(req.params.id), req.file.buffer, req.file.originalname);
+  res.json({ message: 'Audio de la cuña subido ✅' });
+}));
+
+router.delete('/cunas/:id', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  await cunas.borrar(cliente.id, Number(req.params.id));
+  res.json({ message: 'Cuña eliminada ✅' });
+}));
+
+router.post('/cunas/:id/probar', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Tu radio no está lista aún.' });
+  const r = await cunas.probar(cliente, Number(req.params.id));
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ message: 'Cuña sonando 🔊' });
 }));
 
 router.get('/consumo', requireCliente, wrap(async (req, res) => {
