@@ -65,20 +65,20 @@ const MENUS = {
   cliente: [
     { seccion: 'Mi Radio', items: [
       { label: 'Dashboard', icon: IconDashboard, to: '/cliente' },
-      { label: 'AutoDJ', icon: IconSliders, to: '/cliente/autodj' },
       { label: 'Conectar', icon: IconMic, to: '/cliente/conectar' },
     ]},
-    { seccion: 'Contenido', items: [
+    { seccion: '🎚️ AutoDJ', items: [
+      { label: 'Ajustes y hora', icon: IconSliders, to: '/cliente/autodj' },
       { label: 'Música', icon: IconMusic, to: '/cliente/musica' },
       { label: 'Playlists', icon: IconPlaylist, to: '/cliente/playlists' },
+    ]},
+    { seccion: 'Difusión', items: [
       { label: 'Reproductor', icon: IconRadio, to: '/cliente/reproductor' },
       { label: 'Redes Sociales', icon: IconShare, to: '/cliente/redes' },
       { label: 'Estadísticas', icon: IconChart, to: '/cliente/estadisticas' },
     ]},
     { seccion: 'Cuenta', items: [
       { label: 'Configuración', icon: IconSettings, to: '/cliente/configuracion' },
-    ]},
-    { seccion: 'Ayuda', items: [
       { label: 'Aprende', icon: IconMic, to: '/cliente/aprende' },
     ]},
   ],
