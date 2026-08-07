@@ -1,18 +1,20 @@
 /**
- * services/monitor.js — vigilancia + alertas por Telegram (nivel 1)
+ * services/monitor.js — vigilancia + alertas (nivel 1)
  * ------------------------------------------------------------------
- * Cada pocos minutos revisa TODOS los servidores y avisa por Telegram cuando
- * algo cambia a mal (y cuando se recupera). Es determinístico, sin IA: es el
- * "operador que nunca duerme".
+ * Cada pocos minutos revisa TODOS los servidores y avisa cuando algo cambia a
+ * mal (y cuando se recupera). Determinístico, sin IA: el "operador que nunca
+ * duerme". Avisa por Telegram y/o WhatsApp (lo que configures).
  *
  * Alerta de:
  *   - Servidor que deja de responder (y su recuperación)
  *   - Radio/canal que se cae del aire (y su regreso)
  *   - Ancho de banda que se acerca al tope del servidor
  *
- * Config por variables de entorno:
- *   TELEGRAM_BOT_TOKEN   (de @BotFather)
- *   TELEGRAM_CHAT_ID     (chat/grupo donde llegan las alertas)
+ * Canales de aviso (por variables de entorno; puedes usar uno o ambos):
+ *   TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
+ *   WHATSAPP_TOKEN + WHATSAPP_TO  [+ WHATSAPP_API_URL]   (WhatsApp vía 360Messenger)
+ *     WHATSAPP_TO       = tu número con código de país, ej. 573001234567
+ *     WHATSAPP_API_URL  = endpoint de envío (por defecto el de 360Messenger)
  *   MONITOR_INTERVALO_MS (opcional, por defecto 3 min)
  * ------------------------------------------------------------------
  */
@@ -22,25 +24,53 @@ const clienteModel = require('../models/clienteModel');
 const azuracast = require('./azuracast');
 const videoNode = require('./videoNode');
 
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-const CHAT = process.env.TELEGRAM_CHAT_ID || '';
+const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TG_CHAT = process.env.TELEGRAM_CHAT_ID || '';
+const WA_TOKEN = process.env.WHATSAPP_TOKEN || '';
+const WA_TO = process.env.WHATSAPP_TO || '';
+const WA_URL = process.env.WHATSAPP_API_URL || 'https://api.360messenger.com/v2/sendMessage';
 const INTERVALO = Number(process.env.MONITOR_INTERVALO_MS || 3 * 60 * 1000);
 const GB = 1024 ** 3;
+
+const hayTelegram = () => Boolean(TG_TOKEN && TG_CHAT);
+const hayWhatsapp = () => Boolean(WA_TOKEN && WA_TO);
+const configurado = () => hayTelegram() || hayWhatsapp();
 
 // Último estado conocido, para alertar solo en los CAMBIOS (no spamear).
 const st = { servidores: new Map(), clientes: new Map(), banda: new Map() };
 
-async function telegram(texto) {
-  if (!TOKEN || !CHAT) return false;
+async function enviarTelegram(texto) {
   try {
-    const r = await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: CHAT, text: texto, parse_mode: 'HTML', disable_web_page_preview: true }),
+    const r = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: TG_CHAT, text: texto, disable_web_page_preview: true }),
     });
     if (!r.ok) console.error('[monitor] telegram HTTP', r.status);
     return r.ok;
   } catch (e) { console.error('[monitor] telegram:', e.message); return false; }
+}
+
+async function enviarWhatsapp(texto) {
+  try {
+    const body = new URLSearchParams({ phonenumber: WA_TO, text: texto });
+    const r = await fetch(WA_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    if (!r.ok) console.error('[monitor] whatsapp HTTP', r.status);
+    return r.ok;
+  } catch (e) { console.error('[monitor] whatsapp:', e.message); return false; }
+}
+
+/** Envía la alerta por todos los canales configurados. Devuelve true si al menos uno salió. */
+async function notificar(texto) {
+  const envios = [];
+  if (hayTelegram()) envios.push(enviarTelegram(texto));
+  if (hayWhatsapp()) envios.push(enviarWhatsapp(texto));
+  if (!envios.length) return false;
+  const res = await Promise.all(envios);
+  return res.some(Boolean);
 }
 
 /** ¿Debe alertar este cambio? (la primera lectura no alerta, salvo servidor caído). */
@@ -74,9 +104,9 @@ async function revisar() {
 
     // 1) Servidor caído / recuperado
     if (transicion(st.servidores, s.id, alcanzable, true)) {
-      await telegram(alcanzable
-        ? `✅ <b>${s.nombre}</b> volvió a responder.`
-        : `🔴 <b>${s.nombre}</b> NO responde (${esVideo ? 'nodo de video' : 'AzuraCast'}). Revísalo.`);
+      await notificar(alcanzable
+        ? `✅ ${s.nombre} volvió a responder.`
+        : `🔴 ${s.nombre} NO responde (${esVideo ? 'nodo de video' : 'AzuraCast'}). Revísalo.`);
     }
     if (!alcanzable) continue;
 
@@ -87,9 +117,9 @@ async function revisar() {
       const clave = esVideo ? c.short_name : c.azuracast_station_id;
       const alAire = Boolean(online[clave]);
       if (transicion(st.clientes, c.id, alAire)) {
-        await telegram(alAire
-          ? `✅ <b>${c.nombre_empresa}</b> volvió al aire.`
-          : `🔴 <b>${c.nombre_empresa}</b> se cayó (fuera del aire).`);
+        await notificar(alAire
+          ? `✅ ${c.nombre_empresa} volvió al aire.`
+          : `🔴 ${c.nombre_empresa} se cayó (fuera del aire).`);
       }
     }
 
@@ -101,30 +131,32 @@ async function revisar() {
         const pct = gb / s.banda_mensual_gb;
         const nivel = pct >= 0.9 ? 'critico' : pct >= 0.75 ? 'alto' : 'ok';
         if (transicion(st.banda, s.id, nivel) && nivel !== 'ok') {
-          await telegram(`${nivel === 'critico' ? '🚨' : '⚠️'} <b>${s.nombre}</b>: banda al ${Math.round(pct * 100)}% del tope (${gb.toFixed(0)}/${s.banda_mensual_gb} GB este mes).`);
+          await notificar(`${nivel === 'critico' ? '🚨' : '⚠️'} ${s.nombre}: banda al ${Math.round(pct * 100)}% del tope (${gb.toFixed(0)}/${s.banda_mensual_gb} GB este mes).`);
         }
       } catch (_) {}
     }
   }
 }
 
-/** Envía un mensaje de prueba para verificar la config. */
+/** Envía un mensaje de prueba por los canales configurados. */
 async function probar() {
-  if (!TOKEN || !CHAT) return { ok: false, error: 'Falta TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID en el .env' };
-  const ok = await telegram('🔔 <b>Prueba de alertas</b> — el monitor de tu panel está conectado y vigilando tus servidores. ✅');
-  return ok ? { ok: true, message: 'Mensaje de prueba enviado a Telegram ✅' } : { ok: false, error: 'No se pudo enviar. Revisa el token y el chat_id.' };
+  if (!configurado()) return { ok: false, error: 'No hay canal configurado. Pon TELEGRAM_* o WHATSAPP_* en el .env.' };
+  const ok = await notificar('🔔 Prueba de alertas — el monitor de tu panel está conectado y vigilando tus servidores. ✅');
+  const canales = [hayTelegram() && 'Telegram', hayWhatsapp() && 'WhatsApp'].filter(Boolean).join(' y ');
+  return ok ? { ok: true, message: `Mensaje de prueba enviado por ${canales} ✅` } : { ok: false, error: 'No se pudo enviar. Revisa el token y el destino.' };
 }
 
 let timer = null;
 function iniciar() {
   if (timer) return;
-  if (!TOKEN || !CHAT) {
-    console.log('🔔 Monitor: sin Telegram configurado (TELEGRAM_BOT_TOKEN/CHAT_ID). Se activa al ponerlos en el .env.');
+  if (!configurado()) {
+    console.log('🔔 Monitor: sin canal de avisos configurado (Telegram o WhatsApp). Se activa al ponerlos en el .env.');
     return;
   }
   revisar().catch((e) => console.error('[monitor]', e.message));   // primera lectura (fija estados)
   timer = setInterval(() => revisar().catch((e) => console.error('[monitor]', e.message)), INTERVALO);
-  console.log(`🔔 Monitor de alertas activo (revisa cada ${INTERVALO / 60000} min, avisa por Telegram)`);
+  const canales = [hayTelegram() && 'Telegram', hayWhatsapp() && 'WhatsApp'].filter(Boolean).join(' + ');
+  console.log(`🔔 Monitor de alertas activo (cada ${INTERVALO / 60000} min, avisa por ${canales})`);
 }
 
 module.exports = { iniciar, probar, revisar };

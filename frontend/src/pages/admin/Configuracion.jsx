@@ -74,9 +74,9 @@ export default function AdminConfiguracion() {
       <div className="card p-5">
         <h2 className="font-semibold mb-1">🔔 Alertas (Telegram)</h2>
         <p className="text-sm text-gray-400 mb-3">
-          El monitor vigila tus servidores 24/7 y te avisa por Telegram si una radio/canal se cae,
-          un servidor no responde o la banda se acerca al tope. Configúralo con
-          <b> TELEGRAM_BOT_TOKEN</b> y <b>TELEGRAM_CHAT_ID</b> en el <b>.env</b> del servidor, y prueba aquí.
+          El monitor vigila tus servidores 24/7 y te avisa si una radio/canal se cae, un servidor no
+          responde o la banda se acerca al tope. Avisa por <b>Telegram</b> (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)
+          y/o <b>WhatsApp</b> (WHATSAPP_TOKEN + WHATSAPP_TO, vía 360Messenger) — configúralo en el <b>.env</b> y prueba aquí.
         </p>
         <button onClick={probarAlertas} disabled={alerta?.cargando} className="btn-primary text-sm disabled:opacity-60">
           {alerta?.cargando ? 'Enviando…' : 'Enviar alerta de prueba'}
