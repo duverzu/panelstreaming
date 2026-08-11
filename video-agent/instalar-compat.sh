@@ -20,6 +20,7 @@ HLS_DIR=/var/asilive/hls
 LOG_DIR=/var/asilive
 PLAYER_DIR=/var/asilive/player
 AGENTE="${PUERTO_AGENTE:-3000}"
+PANEL_URL="${PANEL_URL:-https://server2.streaminghd.co}"
 CERT="/etc/letsencrypt/live/$DOMINIO"
 
 if [ ! -f "$CERT/fullchain.pem" ]; then
@@ -52,6 +53,7 @@ sed -e "s#{{DOMINIO_ASILIVE}}#$DOMINIO#g" \
     -e "s#{{LOG_DIR}}#$LOG_DIR#g" \
     -e "s#{{PLAYER_DIR}}#$PLAYER_DIR#g" \
     -e "s#{{PUERTO_AGENTE}}#$AGENTE#g" \
+    -e "s#{{PANEL_URL}}#$PANEL_URL#g" \
     -e "s#{{CERT_FULLCHAIN}}#$CERT/fullchain.pem#g" \
     -e "s#{{CERT_KEY}}#$CERT/privkey.pem#g" \
     "$PLANTILLAS/asilive.http" > "$CUENTAS/_asilive.http"

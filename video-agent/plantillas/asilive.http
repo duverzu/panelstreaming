@@ -53,4 +53,10 @@ server {
         client_max_body_size 0;
         add_header 'Access-Control-Allow-Origin' '*' always;
     }
+
+    # Cualquier ruta que no sea de streaming (/, o desconocida) → al panel.
+    # /live, /video/user y /_subir son locations más específicas y siguen igual.
+    location / {
+        return 301 {{PANEL_URL}}/;
+    }
 }
