@@ -77,18 +77,20 @@ function _detenerProceso(user) {
  * Configura y aplica el restream de una cuenta.
  * @param opts { facebook_key?, activo, puertoRtmp, host? }
  */
-async function configurar(user, { facebook_key, activo, puertoRtmp, host = '127.0.0.1' }) {
+async function configurar(user, { facebook_key, activo, puertoRtmp, host = '127.0.0.1', origen }) {
   const datos = await leerConfig();
   const prev = datos[user] || {};
   const clave = facebook_key !== undefined ? String(facebook_key || '').trim() : prev.facebook_key || '';
-  datos[user] = { facebook_key: clave, activo: Boolean(activo) };
+  // Fuente del restream: asilivehd (compat) pasa `origen` (la capa); por-puerto
+  // se arma con su puerto. Se guarda para poder reanudar tras un reinicio.
+  const src = origen || (puertoRtmp ? `rtmp://${host}:${puertoRtmp}/${user}hybrid/play` : (prev.origen || null));
+  datos[user] = { facebook_key: clave, activo: Boolean(activo), origen: src || undefined };
   await guardarConfig(datos);
 
   _detenerProceso(user);                          // reinicia si ya estaba
-  if (datos[user].activo && clave && puertoRtmp) {
-    const origen = `rtmp://${host}:${puertoRtmp}/${user}hybrid/play`;
+  if (datos[user].activo && clave && src) {
     const destino = FB_BASE.replace(/\/$/, '') + '/' + clave;
-    _lanzar(user, origen, destino);
+    _lanzar(user, src, destino);
   }
   return estado(user, datos[user]);
 }
@@ -119,9 +121,12 @@ async function restaurar(puertoDe) {
   const datos = await leerConfig();
   for (const [user, c] of Object.entries(datos)) {
     if (!c.activo || !c.facebook_key) continue;
-    const puertoRtmp = await puertoDe(user).catch(() => null);
-    if (!puertoRtmp) continue;
-    const origen = `rtmp://127.0.0.1:${puertoRtmp}/${user}hybrid/play`;
+    let origen = c.origen;   // compat (y por-puerto) guardan su fuente
+    if (!origen) {
+      const puertoRtmp = await puertoDe(user).catch(() => null);
+      if (!puertoRtmp) continue;
+      origen = `rtmp://127.0.0.1:${puertoRtmp}/${user}hybrid/play`;
+    }
     const destino = FB_BASE.replace(/\/$/, '') + '/' + c.facebook_key;
     _lanzar(user, origen, destino);
     console.log(`[restream] ${user}: reanudado a Facebook`);

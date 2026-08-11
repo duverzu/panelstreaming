@@ -861,6 +861,16 @@ app.get('/cuentas/:user/restream', wrap(async (req, res) => {
  */
 app.put('/cuentas/:user/restream', wrap(async (req, res) => {
   const user = String(req.params.user);
+  // Canal asilivehd (compat): la fuente es la capa (asilivehls/<user>), no un
+  // puerto propio. Va por acá, sin exigir cuenta por-puerto.
+  if (compat.tokenDe(user) !== undefined) {
+    const r = await restream.configurar(user, {
+      facebook_key: req.body?.facebook_key,
+      activo: req.body?.encender !== false,
+      origen: `rtmp://127.0.0.1:1935/asilivehls/${user}`,
+    });
+    return res.json({ ok: true, ...r });
+  }
   const lista = await cuentas();
   if (!lista.find((x) => x.user === user)) return res.status(404).json({ error: 'Cuenta no encontrada' });
   const puertoRtmp = (await puertosDe(user)).rtmp;
