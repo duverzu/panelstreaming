@@ -16,6 +16,16 @@ function IconLlave({ width = 14, height = 14 }) {
   );
 }
 
+/** Icono de lápiz (editar), inline. */
+function IconLapiz({ width = 14, height = 14 }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
 const ESTADO_BADGE = {
   online: { txt: 'Al aire', cls: 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400', dot: 'bg-brand-500 animate-pulse' },
   offline: { txt: 'Fuera de aire', cls: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400', dot: 'bg-gray-400' },
@@ -70,6 +80,21 @@ export default function AdminClientes() {
   useEffect(() => { cargar(); }, []);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Editar nombre y plan de un cliente
+  const [editar, setEditar] = useState(null);
+  const [editForm, setEditForm] = useState({ nombre_empresa: '', plan: '' });
+  const [editMsg, setEditMsg] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+  function abrirEditar(c) { setEditar(c); setEditForm({ nombre_empresa: c.nombre_empresa || '', plan: c.plan || '' }); setEditMsg(null); }
+  async function guardarEditar() {
+    setEditSaving(true); setEditMsg(null);
+    try {
+      await apiFetch(`/admin/clientes/${editar.id}`, { method: 'PUT', body: JSON.stringify(editForm) });
+      setEditar(null); cargar();
+    } catch (e) { setEditMsg(e.message); }
+    finally { setEditSaving(false); }
+  }
 
   // "Rock FM 88.5" → "rockfm885" (mismo criterio que el backend)
   const slug = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 40);
@@ -268,6 +293,7 @@ export default function AdminClientes() {
                                   <IconBtn title="Agregar música de cortesía" onClick={() => agregarBiblioteca(c)} hover="brand"><IconMusic width={14} height={14} /></IconBtn>
                                 </>
                               )}
+                              <IconBtn title="Editar nombre y plan" onClick={() => abrirEditar(c)} hover="brand"><IconLapiz width={14} height={14} /></IconBtn>
                               <IconBtn title="Ver accesos (usuario y datos de conexión)" onClick={() => verAccesos(c)} hover="brand"><IconLlave width={14} height={14} /></IconBtn>
                               <IconBtn title="Entrar al panel" onClick={() => entrar(c)} hover="brand"><IconEnter width={14} height={14} /></IconBtn>
                               <IconBtn title="Eliminar" onClick={() => borrar(c)} hover="red"><IconTrash width={14} height={14} /></IconBtn>
@@ -346,6 +372,29 @@ export default function AdminClientes() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal EDITAR nombre y plan */}
+      <Modal open={!!editar} onClose={() => setEditar(null)} title={`Editar · ${editar?.nombre_empresa || ''}`}>
+        <div className="space-y-3">
+          <div>
+            <label className="label">Nombre</label>
+            <input className="input" value={editForm.nombre_empresa} onChange={(e) => setEditForm({ ...editForm, nombre_empresa: e.target.value })} />
+          </div>
+          <div>
+            <label className="label">Plan</label>
+            <select className="input" value={editForm.plan} onChange={(e) => setEditForm({ ...editForm, plan: e.target.value })}>
+              <option value="">— sin plan —</option>
+              {planesTipo.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Asigna el plan del canal (para orden y facturación).</p>
+          </div>
+          {editMsg && <div className="text-sm rounded-xl px-3 py-2 text-red-600 bg-red-50 dark:bg-red-500/10">{editMsg}</div>}
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => setEditar(null)} className="btn-ghost flex-1">Cancelar</button>
+            <button onClick={guardarEditar} disabled={editSaving} className="btn-primary flex-1">{editSaving ? 'Guardando…' : 'Guardar'}</button>
+          </div>
+        </div>
       </Modal>
 
       {/* Modal de ACCESOS del cliente */}

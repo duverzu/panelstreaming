@@ -243,12 +243,15 @@ router.get('/clientes/estados', requireAdmin, wrap(async (req, res) => {
   // sus cuentas con al_aire), no una petición por cliente.
   const idsNodos = [...new Set(clientes.filter((c) => c.tipo === 'video' && c.activo && c.servidor_id).map((c) => c.servidor_id))];
   const porNodo = new Map();
+  const porNodoCompat = new Map();
   await Promise.all(idsNodos.map(async (sid) => {
     try {
       const s = await servidorModel.findById(sid);
       if (!s || s.tipo !== 'video') return;
-      const lista = await videoNode.crearCliente(s.url, s.api_key).cuentas();
+      const cli = videoNode.crearCliente(s.url, s.api_key);
+      const [lista, compat] = await Promise.all([cli.cuentas(), cli.compatClientes()]);
       porNodo.set(sid, new Map((lista || []).map((x) => [x.user, x])));
+      porNodoCompat.set(sid, new Map((compat || []).map((x) => [x.user, x])));
     } catch (_) { /* nodo caído → queda 'error' abajo */ }
   }));
 
@@ -256,6 +259,11 @@ router.get('/clientes/estados', requireAdmin, wrap(async (req, res) => {
     if (!c.activo) { estados[c.id] = 'suspendido'; return; }
 
     if (c.tipo === 'video') {
+      if (c.compat) {   // canal asilivehd: su estado viene de la capa de compatibilidad
+        const canal = porNodoCompat.get(c.servidor_id)?.get(c.short_name);
+        estados[c.id] = canal?.al_aire ? 'online' : 'offline';
+        return;
+      }
       const mapa = porNodo.get(c.servidor_id);
       if (!mapa) { estados[c.id] = 'error'; return; }
       const cuenta = mapa.get(c.short_name);
