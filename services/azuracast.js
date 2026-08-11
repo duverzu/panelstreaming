@@ -51,6 +51,10 @@ function crearCliente(baseURL, apiKey) {
   // para inyectar el anuncio de la hora recién generado.
   const request = async (id, reqId) => { try { return (await api.post(`/station/${id}/request/${reqId}`)).data; } catch (e) { handleError(`request(${id})`, e); } };
   const stopStation = async (id) => { try { await api.post(`/station/${id}/frontend/stop`); await api.post(`/station/${id}/backend/stop`); return { stopped: true }; } catch (e) { handleError(`stopStation(${id})`, e); } };
+  // Cola de reproducción "preparada" (autodj): listarla o vaciarla. Vaciarla +
+  // skip hace que un pedido recién hecho suene enseguida (no tras 3 canciones).
+  const getQueue = async (id) => { try { return (await api.get(`/station/${id}/queue`)).data; } catch (e) { handleError(`getQueue(${id})`, e); } };
+  const clearQueue = async (id) => { try { return (await api.delete(`/station/${id}/queue`)).data; } catch (e) { handleError(`clearQueue(${id})`, e); } };
   const getStationStatus = async (id) => { try { return (await api.get(`/station/${id}/status`)).data; } catch (e) { handleError(`getStationStatus(${id})`, e); } };
   const listMedia = async (id) => { try { return (await api.get(`/station/${id}/files`)).data; } catch (e) { handleError(`listMedia(${id})`, e); } };
   const uploadMedia = async (id, filename, base64) => { try { return (await api.post(`/station/${id}/files`, { path: filename, file: base64 })).data; } catch (e) { handleError(`uploadMedia(${id})`, e); } };
@@ -76,7 +80,7 @@ function crearCliente(baseURL, apiKey) {
     baseURL, apiKey, api,
     getStation, getStationAdmin, getNowPlaying, getNowPlayingAll, createStation, updateStation, deleteStation,
     getMounts, createMount, updateMount, createStreamer, getStreamers, updateStreamer,
-    restartStation, skipSong, request, stopStation, getStationStatus,
+    restartStation, skipSong, request, stopStation, getStationStatus, getQueue, clearQueue,
     listMedia, uploadMedia, deleteMedia, setFilePlaylists, actualizarFile,
     getPlaylists, createPlaylist, updatePlaylist, deletePlaylist,
     getWebhooks, createWebhook, updateWebhook, deleteWebhook,

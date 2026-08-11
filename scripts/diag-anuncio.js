@@ -1,10 +1,11 @@
 /**
- * scripts/diag-anuncio.js — diagnóstico del anuncio de hora en una estación.
- * Uso (en el VPS del panel):  node scripts/diag-anuncio.js <short_name>
- * Ej:  node scripts/diag-anuncio.js laemistereo
+ * scripts/diag-anuncio.js — encontrar la forma FIABLE de que el anuncio suene ya.
+ * Uso (en el VPS del panel):  node scripts/diag-anuncio.js <short_name-o-id>
  *
- * Hace TODO el flujo paso a paso e imprime qué responde AzuraCast en cada punto,
- * para ver por qué no suena. No deja basura: borra el archivo de prueba al final.
+ * Prueba dos métodos y dice cuál hace sonar el anuncio de una:
+ *   A) JINGLE (la playlist ya existe/está cargada).
+ *   B) REQUEST + vaciar la cola preparada + skip.
+ * Limpia los archivos de prueba al final.
  */
 require('dotenv').config();
 const clienteModel = require('../models/clienteModel');
@@ -14,108 +15,89 @@ const { generarVoz, textoHora } = require('../services/anuncioHora');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const L = (...a) => console.log(...a);
 const paso = (n, t) => L(`\n──── ${n}. ${t} ────`);
+const tit = (s) => s?.song?.title || s?.song?.text || '';
 
-function titulos(np) {
-  const t = (s) => s?.song?.title || s?.song?.text || '(sin título)';
-  return {
-    ahora: np?.now_playing ? t(np.now_playing) : '(nada)',
-    online: np?.is_online,
-    historial: (np?.song_history || []).slice(0, 4).map(t),
-  };
+async function buscarCliente(short) {
+  let c = await clienteModel.findByShortName(short);
+  if (c) return c;
+  const { query } = require('../config/database');
+  const { rows } = await query(`SELECT id, short_name, nombre_empresa FROM clientes WHERE tipo IS DISTINCT FROM 'video' ORDER BY id`);
+  const m = rows.find((r) => String(r.id) === short || (r.short_name || '').toLowerCase() === short.toLowerCase() || (r.nombre_empresa || '').toLowerCase().includes(short.toLowerCase()));
+  if (m) return clienteModel.findById(m.id);
+  L(`No encontré "${short}". Disponibles:`); for (const r of rows) L(`  id ${r.id} · ${r.short_name} · ${r.nombre_empresa}`);
+  return null;
+}
+
+/** Sube un anuncio fresco y devuelve {media, nombre, marca}. */
+async function subirAnuncio(az, stationId, clienteId, etiqueta) {
+  const texto = textoHora(new Date(), { saludo: 'Prueba', zona: 'America/Bogota' });
+  const mp3 = await generarVoz(texto, { voz: 'femenina' });
+  const nombre = `anuncio-diag-${etiqueta}-${clienteId}-${Date.now()}.mp3`;
+  const media = await az.uploadMedia(stationId, nombre, mp3.toString('base64'));
+  return { media, marca: nombre.replace(/\.[^.]+$/, ''), texto };
+}
+
+/** Observa el "ahora suena" y dice en qué segundo aparece la marca (o -1). */
+async function observar(az, stationId, marca, segs) {
+  for (let i = 1; i <= segs / 3; i++) {
+    await sleep(3000);
+    const np = await az.getNowPlaying(stationId).catch(() => null);
+    const ahora = np?.now_playing ? tit(np.now_playing) : '';
+    const sono = ahora.includes(marca) || (np?.song_history || []).some((h) => tit(h).includes(marca));
+    L(`  +${i * 3}s → ahora: "${ahora.slice(0, 40)}"${sono ? '   ✅ ¡SONÓ EL ANUNCIO!' : ''}`);
+    if (sono) return i * 3;
+  }
+  return -1;
 }
 
 (async () => {
-  const short = process.argv[2];
-  if (!short) { L('Falta el short_name. Uso: node scripts/diag-anuncio.js <short_name>'); process.exit(1); }
-
-  let cliente = await clienteModel.findByShortName(short);
-  if (!cliente) {
-    // Quizá pasaron el nombre/empresa o el id: buscar en la lista completa.
-    const { query } = require('../config/database');
-    const { rows } = await query(
-      `SELECT id, short_name, nombre_empresa, azuracast_station_id, tipo
-         FROM clientes WHERE tipo IS DISTINCT FROM 'video' ORDER BY id`);
-    const m = rows.find((r) => String(r.id) === short
-      || (r.short_name || '').toLowerCase() === short.toLowerCase()
-      || (r.nombre_empresa || '').toLowerCase().includes(short.toLowerCase()));
-    if (m) cliente = await clienteModel.findById(m.id);
-    if (!cliente) {
-      L(`No encontré "${short}". Clientes de audio disponibles (usa el short_name o el id):`);
-      for (const r of rows) L(`  id ${r.id} · short_name="${r.short_name}" · ${r.nombre_empresa} · station ${r.azuracast_station_id}`);
-      process.exit(1);
-    }
-  }
-  L(`Cliente: ${cliente.nombre_empresa} (id ${cliente.id}) · servidor_id ${cliente.servidor_id} · station ${cliente.azuracast_station_id}`);
-
+  const cliente = await buscarCliente(process.argv[2] || '');
+  if (!cliente) process.exit(1);
   const az = await azuracast.paraServidorId(cliente.servidor_id);
   const stationId = cliente.azuracast_station_id;
-  if (!stationId) { L('El cliente no tiene azuracast_station_id.'); process.exit(1); }
+  L(`Cliente: ${cliente.nombre_empresa} (id ${cliente.id}) · station ${stationId}`);
 
+  const pls = (await az.getPlaylists(stationId)) || [];
+  const pl = pls.find((p) => p.name === '📣 Anuncios');
+  const plId = pl?.id || (await az.createPlaylist(stationId, { name: '📣 Anuncios', type: 'default', source: 'songs', is_enabled: true, weight: 1 })).id;
+
+  let ganadorA = -1, ganadorB = -1;
   try {
-    paso(1, 'Estado de la estación (¿está al aire? ¿requests activos?)');
-    const st = await az.getStation(stationId).catch((e) => { L('  getStation ERROR:', e.message); return null; });
-    if (st) L('  enable_requests:', st.enable_requests, '· backend:', st.backend_type, '· timezone:', st.timezone);
-    const status = await az.getStationStatus(stationId).catch((e) => { L('  getStationStatus ERROR:', e.message); return null; });
-    if (status) L('  backend_running:', status.backend_running, '· frontend_running:', status.frontend_running);
-    const np0 = await az.getNowPlaying(stationId).catch((e) => { L('  getNowPlaying ERROR:', e.message); return null; });
-    if (np0) L('  ahora suena:', JSON.stringify(titulos(np0)));
+    // ---------- MÉTODO A: JINGLE ----------
+    paso('A', 'JINGLE — playlist como jingle, asignar anuncio, skip, observar 30s');
+    await az.updatePlaylist(stationId, plId, { is_jingle: true, is_enabled: true, include_in_requests: false });
+    const a = await subirAnuncio(az, stationId, cliente.id, 'A');
+    L('  subido:', a.marca);
+    await az.setFilePlaylists(stationId, a.media.id, [plId]);
+    await sleep(5000);
+    await az.skipSong(stationId).catch(() => {});
+    ganadorA = await observar(az, stationId, 'anuncio-diag-A', 30);
+    await az.setFilePlaylists(stationId, a.media.id, []).catch(() => {});
+    await az.deleteMedia(stationId, a.media.id).catch(() => {});
 
-    paso(2, 'Playlist "📣 Anuncios" (config actual)');
-    const pls = (await az.getPlaylists(stationId)) || [];
-    const pl = pls.find((p) => p.name === '📣 Anuncios');
-    if (pl) L('  ', JSON.stringify({ id: pl.id, is_jingle: pl.is_jingle, is_enabled: pl.is_enabled, include_in_requests: pl.include_in_requests, play_per_songs: pl.play_per_songs, num_of_songs: pl.num_songs }));
-    else L('  (todavía no existe; se creará al generar)');
-
-    paso(3, 'Generar voz + subir archivo');
-    const texto = textoHora(new Date(), { saludo: 'Prueba', zona: 'America/Bogota' });
-    L('  texto:', texto);
-    const mp3 = await generarVoz(texto, { voz: 'femenina' });
-    L('  mp3 bytes:', mp3.length);
-    const nombre = `anuncio-diag-${cliente.id}-${Date.now()}.mp3`;
-    const media = await az.uploadMedia(stationId, nombre, mp3.toString('base64'));
-    L('  media:', JSON.stringify({ id: media.id, unique_id: media.unique_id, path: media.path, length: media.length }));
-
-    paso('4a', 'ACTIVAR pedidos en la estación (enable_requests + sin límites)');
-    try {
-      await az.updateStation(stationId, { enable_requests: true, request_delay: 0, request_threshold_seconds: 0 });
-      const st2 = await az.getStation(stationId);
-      L('  enable_requests ahora:', st2.enable_requests);
-    } catch (e) { L('  updateStation ERROR:', e.message); }
-
-    paso('4b', 'Playlist HABILITADA + requestable (no jingle) y asignar el archivo');
-    let plId = pl?.id;
-    if (!plId) {
-      const nuevo = await az.createPlaylist(stationId, { name: '📣 Anuncios', type: 'default', source: 'songs', is_jingle: false, include_in_requests: true, include_in_on_demand: true, is_enabled: true, weight: 1 });
-      plId = nuevo.id; L('  creada playlist id', plId);
-    } else {
-      await az.updatePlaylist(stationId, plId, { is_jingle: false, is_enabled: true, include_in_requests: true, include_in_on_demand: true });
-      L('  playlist forzada a habilitada+requestable');
-    }
-    await az.setFilePlaylists(stationId, media.id, [plId]);
-    L('  archivo asignado a la playlist');
-
-    paso(5, 'Esperar 8s (procesado/recarga) y PEDIR (request)');
+    // ---------- MÉTODO B: REQUEST + vaciar cola ----------
+    paso('B', 'REQUEST — activar pedidos, requestable, pedir, VACIAR cola, skip, observar 30s');
+    await az.updateStation(stationId, { enable_requests: true, request_delay: 0, request_threshold_seconds: 0 }).catch((e) => L('  updateStation:', e.message));
+    await az.updatePlaylist(stationId, plId, { is_jingle: false, is_enabled: true, include_in_requests: true, include_in_on_demand: true });
+    const b = await subirAnuncio(az, stationId, cliente.id, 'B');
+    L('  subido:', b.marca);
+    await az.setFilePlaylists(stationId, b.media.id, [plId]);
     await sleep(8000);
-    let reqOk = false;
-    try { const r = await az.request(stationId, media.unique_id || media.id); reqOk = true; L('  request OK:', JSON.stringify(r).slice(0, 200)); }
+    try { const r = await az.request(stationId, b.media.unique_id || b.media.id); L('  request:', r?.message || 'ok'); }
     catch (e) { L('  request ERROR:', e.message); }
+    try { const q = await az.getQueue(stationId); L('  cola preparada:', Array.isArray(q) ? q.length : q); await az.clearQueue(stationId); L('  cola vaciada'); }
+    catch (e) { L('  cola ERROR:', e.message); }
+    await az.skipSong(stationId).catch(() => {});
+    ganadorB = await observar(az, stationId, 'anuncio-diag-B', 30);
+    await az.setFilePlaylists(stationId, b.media.id, []).catch(() => {});
+    await az.deleteMedia(stationId, b.media.id).catch(() => {});
 
-    paso(6, 'skip (saltar canción actual) y observar 24s');
-    await az.skipSong(stationId).catch((e) => L('  skip ERROR:', e.message));
-    for (let i = 1; i <= 8; i++) {
-      await sleep(3000);
-      const np = await az.getNowPlaying(stationId).catch(() => null);
-      L(`  +${i * 3}s →`, JSON.stringify(titulos(np)));
-    }
-
-    paso(7, 'Limpieza (borrar archivo de prueba)');
-    await az.setFilePlaylists(stationId, media.id, []).catch(() => {});
-    await az.deleteMedia(stationId, media.id).catch((e) => L('  deleteMedia ERROR:', e.message));
-    L('  listo. request funcionó:', reqOk);
-
-    L('\n== FIN. Copia TODO esto y pásamelo. ==');
+    paso('RESULTADO', '¿cuál sonó?');
+    L(`  MÉTODO A (jingle):  ${ganadorA >= 0 ? `✅ sonó a los ${ganadorA}s` : '❌ no sonó en 30s'}`);
+    L(`  MÉTODO B (request+vaciar cola):  ${ganadorB >= 0 ? `✅ sonó a los ${ganadorB}s` : '❌ no sonó en 30s'}`);
   } catch (e) {
     L('\n!! ERROR GENERAL:', e.message);
   }
+  L('\n== FIN. Copia TODO esto y pásamelo. ==');
   process.exit(0);
 })();
