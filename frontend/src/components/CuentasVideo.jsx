@@ -48,10 +48,12 @@ export default function CuentasVideo({ servidorId }) {
 
   useEffect(() => {
     let vivo = true;
-    apiFetch(`/admin/servidores/${servidorId}/cuentas`)
+    const carga = () => apiFetch(`/admin/servidores/${servidorId}/cuentas`)
       .then((d) => vivo && setDatos(d))
       .catch((e) => vivo && setError(e.message));
-    return () => { vivo = false; };
+    carga();
+    const t = setInterval(carga, 10000);   // auto-refresco: ver canales encenderse en vivo
+    return () => { vivo = false; clearInterval(t); };
   }, [servidorId]);
 
   if (error) {
@@ -78,11 +80,11 @@ export default function CuentasVideo({ servidorId }) {
       {datos.cuentas.map((c) => (
         <div key={c.user}>
           <button
-            onClick={() => setAbierta(abierta === c.user ? null : c.user)}
-            className="w-full text-left p-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition flex items-center gap-3"
+            onClick={() => !c.compat && setAbierta(abierta === c.user ? null : c.user)}
+            className={`w-full text-left p-3 transition flex items-center gap-3 ${c.compat ? 'cursor-default' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}
           >
             <span className="flex-1 min-w-0">
-              <span className="font-medium flex items-center gap-2">
+              <span className="font-medium flex items-center gap-2 flex-wrap">
                 {c.nombre_empresa || c.user}
                 {c.al_aire && (
                   <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400">
@@ -90,7 +92,10 @@ export default function CuentasVideo({ servidorId }) {
                     {c.fuente === 'stream' ? 'EMISIÓN 24/7' : 'EN VIVO'}
                   </span>
                 )}
-                {!c.cliente_id && (
+                {c.compat && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">asilivehd</span>
+                )}
+                {!c.cliente_id && !c.compat && (
                   <span
                     role="button" tabIndex={0}
                     onClick={(e) => { e.stopPropagation(); abrirImportar(c); }}
@@ -102,16 +107,27 @@ export default function CuentasVideo({ servidorId }) {
                 )}
               </span>
               <span className="text-xs text-gray-400 font-mono">
-                {c.user} · puertos {c.puertos?.http || '—'} / {c.puertos?.rtmp || '—'}
+                {c.compat
+                  ? `${c.user} · server.asilivehd.com/live/${c.user}.m3u8`
+                  : `${c.user} · puertos ${c.puertos?.http || '—'} / ${c.puertos?.rtmp || '—'}`}
               </span>
             </span>
             <span className="text-right shrink-0">
-              <span className="text-sm font-medium tabular-nums block">{c.espacio}</span>
-              <span className="text-xs text-gray-400">{c.videos} videos</span>
+              {c.compat ? (
+                <>
+                  <span className="text-sm font-medium tabular-nums block">{c.viewers ?? 0}</span>
+                  <span className="text-xs text-gray-400">viewers</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-sm font-medium tabular-nums block">{c.espacio}</span>
+                  <span className="text-xs text-gray-400">{c.videos} videos</span>
+                </>
+              )}
             </span>
           </button>
 
-          {abierta === c.user && <Detalle servidorId={servidorId} user={c.user} />}
+          {abierta === c.user && !c.compat && <Detalle servidorId={servidorId} user={c.user} />}
         </div>
       ))}
     </div>

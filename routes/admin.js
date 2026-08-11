@@ -960,22 +960,38 @@ router.get('/servidores/:id/cuentas', requireAdmin, wrap(async (req, res) => {
     });
   }
 
-  const cuentas = await nodo.cuentas();
+  const [cuentas, canalesCompat] = await Promise.all([nodo.cuentas(), nodo.compatClientes()]);
 
   // Cruce con nuestros clientes: cuáles ya están en el panel y cuáles no
   const nuestros = await clienteModel.findAllWithEmail();
   const porShort = {};
   nuestros.forEach((c) => { if (c.short_name) porShort[c.short_name] = c; });
 
+  const deNodo = cuentas.map((c) => ({
+    ...c,
+    espacio: humanBytes(c.espacio_bytes),
+    // null = existe en el nodo pero todavía no está en el panel
+    cliente_id: porShort[c.user]?.id || null,
+    nombre_empresa: porShort[c.user]?.nombre_empresa || null,
+  }));
+
+  // Canales de la capa de compatibilidad (asilivehd): esquema por-ruta, no por-puerto
+  const deCompat = (canalesCompat || []).map((c) => ({
+    user: c.user,
+    compat: true,
+    al_aire: c.al_aire,
+    fuente: 'live',
+    viewers: c.viewers,
+    espacio: '—',
+    videos: 0,
+    puertos: null,
+    cliente_id: porShort[c.user]?.id || null,
+    nombre_empresa: porShort[c.user]?.nombre_empresa || null,
+  }));
+
   res.json({
     servidor: { id: servidor.id, nombre: servidor.nombre, url: servidor.url },
-    cuentas: cuentas.map((c) => ({
-      ...c,
-      espacio: humanBytes(c.espacio_bytes),
-      // null = existe en el nodo pero todavía no está en el panel
-      cliente_id: porShort[c.user]?.id || null,
-      nombre_empresa: porShort[c.user]?.nombre_empresa || null,
-    })),
+    cuentas: [...deCompat, ...deNodo],
   });
 }));
 

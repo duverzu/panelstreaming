@@ -49,7 +49,7 @@ app.use((req, res, next) => {
   if (req.path === '/health') return next();
   // nginx pregunta desde el propio servidor en cada conexión de vídeo:
   // no lleva token, se acepta solo si viene de localhost.
-  if (req.path.startsWith('/rtmp/') || req.path.startsWith('/compat/')) {
+  if (req.path.startsWith('/rtmp/') || req.path === '/compat/publicar' || req.path === '/compat/fin') {
     const ip = (req.ip || '').replace('::ffff:', '');
     if (ip === '127.0.0.1' || ip === '::1') return next();
     return res.status(403).end();
@@ -364,6 +364,49 @@ app.post('/compat/fin', (req, res) => {
   console.log(`[compat] ${req.body?.name || '?'}: terminó`);
   res.status(200).end();
 });
+
+// GET /compat/clientes — estado de los canales asilivehd (en vivo + viewers).
+// Lo consume el panel (con token) para mostrarlos junto al nodo.
+const ASILIVE_HLS = process.env.ASILIVE_HLS || '/var/asilive/hls';
+const ASILIVE_LOG = process.env.ASILIVE_LOG || '/var/asilive/asilive-access.log';
+
+async function compatAlAire(user) {
+  try {
+    const st = await fsp.stat(path.join(ASILIVE_HLS, `${user}.m3u8`));
+    return Date.now() - st.mtimeMs < 30000;   // el HLS se reescribe cada ~3s
+  } catch { return false; }
+}
+
+/** Viewers por usuario, leyendo el access.log compartido de la capa. */
+async function compatViewers(users, ventanaSeg = 60) {
+  const sets = {}; users.forEach((u) => (sets[u] = new Set()));
+  try {
+    const st = await fsp.stat(ASILIVE_LOG);
+    const inicio = Math.max(0, st.size - 1024 * 1024);
+    const buf = Buffer.alloc(st.size - inicio);
+    const fd = await fsp.open(ASILIVE_LOG, 'r');
+    await fd.read(buf, 0, buf.length, inicio);
+    await fd.close();
+    const corte = Date.now() - ventanaSeg * 1000;
+    for (const linea of buf.toString('utf8').split('\n')) {
+      const m = linea.match(/\/live\/([a-zA-Z0-9_.-]+?)(?:-\d+\.ts|\.m3u8)/);
+      if (!m || !sets[m[1]]) continue;
+      const t = tiempoDeLinea(linea);
+      if (t === null || t < corte) continue;
+      const ip = linea.split(' ')[0];
+      if (ip && ip !== '127.0.0.1') sets[m[1]].add(ip);
+    }
+  } catch { /* aún sin log */ }
+  const out = {}; users.forEach((u) => (out[u] = sets[u].size)); return out;
+}
+
+app.get('/compat/clientes', wrap(async (req, res) => {
+  const users = compat.lista();
+  const viewers = await compatViewers(users);
+  const clientes = [];
+  for (const u of users) clientes.push({ user: u, al_aire: await compatAlAire(u), viewers: viewers[u] || 0 });
+  res.json({ total: users.length, clientes });
+}));
 
 
 // ==================================================================

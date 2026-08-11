@@ -55,6 +55,12 @@ function crearCliente(baseURL, token) {
       try { return (await api.get('/viewers')).data; } catch (e) { return fallo('viewers', e); }
     },
 
+    /** Canales de la capa de compatibilidad "asilivehd" (en vivo + viewers). */
+    compatClientes: async () => {
+      try { return (await api.get('/compat/clientes')).data?.clientes || []; }
+      catch (e) { return fallo('compatClientes', e) || []; }
+    },
+
     /** Estado del reenvío a Facebook de una cuenta. */
     restream: (user) => api.get(`/cuentas/${encodeURIComponent(user)}/restream`).then((r) => r.data).catch((e) => fallo(`restream(${user})`, e)),
     /** Configura/enciende el reenvío a Facebook. body: { facebook_key?, encender } */
