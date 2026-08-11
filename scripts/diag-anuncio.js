@@ -75,27 +75,34 @@ function titulos(np) {
     const media = await az.uploadMedia(stationId, nombre, mp3.toString('base64'));
     L('  media:', JSON.stringify({ id: media.id, unique_id: media.unique_id, path: media.path, length: media.length }));
 
-    paso(4, 'Asegurar playlist como JINGLE y asignar el archivo');
+    paso('4a', 'ACTIVAR pedidos en la estación (enable_requests + sin límites)');
+    try {
+      await az.updateStation(stationId, { enable_requests: true, request_delay: 0, request_threshold_seconds: 0 });
+      const st2 = await az.getStation(stationId);
+      L('  enable_requests ahora:', st2.enable_requests);
+    } catch (e) { L('  updateStation ERROR:', e.message); }
+
+    paso('4b', 'Playlist HABILITADA + requestable (no jingle) y asignar el archivo');
     let plId = pl?.id;
     if (!plId) {
-      const nuevo = await az.createPlaylist(stationId, { name: '📣 Anuncios', type: 'default', source: 'songs', is_jingle: true, is_enabled: true, weight: 1 });
+      const nuevo = await az.createPlaylist(stationId, { name: '📣 Anuncios', type: 'default', source: 'songs', is_jingle: false, include_in_requests: true, include_in_on_demand: true, is_enabled: true, weight: 1 });
       plId = nuevo.id; L('  creada playlist id', plId);
     } else {
-      await az.updatePlaylist(stationId, plId, { is_jingle: true, is_enabled: true });
-      L('  playlist forzada a jingle+enabled');
+      await az.updatePlaylist(stationId, plId, { is_jingle: false, is_enabled: true, include_in_requests: true, include_in_on_demand: true });
+      L('  playlist forzada a habilitada+requestable');
     }
     await az.setFilePlaylists(stationId, media.id, [plId]);
-    L('  archivo asignado a la jingle');
+    L('  archivo asignado a la playlist');
 
-    paso(5, 'Esperar 6s (procesado/recarga) y PEDIR (request)');
-    await sleep(6000);
+    paso(5, 'Esperar 8s (procesado/recarga) y PEDIR (request)');
+    await sleep(8000);
     let reqOk = false;
     try { const r = await az.request(stationId, media.unique_id || media.id); reqOk = true; L('  request OK:', JSON.stringify(r).slice(0, 200)); }
     catch (e) { L('  request ERROR:', e.message); }
 
-    paso(6, 'skip (saltar canción actual) y observar 12s');
+    paso(6, 'skip (saltar canción actual) y observar 24s');
     await az.skipSong(stationId).catch((e) => L('  skip ERROR:', e.message));
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 8; i++) {
       await sleep(3000);
       const np = await az.getNowPlaying(stationId).catch(() => null);
       L(`  +${i * 3}s →`, JSON.stringify(titulos(np)));
