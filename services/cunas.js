@@ -14,7 +14,7 @@
 const { query } = require('../config/database');
 const clienteModel = require('../models/clienteModel');
 const azuracast = require('./azuracast');
-const { generarVoz, verConfig } = require('./anuncioHora');
+const { generarVoz, verConfig, retirarTrasSonar } = require('./anuncioHora');
 
 const PLAYLIST = '📣 Cuñas';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -23,20 +23,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function playlistCunas(az, stationId) {
   const pls = (await az.getPlaylists(stationId)) || [];
   const existe = pls.find((p) => p.name === PLAYLIST);
-  // Debe estar HABILITADA y requestable (si no, AzuraCast rechaza el request y
-  // la cuña no suena), pero NO jingle (si no se mete tras cada canción). No rota
-  // porque la cuña se SACA de la playlist tras pedirla (ver reproducir).
+  // Tipo JINGLE habilitado: es lo único que suena puntual entre canciones. Para
+  // que no se repita, la cuña se mete a la playlist solo al sonar y se saca tras
+  // sonar una vez (ver reproducir). Playlists viejas mal → se corrigen.
   if (existe) {
-    if (existe.is_jingle || !existe.is_enabled || !existe.include_in_requests) {
-      await az.updatePlaylist(stationId, existe.id, {
-        is_jingle: false, is_enabled: true, include_in_requests: true, include_in_on_demand: true,
-      }).catch(() => {});
+    if (!existe.is_jingle || !existe.is_enabled) {
+      await az.updatePlaylist(stationId, existe.id, { is_jingle: true, is_enabled: true }).catch(() => {});
     }
     return existe.id;
   }
   const pl = await az.createPlaylist(stationId, {
     name: PLAYLIST, type: 'default', source: 'songs',
-    is_jingle: false, include_in_requests: true, include_in_on_demand: true, is_enabled: true, weight: 1,
+    is_jingle: true, include_in_requests: false, include_in_on_demand: false, is_enabled: true, weight: 1,
   });
   return pl.id;
 }
@@ -48,20 +46,18 @@ async function subirMedia(az, stationId, buffer, nombre) {
   return media.unique_id || media.id;
 }
 
-/** Pone a sonar una cuña: la mete a la playlist para poder pedirla, la pide y
- *  la saca (así suena solo a su hora, no rota como canción al azar). */
+/** Pone a sonar una cuña: la mete a la jingle, salta (si aplica) para que suene,
+ *  y en segundo plano la saca tras sonar una vez (así no se repite). */
 async function reproducir(az, stationId, mediaId, { skip = true } = {}) {
-  await sleep(1500);
-  let numId = null;
-  try {
-    const plId = await playlistCunas(az, stationId);
-    const files = (await az.listMedia(stationId)) || [];
-    numId = files.find((x) => x.unique_id === mediaId || String(x.id) === String(mediaId))?.id ?? null;
-    if (numId) { await az.setFilePlaylists(stationId, numId, [plId]); await sleep(1500); }
-  } catch (e) { console.error('[cuna] preparar:', e.message); }
-  try { await az.request(stationId, mediaId); } catch (e) { console.error('[cuna] request:', e.message); }
-  if (skip) await az.skipSong(stationId).catch(() => {});
-  if (numId) { await sleep(1500); await az.setFilePlaylists(stationId, numId, []).catch(() => {}); }
+  const plId = await playlistCunas(az, stationId);
+  const files = (await az.listMedia(stationId)) || [];
+  const f = files.find((x) => x.unique_id === mediaId || String(x.id) === String(mediaId));
+  if (!f) { try { await az.request(stationId, mediaId); } catch (e) { console.error('[cuna] request:', e.message); } return; }
+  await az.setFilePlaylists(stationId, f.id, [plId]);            // queda como jingle
+  await sleep(4000);                                            // deja que recargue
+  if (skip) await az.skipSong(stationId).catch(() => {});        // prueba → suena de una
+  retirarTrasSonar(az, stationId, String(f.path || '').split('/').pop().replace(/\.[^.]+$/, ''), f.id)
+    .catch((e) => console.error('[cuna] retiro:', e.message));
 }
 
 // ---- CRUD ---------------------------------------------------------

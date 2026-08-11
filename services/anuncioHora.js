@@ -100,29 +100,50 @@ async function generarVoz(texto, { voz } = {}) {
 }
 
 // ---- Inyección en AzuraCast --------------------------------------
+// Nombre "marca" (sin carpeta ni extensión) para reconocer el archivo en el
+// "ahora suena" de AzuraCast (title = nombre del archivo cuando no hay ID3).
+const marca = (n) => String(n).split('/').pop().replace(/\.[^.]+$/, '');
+
 /**
- * Busca/crea la playlist de anuncios. Debe estar HABILITADA y requestable
- * (si está deshabilitada, AzuraCast rechaza el request y el anuncio no suena),
- * pero NO como jingle (si es jingle se mete tras cada canción y repite la hora).
- * No rota porque el archivo se SACA de la playlist justo después de pedirlo
- * (ver anunciarEn). Las playlists viejas quedaron mal: aquí se corrigen.
+ * Busca/crea la playlist de anuncios como JINGLE habilitado. El jingle es lo
+ * ÚNICO que suena de forma fiable y puntual entre canciones (el "request" a un
+ * archivo recién subido no es fiable: tarda en quedar pedible y no suena). Para
+ * que NO se repita toda la hora, el anuncio se SACA de la playlist apenas suena
+ * una vez (ver retirarTrasSonar). Las playlists viejas quedaron mal: se corrigen.
  */
 async function playlistAnuncios(az, stationId) {
   const pls = (await az.getPlaylists(stationId)) || [];
   const existe = pls.find((p) => p.name === PLAYLIST);
   if (existe) {
-    if (existe.is_jingle || !existe.is_enabled || !existe.include_in_requests) {
-      await az.updatePlaylist(stationId, existe.id, {
-        is_jingle: false, is_enabled: true, include_in_requests: true, include_in_on_demand: true,
-      }).catch(() => {});
+    if (!existe.is_jingle || !existe.is_enabled) {
+      await az.updatePlaylist(stationId, existe.id, { is_jingle: true, is_enabled: true }).catch(() => {});
     }
     return existe.id;
   }
   const pl = await az.createPlaylist(stationId, {
     name: PLAYLIST, type: 'default', source: 'songs',
-    is_jingle: false, include_in_requests: true, include_in_on_demand: true, is_enabled: true, weight: 1,
+    is_jingle: true, include_in_requests: false, include_in_on_demand: false, is_enabled: true, weight: 1,
   });
   return pl.id;
+}
+
+/**
+ * Espera (en segundo plano) a que un archivo suene UNA vez y lo saca de su
+ * playlist para que no se repita entre canciones. Detecta que ya sonó mirando
+ * el "ahora suena" y el historial reciente. Si no lo detecta, a los ~5 min lo
+ * saca igual. `borrarClienteId` además borra los anuncios viejos del cliente.
+ */
+async function retirarTrasSonar(az, stationId, marcaNombre, mediaNumId, { borrarClienteId = null } = {}) {
+  const suena = (s) => String(s?.song?.title || s?.song?.text || '').includes(marcaNombre);
+  for (let i = 0; i < 60; i++) {                 // ~60 * 5s = 5 min máx
+    await sleep(5000);
+    try {
+      const np = await az.getNowPlaying(stationId);
+      if (suena(np?.now_playing) || (np?.song_history || []).some(suena)) break;
+    } catch (_) {}
+  }
+  if (mediaNumId != null) await az.setFilePlaylists(stationId, mediaNumId, []).catch(() => {});
+  if (borrarClienteId) await limpiarViejos(az, stationId, borrarClienteId, mediaNumId);
 }
 
 /**
@@ -161,16 +182,15 @@ async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, 
   const nombre = `anuncio-hora-${cliente.id}-${Date.now()}.mp3`;
 
   const media = await az.uploadMedia(stationId, nombre, mp3.toString('base64'));
-  const plId = await playlistAnuncios(az, stationId);
-  await az.setFilePlaylists(stationId, media.id, [plId]);
-  await sleep(2500);                                             // deja que AzuraCast lo indexe
-  try { await az.request(stationId, media.unique_id || media.id); } catch (e) { console.error('[anuncio] request:', e.message); }
-  if (skip) await az.skipSong(stationId).catch(() => {});
-  // Ya quedó PEDIDO (sonará una vez). Lo sacamos de la playlist para que NO
-  // rote/repita, y barremos todos los anuncios viejos del cliente.
-  await sleep(1500);
-  await az.setFilePlaylists(stationId, media.id, []).catch(() => {});
-  await limpiarViejos(az, stationId, cliente.id, media.id);
+  await limpiarViejos(az, stationId, cliente.id, media.id);      // fuera anuncios viejos ANTES de sonar
+  const plId = await playlistAnuncios(az, stationId);            // playlist tipo jingle
+  await az.setFilePlaylists(stationId, media.id, [plId]);        // el fresco queda como ÚNICO jingle
+  await sleep(4000);                                            // deja que AzuraCast lo procese/recargue
+  if (skip) await az.skipSong(stationId).catch(() => {});        // "Probar" → suena de una; programado no corta
+  // En segundo plano: cuando suene UNA vez, lo saca de la jingle para que no se
+  // repita entre canciones (la causa del "pegado en la misma hora").
+  retirarTrasSonar(az, stationId, marca(nombre), media.id, { borrarClienteId: cliente.id })
+    .catch((e) => console.error('[anuncio] retiro:', e.message));
   return { ok: true, texto };
 }
 
@@ -228,4 +248,4 @@ function iniciar() {
   console.log('⏰ Anuncio de hora activo (revisa cada 15s las franjas configuradas)');
 }
 
-module.exports = { iniciar, verConfig, guardarConfig, anunciarEn, textoHora, generarVoz, climaTexto };
+module.exports = { iniciar, verConfig, guardarConfig, anunciarEn, textoHora, generarVoz, climaTexto, retirarTrasSonar };
