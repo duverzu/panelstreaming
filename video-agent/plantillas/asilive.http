@@ -22,4 +22,15 @@ server {
         add_header 'Cache-Control' 'no-cache' always;
         add_header 'Access-Control-Allow-Origin' '*' always;
     }
+
+    # Reproductor propio, en la MISMA ruta que asilivehd:
+    #   https://<dominio>/video/user/?user=<usuario>
+    # Así los iframes ya embebidos en las webs de los clientes NO cambian,
+    # pero cargan NUESTRO player (bonito y con reconexión automática).
+    location = /video/user { return 301 /video/user/$is_args$args; }
+    location /video/user/ {
+        alias {{PLAYER_DIR}}/;
+        index index.html;
+        add_header 'Access-Control-Allow-Origin' '*' always;
+    }
 }

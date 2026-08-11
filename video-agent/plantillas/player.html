@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>En vivo</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  video{width:100%;height:100%;object-fit:contain;background:#000}
+  #msg{position:absolute;color:#cfcfcf;font:14px/1.5 system-ui,-apple-system,sans-serif;text-align:center;padding:1.2em;pointer-events:none}
+  .spin{width:34px;height:34px;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:g .8s linear infinite;margin:0 auto .6em}
+  @keyframes g{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <video id="v" playsinline autoplay muted controls poster=""></video>
+  <div id="msg"><div class="spin"></div>Conectando…</div>
+</div>
+<script src="hls.min.js"></script>
+<script>
+(function(){
+  var user = (new URLSearchParams(location.search).get('user') || '').replace(/[^a-zA-Z0-9_-]/g,'');
+  var v = document.getElementById('v'), msg = document.getElementById('msg');
+  function aviso(t){ msg.innerHTML = t ? (t.indexOf('Conect')===0 ? '<div class="spin"></div>' : '') + t : ''; msg.style.display = t ? 'block' : 'none'; }
+  if(!user){ aviso('Canal no especificado'); return; }
+  var src = '/live/' + user + '.m3u8', hls;
+
+  v.addEventListener('playing', function(){ aviso(''); });
+  v.addEventListener('waiting', function(){ aviso('Conectando…'); });
+
+  function arrancar(){
+    if (window.Hls && Hls.isSupported()){
+      hls = new Hls({ liveSyncDurationCount:3, manifestLoadingMaxRetry:99, levelLoadingMaxRetry:99, fragLoadingMaxRetry:99 });
+      hls.loadSource(src);
+      hls.attachMedia(v);
+      hls.on(Hls.Events.ERROR, function(_, data){
+        if (data && data.fatal){
+          aviso('Reconectando…');
+          setTimeout(function(){ try{ hls.destroy(); }catch(e){} arrancar(); }, 3000);
+        }
+      });
+    } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+      v.src = src;   // Safari / iOS: HLS nativo
+      v.addEventListener('error', function(){ aviso('Reconectando…'); setTimeout(arrancar, 3000); });
+    } else {
+      aviso('Tu navegador no soporta este video');
+    }
+  }
+  arrancar();
+})();
+</script>
+</body>
+</html>
