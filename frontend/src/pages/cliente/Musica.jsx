@@ -12,12 +12,31 @@ export default function ClienteMusica() {
   const [sel, setSel] = useState(() => new Set());   // canciones seleccionadas (para lote)
   const [aplicando, setAplicando] = useState(false);
   const inputRef = useRef(null);
+  const [busqueda, setBusqueda] = useState('');
+  const [orden, setOrden] = useState('recientes');
+  const [pagina, setPagina] = useState(0);
+
+  // Filtrado + orden + paginación (client-side): la página va fluida aunque
+  // el cliente tenga miles de canciones.
+  const q = busqueda.trim().toLowerCase();
+  const filtradas = media
+    .filter((m) => !q || (m.titulo || '').toLowerCase().includes(q) || (m.artista || '').toLowerCase().includes(q))
+    .slice()
+    .sort((a, b) => {
+      if (orden === 'titulo') return (a.titulo || '').localeCompare(b.titulo || '', 'es', { numeric: true });
+      if (orden === 'artista') return (a.artista || '').localeCompare(b.artista || '', 'es', { numeric: true });
+      return (b.id || 0) - (a.id || 0);   // recientes (id más alto = subido después)
+    });
+  const POR_PAGINA = 50;
+  const totalPaginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
+  const pag = Math.min(pagina, totalPaginas - 1);
+  const paginadas = filtradas.slice(pag * POR_PAGINA, (pag + 1) * POR_PAGINA);
 
   function toggle(id) {
     setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
   function toggleTodos() {
-    setSel((s) => (s.size === media.length ? new Set() : new Set(media.map((m) => m.id))));
+    setSel((s) => (s.size >= filtradas.length && filtradas.length > 0 ? new Set() : new Set(filtradas.map((m) => m.id))));
   }
 
   /** Agrega o quita una playlist a las canciones seleccionadas (o a todas). */
@@ -127,19 +146,32 @@ export default function ClienteMusica() {
       <div className="card p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold flex items-center gap-2">
-            <IconMusic width={18} height={18} /> Mi música <span className="text-gray-400 font-normal">({media.length})</span>
+            <IconMusic width={18} height={18} /> Mi música <span className="text-gray-400 font-normal">({q ? `${filtradas.length} de ${media.length}` : media.length})</span>
           </h2>
           <button onClick={cargar} className="btn-ghost !py-2 !px-3 text-xs">
             <IconRefresh width={15} height={15} /> Actualizar
           </button>
         </div>
 
+        {/* Buscador + orden — para librerías grandes */}
+        {media.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <input value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setPagina(0); }}
+              placeholder="🔍 Buscar por título o artista…" className="input !py-2 text-sm flex-1 min-w-[180px]" />
+            <select value={orden} onChange={(e) => setOrden(e.target.value)} className="input !w-auto !py-2 text-sm">
+              <option value="recientes">Recientes</option>
+              <option value="titulo">Título A-Z</option>
+              <option value="artista">Artista A-Z</option>
+            </select>
+          </div>
+        )}
+
         {/* Barra de acciones en lote — evita ir pista por pista */}
         {media.length > 0 && playlists.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 mb-3 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-950 text-sm">
             <label className="flex items-center gap-1.5 cursor-pointer select-none">
-              <input type="checkbox" checked={sel.size === media.length && media.length > 0} onChange={toggleTodos} />
-              <span className="text-gray-500">{sel.size ? `${sel.size} seleccionada(s)` : 'Seleccionar todo'}</span>
+              <input type="checkbox" checked={sel.size >= filtradas.length && filtradas.length > 0} onChange={toggleTodos} />
+              <span className="text-gray-500">{sel.size ? `${sel.size} seleccionada(s)` : (q ? `Seleccionar los ${filtradas.length} filtrados` : 'Seleccionar todo')}</span>
             </label>
 
             {sel.size > 0 ? (
@@ -170,9 +202,12 @@ export default function ClienteMusica() {
           <p className="py-8 text-center text-gray-400">Cargando…</p>
         ) : media.length === 0 ? (
           <p className="py-8 text-center text-gray-400">Aún no has subido música. ¡Sube tu primer MP3!</p>
+        ) : filtradas.length === 0 ? (
+          <p className="py-8 text-center text-gray-400">Ninguna canción coincide con «{busqueda}».</p>
         ) : (
+          <>
           <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
-            {media.map((m) => (
+            {paginadas.map((m) => (
               <div key={m.id} className={`flex items-center gap-3 py-3 ${sel.has(m.id) ? 'bg-brand-50/40 dark:bg-brand-500/5 -mx-2 px-2 rounded-lg' : ''}`}>
                 <input type="checkbox" checked={sel.has(m.id)} onChange={() => toggle(m.id)} className="shrink-0" />
                 <div className="w-9 h-9 shrink-0 rounded-lg bg-gray-100 dark:bg-gray-800 grid place-items-center text-gray-400">
@@ -208,6 +243,14 @@ export default function ClienteMusica() {
               </div>
             ))}
           </div>
+          {totalPaginas > 1 && (
+            <div className="flex items-center justify-center gap-3 mt-4 text-sm">
+              <button onClick={() => setPagina((n) => Math.max(0, n - 1))} disabled={pag === 0} className="btn-ghost !py-1.5 !px-3 text-xs disabled:opacity-40">‹ Anterior</button>
+              <span className="text-gray-400">Página {pag + 1} de {totalPaginas}</span>
+              <button onClick={() => setPagina((n) => Math.min(totalPaginas - 1, n + 1))} disabled={pag >= totalPaginas - 1} className="btn-ghost !py-1.5 !px-3 text-xs disabled:opacity-40">Siguiente ›</button>
+            </div>
+          )}
+          </>
         )}
       </div>
     </div>
