@@ -22,6 +22,7 @@ const claves = require('./claves');
 const webtv = require('./webtv');
 const restream = require('./restream');
 const compat = require('./compat');
+const compat247 = require('./compat247');
 const { crearCuenta, eliminarConfig } = require('./crear');
 const listas = require('./listas');
 const fsp2 = require('fs/promises');
@@ -350,6 +351,13 @@ app.post('/rtmp/fin', wrap(async (req, res) => {
 //  El nombre del stream es el usuario y el token va como ?token=.
 //  Se valida contra compat-tokens.json (los tokens EXACTOS del viejo).
 // ==================================================================
+// Reanudaciones del 24/7 pendientes (se cancelan si el vivo reconecta).
+const reanudarCompat = new Map();
+async function compatTieneVideos(user) {
+  try { return (await fsp.readdir(path.join(BASE, user, 'uploads'))).some((f) => /\.(mp4|mkv|mov|webm|flv)$/i.test(f)); }
+  catch { return false; }
+}
+
 app.post('/compat/publicar', (req, res) => {
   const name = String(req.body?.name || '');
   const token = String(req.body?.token || '');
@@ -357,12 +365,31 @@ app.post('/compat/publicar', (req, res) => {
     console.error(`[compat] rechazado "${name}" (token inválido) desde ${req.body?.addr}`);
     return res.status(403).end();
   }
+  // El vivo TOMA el canal: cancela una reanudación pendiente y pausa el 24/7
+  // (si tiene), para que no peleen por asilivehls/<user>.
+  const pend = reanudarCompat.get(name);
+  if (pend) { clearTimeout(pend); reanudarCompat.delete(name); }
+  if (compat247.emitiendo(name)) { compat247.detener(name); console.log(`[compat] ${name}: 24/7 en pausa mientras dura el vivo`); }
   console.log(`[compat] ${name}: al aire desde ${req.body?.addr}`);
   res.status(200).end();
 });
+
 app.post('/compat/fin', (req, res) => {
-  console.log(`[compat] ${req.body?.name || '?'}: terminó`);
+  const name = String(req.body?.name || '');
   res.status(200).end();
+  if (!name) return;
+  console.log(`[compat] ${name}: terminó el vivo`);
+  // Reanuda el 24/7 tras una espera (si el encoder reconecta enseguida, el
+  // /compat/publicar cancela este timer y el 24/7 no revive en medio del vivo).
+  const anterior = reanudarCompat.get(name);
+  if (anterior) clearTimeout(anterior);
+  reanudarCompat.set(name, setTimeout(async () => {
+    reanudarCompat.delete(name);
+    if (compat247.emitiendo(name)) return;
+    if (await compatTieneVideos(name)) {
+      compat247.iniciar(name).then((r) => r.ok && console.log(`[compat] ${name}: 24/7 reanudado`)).catch((e) => console.error('[compat] reanudar 24/7:', e.message));
+    }
+  }, 6000));
 });
 
 // GET /compat/clientes — estado de los canales asilivehd (en vivo + viewers).
@@ -420,11 +447,21 @@ app.get('/compat/clientes/:user', wrap(async (req, res) => {
     user,
     al_aire: await compatAlAire(user),
     viewers,
+    emitiendo_247: compat247.emitiendo(user),
+    tiene_videos: await compatTieneVideos(user),
     servidor_rtmp: `rtmp://${COMPAT_DOMINIO}/live`,
     clave: `${user}?token=${token}`,
     m3u8: `https://${COMPAT_DOMINIO}/live/${user}.m3u8`,
     player: `https://${COMPAT_DOMINIO}/video/user/?user=${user}`,
   });
+}));
+
+/** POST /compat/clientes/:user/24-7 — enciende/apaga el AutoDJ de un canal asilivehd. */
+app.post('/compat/clientes/:user/24-7', wrap(async (req, res) => {
+  const user = String(req.params.user);
+  if (compat.tokenDe(user) === undefined) return res.status(404).json({ error: 'No es un canal asilivehd' });
+  if (req.body?.encender === false) return res.json({ ok: true, ...compat247.detener(user) });
+  res.json(await compat247.recargar(user));
 }));
 
 
@@ -830,6 +867,7 @@ app.listen(PORT, HOST, () => {
   };
   webtv.restaurar(hayVivo).catch((e) => console.error('[webtv] restaurar:', e.message));
   webtv.iniciarPlanificador();   // cambia de lista sola según la programación por horario
+  compat247.restaurar().catch((e) => console.error('[compat247] restaurar:', e.message));   // AutoDJ de canales asilivehd
   // Reanuda los restream a Facebook que estaban activos
   restream.restaurar(async (user) => (await puertosDe(user)).rtmp).catch((e) => console.error('[restream] restaurar:', e.message));
   if (HOST !== '127.0.0.1') console.warn('   ⚠️  Expuesto fuera del servidor: asegúrate de tener firewall');
