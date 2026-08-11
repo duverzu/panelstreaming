@@ -30,15 +30,34 @@ export default function ClientePlaylists() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [f, setF] = useState(VACIO);
+  const [media, setMedia] = useState([]);
+  const [expandida, setExpandida] = useState(null);   // playlist id abierta (ver canciones)
+  const [addTo, setAddTo] = useState(null);           // playlist a la que se agregan canciones
+  const [addSel, setAddSel] = useState([]);           // ids seleccionados para agregar
+  const [busyMedia, setBusyMedia] = useState(false);
 
   async function cargar() {
     setLoading(true);
     try {
-      const { playlists } = await apiFetch('/cliente/playlists');
+      const [{ playlists }, m] = await Promise.all([apiFetch('/cliente/playlists'), apiFetch('/cliente/media')]);
       setPlaylists(playlists);
+      setMedia(m.media || []);
     } finally {
       setLoading(false);
     }
+  }
+
+  const cancionesDe = (plId) => media.filter((m) => (m.playlists || []).some((p) => p.id === plId));
+  async function quitarCancion(plId, mediaId) {
+    setBusyMedia(true);
+    try { await apiFetch('/cliente/media/playlists-lote', { method: 'PUT', body: JSON.stringify({ media_ids: [mediaId], playlist_id: plId, accion: 'quitar' }) }); await cargar(); }
+    catch (e) { alert(e.message); } finally { setBusyMedia(false); }
+  }
+  async function agregarCanciones() {
+    if (!addSel.length) { setAddTo(null); return; }
+    setBusyMedia(true);
+    try { await apiFetch('/cliente/media/playlists-lote', { method: 'PUT', body: JSON.stringify({ media_ids: addSel, playlist_id: addTo, accion: 'agregar' }) }); setAddTo(null); setAddSel([]); await cargar(); }
+    catch (e) { alert(e.message); } finally { setBusyMedia(false); }
   }
   useEffect(() => { cargar(); }, []);
 
@@ -107,32 +126,66 @@ export default function ClientePlaylists() {
           <div className="space-y-2.5">
             {playlists.map((p) => {
               const b = BADGE[p.tipo];
+              const n = cancionesDe(p.id).length;
+              const abierta = expandida === p.id;
               return (
-                <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
-                  <div className="w-9 h-9 shrink-0 rounded-lg bg-gray-100 dark:bg-gray-800 grid place-items-center text-gray-400">
-                    <IconMusic width={16} height={16} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium truncate">{p.nombre}</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${b.cls}`}>{b.txt}</span>
-                      <span className="text-[10px] text-gray-400">{p.orden === 'orden' ? '↕ en orden' : '🔀 aleatorio'}</span>
+                <div key={p.id} className="rounded-xl border border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center gap-3 p-3">
+                    <div className="w-9 h-9 shrink-0 rounded-lg bg-gray-100 dark:bg-gray-800 grid place-items-center text-gray-400">
+                      <IconMusic width={16} height={16} />
                     </div>
-                    <div className="text-xs text-gray-400 truncate">
-                      {p.tipo === 'jingle' && `Cada ${p.cada_canciones} canciones`}
-                      {p.tipo === 'programa' && p.horario[0] && `${nombreDias(p.horario[0].dias)} · ${p.horario[0].inicio}–${p.horario[0].fin}`}
-                      {p.tipo === 'general' && 'Rotación general del AutoDJ'}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{p.nombre}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${b.cls}`}>{b.txt}</span>
+                        <span className="text-[10px] text-gray-400">{p.orden === 'orden' ? '↕ en orden' : '🔀 aleatorio'}</span>
+                      </div>
+                      <div className="text-xs text-gray-400 truncate">
+                        {p.tipo === 'jingle' && `Cada ${p.cada_canciones} canciones`}
+                        {p.tipo === 'programa' && p.horario[0] && `${nombreDias(p.horario[0].dias)} · ${p.horario[0].inicio}–${p.horario[0].fin}`}
+                        {p.tipo === 'general' && 'Rotación general del AutoDJ'}
+                      </div>
                     </div>
+                    <button onClick={() => setExpandida(abierta ? null : p.id)}
+                      className={`text-xs px-2.5 py-1 rounded-lg border transition ${abierta ? 'border-brand-500 text-brand-600' : 'border-gray-200 dark:border-gray-800 hover:border-brand-500 hover:text-brand-600'}`}>
+                      {abierta ? '▲ Ocultar' : `📂 Ver canciones (${n})`}
+                    </button>
+                    <button onClick={() => abrirEditar(p)} className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-brand-500 hover:text-brand-600 transition">Editar</button>
+                    <button onClick={() => toggleActiva(p)}
+                      className={`text-xs px-2.5 py-1 rounded-lg border transition ${p.activa ? 'border-brand-500 text-brand-600' : 'border-gray-200 dark:border-gray-800 text-gray-400'}`}>
+                      {p.activa ? 'Activa' : 'Pausada'}
+                    </button>
+                    <button onClick={() => eliminar(p)} title="Eliminar"
+                      className="w-8 h-8 shrink-0 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-800 hover:border-red-400 hover:text-red-500 transition">
+                      <IconTrash width={15} height={15} />
+                    </button>
                   </div>
-                  <button onClick={() => abrirEditar(p)} className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-brand-500 hover:text-brand-600 transition">Editar</button>
-                  <button onClick={() => toggleActiva(p)}
-                    className={`text-xs px-2.5 py-1 rounded-lg border transition ${p.activa ? 'border-brand-500 text-brand-600' : 'border-gray-200 dark:border-gray-800 text-gray-400'}`}>
-                    {p.activa ? 'Activa' : 'Pausada'}
-                  </button>
-                  <button onClick={() => eliminar(p)} title="Eliminar"
-                    className="w-8 h-8 shrink-0 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-800 hover:border-red-400 hover:text-red-500 transition">
-                    <IconTrash width={15} height={15} />
-                  </button>
+
+                  {abierta && (
+                    <div className="border-t border-gray-100 dark:border-gray-800 p-3 bg-gray-50/60 dark:bg-gray-950/30 rounded-b-xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-gray-400">{n} canción(es) dentro</span>
+                        <button onClick={() => { setAddTo(p.id); setAddSel([]); }} className="text-xs text-brand-600 dark:text-brand-400 hover:underline">＋ Agregar canciones</button>
+                      </div>
+                      {n === 0 ? (
+                        <p className="text-xs text-gray-400 py-2 text-center">Esta playlist está vacía. Agrega canciones de tu música.</p>
+                      ) : (
+                        <div className="space-y-1 max-h-64 overflow-y-auto">
+                          {cancionesDe(p.id).map((m) => (
+                            <div key={m.id} className="flex items-center gap-2 text-sm py-1">
+                              <IconMusic width={13} height={13} className="text-gray-300 shrink-0" />
+                              <span className="flex-1 min-w-0 truncate">{m.titulo}{m.artista ? <span className="text-gray-400"> · {m.artista}</span> : ''}</span>
+                              <span className="text-[11px] text-gray-400 shrink-0">{m.duracion}</span>
+                              <button onClick={() => quitarCancion(p.id, m.id)} disabled={busyMedia} title="Quitar de esta playlist"
+                                className="w-7 h-7 shrink-0 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-800 hover:border-red-400 hover:text-red-500 disabled:opacity-40 transition">
+                                <IconTrash width={12} height={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -205,6 +258,36 @@ export default function ClientePlaylists() {
             <button className="btn-primary flex-1" disabled={saving}>{saving ? 'Guardando…' : editId ? 'Guardar cambios' : 'Crear playlist'}</button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal AGREGAR canciones a una playlist */}
+      <Modal open={addTo !== null} onClose={() => setAddTo(null)} title="Agregar canciones a la playlist">
+        <div className="space-y-3">
+          {(() => {
+            const disponibles = media.filter((m) => !(m.playlists || []).some((p) => p.id === addTo));
+            if (!disponibles.length) return <p className="text-sm text-gray-400 py-4 text-center">Todas tus canciones ya están en esta playlist.</p>;
+            return (
+              <>
+                <p className="text-xs text-gray-400">Marca las canciones que quieres agregar ({addSel.length} seleccionada{addSel.length === 1 ? '' : 's'}).</p>
+                <div className="max-h-72 overflow-y-auto space-y-0.5 border border-gray-100 dark:border-gray-800 rounded-xl p-2">
+                  {disponibles.map((m) => (
+                    <label key={m.id} className="flex items-center gap-2 text-sm py-1 px-1 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/40 cursor-pointer">
+                      <input type="checkbox" checked={addSel.includes(m.id)}
+                        onChange={(e) => setAddSel((s) => e.target.checked ? [...s, m.id] : s.filter((x) => x !== m.id))} />
+                      <span className="flex-1 min-w-0 truncate">{m.titulo}{m.artista ? <span className="text-gray-400"> · {m.artista}</span> : ''}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => setAddTo(null)} className="btn-ghost flex-1">Cancelar</button>
+            <button onClick={agregarCanciones} disabled={busyMedia || !addSel.length} className="btn-primary flex-1">
+              {busyMedia ? 'Agregando…' : `Agregar${addSel.length ? ` (${addSel.length})` : ''}`}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
