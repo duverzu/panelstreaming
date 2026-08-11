@@ -125,7 +125,23 @@ async function playlistAnuncios(az, stationId) {
   return pl.id;
 }
 
-const ultimoAnuncioMedia = new Map();   // cliente_id -> media.id del último anuncio (para borrarlo)
+/**
+ * Borra TODOS los anuncios de hora viejos de un cliente (menos `keepId`).
+ * Antes solo se recordaba el último en memoria; con los reinicios de pm2 se
+ * acumulaban archivos (`anuncio-hora-31-...mp3`) que seguían sonando la hora
+ * pasada. Esto barre todos por nombre, sobreviva o no el proceso.
+ */
+async function limpiarViejos(az, stationId, clienteId, keepId) {
+  try {
+    const files = (await az.listMedia(stationId)) || [];
+    const rx = new RegExp(`(^|/)anuncio-hora-${clienteId}(-|\\.)`);
+    for (const f of files) {
+      if (f.id !== keepId && rx.test(f.path || f.title || '')) {
+        await az.deleteMedia(stationId, f.id).catch(() => {});
+      }
+    }
+  } catch (_) {}
+}
 
 /** Genera la hora y la pone a sonar en una estación. */
 async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, con_clima = false, zona = null, voz = null } = {}) {
@@ -150,10 +166,8 @@ async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, 
   await sleep(2500);                                             // deja que AzuraCast lo indexe
   try { await az.request(stationId, media.unique_id || media.id); } catch (e) { console.error('[anuncio] request:', e.message); }
   if (skip) await az.skipSong(stationId).catch(() => {});
-  // Borra el anuncio ANTERIOR de este cliente (no acumular archivos en disco)
-  const previo = ultimoAnuncioMedia.get(cliente.id);
-  if (previo && previo !== media.id) az.deleteMedia(stationId, previo).catch(() => {});
-  ultimoAnuncioMedia.set(cliente.id, media.id);
+  // Barre TODOS los anuncios viejos de este cliente (deja solo el recién creado).
+  await limpiarViejos(az, stationId, cliente.id, media.id);
   return { ok: true, texto };
 }
 
