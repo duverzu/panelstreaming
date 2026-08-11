@@ -659,6 +659,7 @@ router.get('/video', requireCliente, wrap(async (req, res) => {
       conexion: { servidor: info.servidor_rtmp, clave: info.clave },
       urls: { canal: info.m3u8, player: info.player },
       consumo: null,
+      player_externo: await playerExterno.buscar(cliente.short_name),
     });
   }
 
@@ -698,6 +699,7 @@ router.get('/video', requireCliente, wrap(async (req, res) => {
       total_gb: +(consumo.total_bytes / 1073741824).toFixed(2),
       por_dia: consumo.por_dia.map((d) => ({ fecha: d.fecha, gb: +(d.bytes / 1073741824).toFixed(3) })),
     } : null,
+    player_externo: await playerExterno.buscar(user),
   });
 }));
 
