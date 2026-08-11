@@ -14,7 +14,7 @@
 const { query } = require('../config/database');
 const clienteModel = require('../models/clienteModel');
 const azuracast = require('./azuracast');
-const { generarVoz } = require('./anuncioHora');
+const { generarVoz, verConfig } = require('./anuncioHora');
 
 const PLAYLIST = '📣 Cuñas';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -23,10 +23,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function playlistCunas(az, stationId) {
   const pls = (await az.getPlaylists(stationId)) || [];
   const existe = pls.find((p) => p.name === PLAYLIST);
-  if (existe) return existe.id;
+  // Solo-a-pedido (no rota): así la cuña suena a su hora y NO se repite entre
+  // canciones. Playlists viejas quedaron como jingle → se corrigen.
+  if (existe) {
+    if (existe.is_jingle || existe.is_enabled) {
+      await az.updatePlaylist(stationId, existe.id, {
+        is_jingle: false, is_enabled: false, include_in_requests: true, include_in_on_demand: true,
+      }).catch(() => {});
+    }
+    return existe.id;
+  }
   const pl = await az.createPlaylist(stationId, {
     name: PLAYLIST, type: 'default', source: 'songs',
-    is_jingle: true, include_in_requests: true, include_in_on_demand: false, is_enabled: true, weight: 1,
+    is_jingle: false, include_in_requests: true, include_in_on_demand: true, is_enabled: false, weight: 1,
   });
   return pl.id;
 }
@@ -63,6 +72,7 @@ async function guardar(cliente, { id, nombre, tipo, texto, horas, activo }) {
   const t = tipo === 'audio' ? 'audio' : 'texto';
   const hrs = JSON.stringify(normHoras(horas));
   const stationId = cliente.azuracast_station_id;
+  const voz = (await verConfig(cliente.id).catch(() => ({}))).voz;   // misma voz que el anuncio de hora
 
   if (id) {
     const { rows } = await query('SELECT * FROM cunas WHERE id = $1 AND cliente_id = $2', [id, cliente.id]);
@@ -72,7 +82,7 @@ async function guardar(cliente, { id, nombre, tipo, texto, horas, activo }) {
     // Si es texto y cambió el texto, regenera la voz
     if (t === 'texto' && texto && texto !== prev.texto) {
       const az = await azuracast.paraServidorId(cliente.servidor_id);
-      media_id = await subirMedia(az, stationId, await generarVoz(texto), `cuna-${cliente.id}-${id}.mp3`);
+      media_id = await subirMedia(az, stationId, await generarVoz(texto, { voz }), `cuna-${cliente.id}-${id}.mp3`);
     }
     await query(
       'UPDATE cunas SET nombre=$1, tipo=$2, texto=$3, horas=$4, activo=$5, media_id=$6, updated_at=now() WHERE id=$7',
@@ -86,7 +96,7 @@ async function guardar(cliente, { id, nombre, tipo, texto, horas, activo }) {
   if (t === 'texto' && texto) {
     const az = await azuracast.paraServidorId(cliente.servidor_id);
     // se sube tras crear la fila para nombrar el archivo con el id; aquí subimos genérico
-    media_id = await subirMedia(az, stationId, await generarVoz(texto), `cuna-${cliente.id}-nueva.mp3`);
+    media_id = await subirMedia(az, stationId, await generarVoz(texto, { voz }), `cuna-${cliente.id}-nueva.mp3`);
   }
   const { rows } = await query(
     'INSERT INTO cunas (cliente_id, nombre, tipo, texto, horas, activo, media_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',

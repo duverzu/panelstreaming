@@ -234,6 +234,9 @@ ALTER TABLE clientes ADD COLUMN IF NOT EXISTS short_name VARCHAR(150);
 ALTER TABLE clientes ADD COLUMN IF NOT EXISTS compat BOOLEAN DEFAULT false;
 -- Zona horaria del cliente para la programación (cuñas, anuncio de hora).
 ALTER TABLE anuncio_hora ADD COLUMN IF NOT EXISTS zona_horaria VARCHAR(64) DEFAULT 'America/Bogota';
+-- Voz del anuncio de hora / cuñas de texto: 'masculina' (Piper, locutor) o
+-- 'femenina' (Google TTS). Por defecto la de locutor si está configurada.
+ALTER TABLE anuncio_hora ADD COLUMN IF NOT EXISTS voz VARCHAR(16) DEFAULT 'masculina';
 
 -- Índices para búsquedas frecuentes
 CREATE INDEX IF NOT EXISTS idx_clientes_user_id     ON clientes(user_id);

@@ -59,6 +59,21 @@ export default function AnuncioHora() {
         <p className="text-[11px] text-gray-400 mt-1">La hora de tus <b>anuncios y cuñas</b> se calcula con esta zona. Por defecto: Colombia.</p>
       </div>
 
+      <div>
+        <label className="label">Voz del locutor</label>
+        <div className="flex gap-2">
+          {[['masculina', '👨 Masculina'], ['femenina', '👩 Femenina']].map(([v, t]) => (
+            <button key={v} type="button" disabled={ocupado} onClick={() => guardar({ voz: v })}
+              className={`px-3 py-1.5 rounded-xl text-sm border transition ${(cfg.voz || 'masculina') === v
+                ? 'bg-brand-500 text-white border-brand-500'
+                : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+              {t}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-gray-400 mt-1">Voz que dice la <b>hora y las cuñas de texto</b>. La masculina es de locutor (más natural); la femenina es la voz estándar. Las cuñas ya creadas conservan su voz.</p>
+      </div>
+
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" checked={cfg.activo} disabled={ocupado} onChange={(e) => guardar({ activo: e.target.checked })} />
         <span className="text-sm">Activar el anuncio de la hora</span>

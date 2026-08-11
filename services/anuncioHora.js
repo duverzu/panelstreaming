@@ -83,9 +83,11 @@ async function climaTexto(ciudad) {
 
 // ---- Voz (TTS) ----------------------------------------------------
 /** Genera el MP3 de un texto. Devuelve un Buffer. */
-async function generarVoz(texto) {
+async function generarVoz(texto, { voz } = {}) {
   const cmd = process.env.ANUNCIO_TTS_CMD;   // ej: comando que recibe el texto por args y devuelve mp3 por stdout
-  if (cmd) {
+  // Voz de locutor (Piper) SOLO si el cliente eligió 'masculina' y está configurada.
+  // 'femenina' (o sin preferencia) → Google Translate TTS.
+  if (cmd && voz === 'masculina') {
     return await new Promise((resolve, reject) => {
       execFile(cmd, [texto], { encoding: 'buffer', maxBuffer: 20 * 1024 * 1024 }, (e, out) => e ? reject(e) : resolve(out));
     });
@@ -98,14 +100,27 @@ async function generarVoz(texto) {
 }
 
 // ---- Inyección en AzuraCast --------------------------------------
-/** Busca/crea la playlist de anuncios (requestable + jingle). Devuelve su id. */
+/**
+ * Busca/crea la playlist de anuncios. Es SOLO-A-PEDIDO (no rota):
+ *   is_enabled:false + include_in_requests:true → el archivo se puede pedir
+ *   (request) pero NO entra en la rotación/jingle. Así el anuncio suena UNA vez
+ *   cuando se pide y no se repite toda la hora. Las playlists viejas quedaron
+ *   como jingle en rotación (repetían "las 4:45"): aquí se corrigen.
+ */
 async function playlistAnuncios(az, stationId) {
   const pls = (await az.getPlaylists(stationId)) || [];
   const existe = pls.find((p) => p.name === PLAYLIST);
-  if (existe) return existe.id;
+  if (existe) {
+    if (existe.is_jingle || existe.is_enabled) {
+      await az.updatePlaylist(stationId, existe.id, {
+        is_jingle: false, is_enabled: false, include_in_requests: true, include_in_on_demand: true,
+      }).catch(() => {});
+    }
+    return existe.id;
+  }
   const pl = await az.createPlaylist(stationId, {
     name: PLAYLIST, type: 'default', source: 'songs',
-    is_jingle: true, include_in_requests: true, include_in_on_demand: false, is_enabled: true, weight: 1,
+    is_jingle: false, include_in_requests: true, include_in_on_demand: true, is_enabled: false, weight: 1,
   });
   return pl.id;
 }
@@ -113,7 +128,7 @@ async function playlistAnuncios(az, stationId) {
 const ultimoAnuncioMedia = new Map();   // cliente_id -> media.id del último anuncio (para borrarlo)
 
 /** Genera la hora y la pone a sonar en una estación. */
-async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, con_clima = false, zona = null } = {}) {
+async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, con_clima = false, zona = null, voz = null } = {}) {
   const az = await azuracast.paraServidorId(cliente.servidor_id);
   const stationId = cliente.azuracast_station_id;
   if (!stationId) return { ok: false, error: 'sin estación' };
@@ -123,7 +138,7 @@ async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, 
     const clima = await climaTexto(ciudad);
     if (clima) texto += `. Ahora mismo ${clima}`;
   }
-  const mp3 = await generarVoz(texto);
+  const mp3 = await generarVoz(texto, { voz });
   // Nombre ÚNICO cada vez: si se reusa el mismo, AzuraCast puede reproducir la
   // versión vieja (aún sin re-analizar) y decir una hora pasada. Con nombre
   // nuevo, siempre suena el audio fresco.
@@ -144,21 +159,23 @@ async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, 
 
 // ---- Config (tabla anuncio_hora) ---------------------------------
 async function verConfig(clienteId) {
-  const { rows } = await query('SELECT cliente_id, activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria FROM anuncio_hora WHERE cliente_id = $1', [clienteId]);
-  return rows[0] || { cliente_id: clienteId, activo: false, cada_min: 60, con_saludo: false, ciudad: null, con_clima: false, zona_horaria: DEFAULT_TZ };
+  const { rows } = await query('SELECT cliente_id, activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria, voz FROM anuncio_hora WHERE cliente_id = $1', [clienteId]);
+  return rows[0] || { cliente_id: clienteId, activo: false, cada_min: 60, con_saludo: false, ciudad: null, con_clima: false, zona_horaria: DEFAULT_TZ, voz: 'masculina' };
 }
-async function guardarConfig(clienteId, { activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria }) {
+async function guardarConfig(clienteId, { activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria, voz }) {
   const cada = [15, 30, 60].includes(Number(cada_min)) ? Number(cada_min) : 60;
   const ciu = ciudad !== undefined ? (String(ciudad || '').trim().slice(0, 120) || null) : undefined;
   const zona = (typeof zona_horaria === 'string' && zona_horaria.trim()) ? zona_horaria.trim().slice(0, 64) : null;
+  const vz = voz === 'femenina' || voz === 'masculina' ? voz : null;   // null → no cambia
   await query(
-    `INSERT INTO anuncio_hora (cliente_id, activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6, COALESCE($7,'America/Bogota'), now())
+    `INSERT INTO anuncio_hora (cliente_id, activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria, voz, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6, COALESCE($7,'America/Bogota'), COALESCE($8,'masculina'), now())
      ON CONFLICT (cliente_id) DO UPDATE SET
        activo = $2, cada_min = $3, con_saludo = $4,
        ciudad = COALESCE($5, anuncio_hora.ciudad), con_clima = $6,
-       zona_horaria = COALESCE($7, anuncio_hora.zona_horaria), updated_at = now()`,
-    [clienteId, Boolean(activo), cada, Boolean(con_saludo), ciu ?? null, Boolean(con_clima), zona]
+       zona_horaria = COALESCE($7, anuncio_hora.zona_horaria),
+       voz = COALESCE($8, anuncio_hora.voz), updated_at = now()`,
+    [clienteId, Boolean(activo), cada, Boolean(con_saludo), ciu ?? null, Boolean(con_clima), zona, vz]
   );
   return verConfig(clienteId);
 }
@@ -170,7 +187,7 @@ const ultimoSlotPorCliente = new Map();   // cliente_id -> "HH:MM" ya anunciado
 async function tick() {
   if (new Date().getSeconds() > 20) return;         // solo al comienzo del minuto
   try {
-    const { rows } = await query('SELECT cliente_id, cada_min, con_saludo, ciudad, con_clima, zona_horaria FROM anuncio_hora WHERE activo = true');
+    const { rows } = await query('SELECT cliente_id, cada_min, con_saludo, ciudad, con_clima, zona_horaria, voz FROM anuncio_hora WHERE activo = true');
     for (const cfg of rows) {
       const zona = cfg.zona_horaria || DEFAULT_TZ;
       const { hora, minuto } = partesEnZona(zona);   // hora LOCAL del cliente
@@ -181,7 +198,7 @@ async function tick() {
       if (!cliente?.azuracast_station_id || cliente.tipo === 'video' || !cliente.activo) continue;
       ultimoSlotPorCliente.set(cfg.cliente_id, slot);
       // skip:false → NO corta la canción actual; el anuncio suena cuando termina.
-      anunciarEn(cliente, { skip: false, saludo: cfg.con_saludo ? 'Atención' : null, ciudad: cfg.ciudad, con_clima: cfg.con_clima, zona })
+      anunciarEn(cliente, { skip: false, saludo: cfg.con_saludo ? 'Atención' : null, ciudad: cfg.ciudad, con_clima: cfg.con_clima, zona, voz: cfg.voz })
         .then((r) => console.log(`[anuncio] ${cliente.nombre_empresa}: ${r.texto || r.error}`))
         .catch((e) => console.error(`[anuncio] ${cliente.nombre_empresa}:`, e.message));
     }
