@@ -28,8 +28,23 @@ function titulos(np) {
   const short = process.argv[2];
   if (!short) { L('Falta el short_name. Uso: node scripts/diag-anuncio.js <short_name>'); process.exit(1); }
 
-  const cliente = await clienteModel.findByShortName(short);
-  if (!cliente) { L(`No encontré cliente con short_name="${short}"`); process.exit(1); }
+  let cliente = await clienteModel.findByShortName(short);
+  if (!cliente) {
+    // Quizá pasaron el nombre/empresa o el id: buscar en la lista completa.
+    const { query } = require('../config/database');
+    const { rows } = await query(
+      `SELECT id, short_name, nombre_empresa, azuracast_station_id, tipo
+         FROM clientes WHERE tipo IS DISTINCT FROM 'video' ORDER BY id`);
+    const m = rows.find((r) => String(r.id) === short
+      || (r.short_name || '').toLowerCase() === short.toLowerCase()
+      || (r.nombre_empresa || '').toLowerCase().includes(short.toLowerCase()));
+    if (m) cliente = await clienteModel.findById(m.id);
+    if (!cliente) {
+      L(`No encontré "${short}". Clientes de audio disponibles (usa el short_name o el id):`);
+      for (const r of rows) L(`  id ${r.id} · short_name="${r.short_name}" · ${r.nombre_empresa} · station ${r.azuracast_station_id}`);
+      process.exit(1);
+    }
+  }
   L(`Cliente: ${cliente.nombre_empresa} (id ${cliente.id}) · servidor_id ${cliente.servidor_id} · station ${cliente.azuracast_station_id}`);
 
   const az = await azuracast.paraServidorId(cliente.servidor_id);
