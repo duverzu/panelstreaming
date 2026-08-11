@@ -55,6 +55,7 @@ function crearCliente(baseURL, apiKey) {
   // skip hace que un pedido recién hecho suene enseguida (no tras 3 canciones).
   const getQueue = async (id) => { try { return (await api.get(`/station/${id}/queue`)).data; } catch (e) { handleError(`getQueue(${id})`, e); } };
   const clearQueue = async (id) => { try { return (await api.delete(`/station/${id}/queue`)).data; } catch (e) { handleError(`clearQueue(${id})`, e); } };
+  const deleteQueueItem = async (id, qid) => { try { return (await api.delete(`/station/${id}/queue/${qid}`)).data; } catch (e) { handleError(`deleteQueueItem(${id}/${qid})`, e); } };
   const getStationStatus = async (id) => { try { return (await api.get(`/station/${id}/status`)).data; } catch (e) { handleError(`getStationStatus(${id})`, e); } };
   const listMedia = async (id) => { try { return (await api.get(`/station/${id}/files`)).data; } catch (e) { handleError(`listMedia(${id})`, e); } };
   const uploadMedia = async (id, filename, base64) => { try { return (await api.post(`/station/${id}/files`, { path: filename, file: base64 })).data; } catch (e) { handleError(`uploadMedia(${id})`, e); } };
@@ -80,7 +81,7 @@ function crearCliente(baseURL, apiKey) {
     baseURL, apiKey, api,
     getStation, getStationAdmin, getNowPlaying, getNowPlayingAll, createStation, updateStation, deleteStation,
     getMounts, createMount, updateMount, createStreamer, getStreamers, updateStreamer,
-    restartStation, skipSong, request, stopStation, getStationStatus, getQueue, clearQueue,
+    restartStation, skipSong, request, stopStation, getStationStatus, getQueue, clearQueue, deleteQueueItem,
     listMedia, uploadMedia, deleteMedia, setFilePlaylists, actualizarFile,
     getPlaylists, createPlaylist, updatePlaylist, deletePlaylist,
     getWebhooks, createWebhook, updateWebhook, deleteWebhook,
