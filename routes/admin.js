@@ -995,6 +995,38 @@ router.get('/servidores/:id/cuentas', requireAdmin, wrap(async (req, res) => {
   });
 }));
 
+/**
+ * POST /admin/servidores/:id/compat/importar
+ * Da de alta en el panel TODOS los canales de la capa asilivehd que aún no
+ * estén registrados: crea usuario + cliente (compat) por cada uno. No toca el
+ * nodo. El cliente no recibe acceso aquí; su clave se genera después (Accesos).
+ */
+router.post('/servidores/:id/compat/importar', requireAdmin, wrap(async (req, res) => {
+  const servidor = await servidorModel.findById(Number(req.params.id));
+  if (!servidor || servidor.tipo !== 'video') return res.status(404).json({ error: 'Nodo de video no encontrado' });
+
+  const nodo = videoNode.crearCliente(servidor.url, servidor.api_key);
+  const canales = await nodo.compatClientes();
+  if (!canales.length) return res.json({ ok: true, creados: 0, reporte: [], message: 'El nodo no reportó canales asilivehd' });
+
+  const reporte = [];
+  for (const c of canales) {
+    try {
+      if (await clienteModel.findByShortName(c.user)) { reporte.push({ user: c.user, ok: false, motivo: 'ya está en el panel' }); continue; }
+      const usuario = (await userModel.findByUsername(c.user)) ? await userModel.generarUsername(c.user) : c.user;
+      const password_hash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
+      const cuentaUser = await userModel.create({ username: usuario, email: `${c.user}@asilivehd.local`, password_hash, role: 'cliente' });
+      await clienteModel.create({
+        user_id: cuentaUser.id, nombre_empresa: c.user, plan: 'asilivehd',
+        tipo: 'video', short_name: c.user, servidor_id: servidor.id,
+        url_streaming: `https://server.asilivehd.com/live/${c.user}.m3u8`, compat: true,
+      });
+      reporte.push({ user: c.user, ok: true });
+    } catch (e) { reporte.push({ user: c.user, ok: false, motivo: e.message }); }
+  }
+  res.json({ ok: true, creados: reporte.filter((r) => r.ok).length, total: canales.length, reporte });
+}));
+
 
 /**
  * POST /admin/servidores/:id/cuentas/:user/importar

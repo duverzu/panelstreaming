@@ -55,4 +55,7 @@ function definir(user, token) {
 
 function lista() { return Object.keys(tokens); }
 
-module.exports = { valida, definir, lista, cargar, archivo: ARCHIVO };
+/** Token de un usuario (para armar su clave "usuario?token="). */
+function tokenDe(user) { if (tokens[user] === undefined) cargar(); return tokens[user]; }
+
+module.exports = { valida, definir, lista, tokenDe, cargar, archivo: ARCHIVO };

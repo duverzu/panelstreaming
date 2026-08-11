@@ -18,6 +18,17 @@ export default function CuentasVideo({ servidorId }) {
   const [guardando, setGuardando] = useState(false);
   const [errImport, setErrImport] = useState(null);
   const [aviso, setAviso] = useState(null);
+  const [importandoCompat, setImportandoCompat] = useState(false);
+
+  async function importarCompat() {
+    setImportandoCompat(true); setAviso(null);
+    try {
+      const r = await apiFetch(`/admin/servidores/${servidorId}/compat/importar`, { method: 'POST' });
+      setAviso(`✅ ${r.creados} canal(es) asilivehd dados de alta en el panel. Genera su acceso en Clientes → 🔑.`);
+      cargar();
+    } catch (e) { setAviso('Error: ' + e.message); }
+    finally { setImportandoCompat(false); }
+  }
 
   function cargar() {
     apiFetch(`/admin/servidores/${servidorId}/cuentas`).then(setDatos).catch((e) => setError(e.message));
@@ -72,6 +83,17 @@ export default function CuentasVideo({ servidorId }) {
         {aviso} · El cliente aún no tiene acceso; se le genera cuando su panel muestre sus videos.
       </div>
     )}
+    {datos.cuentas.filter((c) => c.compat && !c.cliente_id).length > 0 && (
+      <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 px-3 py-2.5">
+        <span className="text-xs text-indigo-700 dark:text-indigo-300">
+          {datos.cuentas.filter((c) => c.compat && !c.cliente_id).length} canal(es) asilivehd sin dar de alta en el panel
+        </span>
+        <button onClick={importarCompat} disabled={importandoCompat} className="btn-primary !py-1.5 !px-3 text-xs shrink-0">
+          {importandoCompat ? 'Dando de alta…' : `Dar de alta (${datos.cuentas.filter((c) => c.compat && !c.cliente_id).length})`}
+        </button>
+      </div>
+    )}
+
     <div className="mt-4 rounded-xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
       {datos.cuentas.length === 0 && (
         <div className="p-4 text-sm text-gray-400 text-center">Este nodo no tiene cuentas todavía.</div>

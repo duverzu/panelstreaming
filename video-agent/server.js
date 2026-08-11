@@ -369,6 +369,7 @@ app.post('/compat/fin', (req, res) => {
 // Lo consume el panel (con token) para mostrarlos junto al nodo.
 const ASILIVE_HLS = process.env.ASILIVE_HLS || '/var/asilive/hls';
 const ASILIVE_LOG = process.env.ASILIVE_LOG || '/var/asilive/asilive-access.log';
+const COMPAT_DOMINIO = process.env.COMPAT_DOMINIO || 'server.asilivehd.com';
 
 async function compatAlAire(user) {
   try {
@@ -406,6 +407,24 @@ app.get('/compat/clientes', wrap(async (req, res) => {
   const clientes = [];
   for (const u of users) clientes.push({ user: u, al_aire: await compatAlAire(u), viewers: viewers[u] || 0 });
   res.json({ total: users.length, clientes });
+}));
+
+// GET /compat/clientes/:user — conexión completa de un canal asilivehd
+// (para su panel de cliente: RTMP, clave, m3u8, player, estado).
+app.get('/compat/clientes/:user', wrap(async (req, res) => {
+  const user = String(req.params.user);
+  const token = compat.tokenDe(user);
+  if (token === undefined) return res.status(404).json({ error: 'No es un canal de la capa asilivehd' });
+  const viewers = (await compatViewers([user]))[user] || 0;
+  res.json({
+    user,
+    al_aire: await compatAlAire(user),
+    viewers,
+    servidor_rtmp: `rtmp://${COMPAT_DOMINIO}/live`,
+    clave: `${user}?token=${token}`,
+    m3u8: `https://${COMPAT_DOMINIO}/live/${user}.m3u8`,
+    player: `https://${COMPAT_DOMINIO}/video/user/?user=${user}`,
+  });
 }));
 
 

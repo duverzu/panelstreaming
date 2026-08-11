@@ -626,6 +626,25 @@ router.get('/video', requireCliente, wrap(async (req, res) => {
   if (!ctx) return res.status(400).json({ error: 'Tu cuenta no es de video' });
 
   const user = cliente.short_name;
+
+  // Cliente migrado por la capa asilivehd: su conexión y player vienen de /compat/
+  // (esquema por-ruta), no del motor por-puerto. No tiene videos ni 24/7.
+  if (cliente.compat) {
+    const info = await ctx.nodo.compatCliente(user);
+    if (!info) return res.status(502).json({ error: 'No se pudo consultar tu canal ahora mismo. Intenta en un momento.' });
+    return res.json({
+      nombre: cliente.nombre_empresa,
+      al_aire: info.al_aire,
+      viewers: info.viewers,
+      videos: [], espacio_mb: 0, espacio_total_mb: null,
+      permite_vivo: true,
+      compat: true,
+      conexion: { servidor: info.servidor_rtmp, clave: info.clave },
+      urls: { canal: info.m3u8, player: info.player },
+      consumo: null,
+    });
+  }
+
   const [detalle, consumo, conexion, plan, vw] = await Promise.all([
     ctx.nodo.cuenta(user),
     ctx.nodo.consumo(user, 30),

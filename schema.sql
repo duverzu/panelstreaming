@@ -229,6 +229,9 @@ ALTER TABLE clientes ADD COLUMN IF NOT EXISTS reseller_id INTEGER REFERENCES res
 ALTER TABLE clientes ADD COLUMN IF NOT EXISTS servidor_id INTEGER REFERENCES servidores(id) ON DELETE SET NULL;
 -- Shortcode de la estación (para el reproductor/embed público sin exponer el id)
 ALTER TABLE clientes ADD COLUMN IF NOT EXISTS short_name VARCHAR(150);
+-- Cliente migrado por la capa de compatibilidad "asilivehd" (esquema por-ruta,
+-- no por-puerto): su conexión y player vienen de /compat/, no del motor normal.
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS compat BOOLEAN DEFAULT false;
 
 -- Índices para búsquedas frecuentes
 CREATE INDEX IF NOT EXISTS idx_clientes_user_id     ON clientes(user_id);

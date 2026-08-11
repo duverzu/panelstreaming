@@ -61,6 +61,12 @@ function crearCliente(baseURL, token) {
       catch (e) { return fallo('compatClientes', e) || []; }
     },
 
+    /** Conexión completa de un canal asilivehd (RTMP, clave, m3u8, player, estado). */
+    compatCliente: async (user) => {
+      try { return (await api.get(`/compat/clientes/${encodeURIComponent(user)}`)).data; }
+      catch (e) { return fallo(`compatCliente(${user})`, e); }
+    },
+
     /** Estado del reenvío a Facebook de una cuenta. */
     restream: (user) => api.get(`/cuentas/${encodeURIComponent(user)}/restream`).then((r) => r.data).catch((e) => fallo(`restream(${user})`, e)),
     /** Configura/enciende el reenvío a Facebook. body: { facebook_key?, encender } */
