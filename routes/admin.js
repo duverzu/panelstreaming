@@ -1014,7 +1014,11 @@ router.post('/servidores/:id/compat/importar', requireAdmin, wrap(async (req, re
     try {
       if (await clienteModel.findByShortName(c.user)) { reporte.push({ user: c.user, ok: false, motivo: 'ya está en el panel' }); continue; }
       const usuario = (await userModel.findByUsername(c.user)) ? await userModel.generarUsername(c.user) : c.user;
-      const password_hash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
+      // Contraseña del panel = su token (en asilivehd la "password" ES el token):
+      // así el cliente entra con las MISMAS credenciales que ya conoce.
+      const info = await nodo.compatCliente(c.user);
+      const pass = (info?.clave || '').split('?token=')[1] || crypto.randomBytes(18).toString('hex');
+      const password_hash = await bcrypt.hash(pass, 10);
       const cuentaUser = await userModel.create({ username: usuario, email: `${c.user}@asilivehd.local`, password_hash, role: 'cliente' });
       await clienteModel.create({
         user_id: cuentaUser.id, nombre_empresa: c.user, plan: 'asilivehd',
