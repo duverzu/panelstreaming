@@ -110,6 +110,8 @@ async function playlistAnuncios(az, stationId) {
   return pl.id;
 }
 
+const ultimoAnuncioMedia = new Map();   // cliente_id -> media.id del último anuncio (para borrarlo)
+
 /** Genera la hora y la pone a sonar en una estación. */
 async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, con_clima = false, zona = null } = {}) {
   const az = await azuracast.paraServidorId(cliente.servidor_id);
@@ -122,7 +124,10 @@ async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, 
     if (clima) texto += `. Ahora mismo ${clima}`;
   }
   const mp3 = await generarVoz(texto);
-  const nombre = `anuncio-hora-${cliente.id}.mp3`;               // se sobreescribe cada vez
+  // Nombre ÚNICO cada vez: si se reusa el mismo, AzuraCast puede reproducir la
+  // versión vieja (aún sin re-analizar) y decir una hora pasada. Con nombre
+  // nuevo, siempre suena el audio fresco.
+  const nombre = `anuncio-hora-${cliente.id}-${Date.now()}.mp3`;
 
   const media = await az.uploadMedia(stationId, nombre, mp3.toString('base64'));
   const plId = await playlistAnuncios(az, stationId);
@@ -130,6 +135,10 @@ async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, 
   await sleep(2500);                                             // deja que AzuraCast lo indexe
   try { await az.request(stationId, media.unique_id || media.id); } catch (e) { console.error('[anuncio] request:', e.message); }
   if (skip) await az.skipSong(stationId).catch(() => {});
+  // Borra el anuncio ANTERIOR de este cliente (no acumular archivos en disco)
+  const previo = ultimoAnuncioMedia.get(cliente.id);
+  if (previo && previo !== media.id) az.deleteMedia(stationId, previo).catch(() => {});
+  ultimoAnuncioMedia.set(cliente.id, media.id);
   return { ok: true, texto };
 }
 
