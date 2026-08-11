@@ -29,6 +29,7 @@ const { generateToken } = require('../services/auth');
 const azuracast = require('../services/azuracast');
 const videoNode = require('../services/videoNode');
 const migracion = require('../services/migracion');
+const { capacidadesCliente } = require('../services/capacidadesCliente');
 const authFactory = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
 
@@ -225,9 +226,10 @@ router.post('/clientes/:id/impersonar', requireAdmin, wrap(async (req, res) => {
     impersonated_by: req.user.sub,
   });
 
+  const cap = await capacidadesCliente(cliente);
   res.json({
     token,
-    cliente: { id: cliente.id, nombre_empresa: cliente.nombre_empresa, tipo: cliente.tipo || 'audio', username: user.username, email: user.email },
+    cliente: { id: cliente.id, nombre_empresa: cliente.nombre_empresa, tipo: cliente.tipo || 'audio', username: user.username, email: user.email, ...cap },
   });
 }));
 

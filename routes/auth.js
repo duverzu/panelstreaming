@@ -15,6 +15,7 @@ const userModel = require('../models/userModel');
 const clienteModel = require('../models/clienteModel');
 const resellerModel = require('../models/resellerModel');
 const { generateToken, verifyToken } = require('../services/auth');
+const { capacidadesCliente } = require('../services/capacidadesCliente');
 const rateLimit = require('../middleware/rateLimit');
 
 const router = express.Router();
@@ -68,6 +69,7 @@ router.post('/login', limiteLogin, wrap(async (req, res) => {
   if (!cliente.activo) return res.status(403).json({ error: 'Cuenta desactivada. Contacta al administrador.' });
 
   const token = generateToken(user.id, 'cliente', { cliente_id: cliente.id });
+  const cap = await capacidadesCliente(cliente);
   res.json({
     token,
     role: 'cliente',
@@ -79,6 +81,7 @@ router.post('/login', limiteLogin, wrap(async (req, res) => {
       cliente_id: cliente.id,
       nombre_empresa: cliente.nombre_empresa,
       tipo: cliente.tipo || 'audio',
+      ...cap,
     },
   });
 }));
@@ -104,12 +107,13 @@ router.post('/sso', rateLimit({ max: 30, ventanaMs: 60000 }), wrap(async (req, r
   if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
   const sesion = generateToken(cliente.user_id, 'cliente', { cliente_id: cliente.id });
+  const cap = await capacidadesCliente(cliente);
   res.json({
     token: sesion,
     role: 'cliente',
     user: {
       id: user.id, username: user.username, email: user.email, role: 'cliente',
-      cliente_id: cliente.id, nombre_empresa: cliente.nombre_empresa, tipo: cliente.tipo || 'audio',
+      cliente_id: cliente.id, nombre_empresa: cliente.nombre_empresa, tipo: cliente.tipo || 'audio', ...cap,
     },
   });
 }));

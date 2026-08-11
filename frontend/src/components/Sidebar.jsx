@@ -90,7 +90,16 @@ export default function Sidebar() {
   const loc = useLocation();
   // Un cliente de video ve otro menú: las páginas de radio no le sirven
   const esVideo = role === 'cliente' && user?.tipo === 'video';
-  const menu = (esVideo ? MENUS.cliente_video : MENUS[role]) || MENUS.admin;
+  let menu = (esVideo ? MENUS.cliente_video : MENUS[role]) || MENUS.admin;
+
+  // Cliente de video SOLO EN VIVO (plan sin almacenamiento o canal asilivehd):
+  // no usa VOD/24-7, así que se le ocultan "Gestionar videos" y "Playlist".
+  if (esVideo && user?.permite_vod === false) {
+    const ocultar = ['/cliente/videos', '/cliente/playlist'];
+    menu = menu
+      .map((g) => ({ ...g, items: g.items.filter((it) => !ocultar.includes(it.to)) }))
+      .filter((g) => g.items.length > 0);
+  }
 
   // Activo teniendo en cuenta el ?tipo= (dos ítems pueden compartir ruta y
   // diferenciarse solo por el tipo: Clientes de audio vs Clientes de video).
