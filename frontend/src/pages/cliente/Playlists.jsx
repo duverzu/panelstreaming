@@ -3,6 +3,16 @@ import { apiFetch } from '../../api';
 import Modal from '../../components/Modal';
 import { IconPlaylist, IconMusic, IconTrash, IconPlus } from '../../icons';
 
+/** Icono de lápiz (renombrar), inline. */
+function IconLapiz({ width = 14, height = 14, className = '' }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
 const DIAS = [
   { n: 1, l: 'Lun' }, { n: 2, l: 'Mar' }, { n: 3, l: 'Mié' }, { n: 4, l: 'Jue' },
   { n: 5, l: 'Vie' }, { n: 6, l: 'Sáb' }, { n: 7, l: 'Dom' },
@@ -35,6 +45,8 @@ export default function ClientePlaylists() {
   const [addTo, setAddTo] = useState(null);           // playlist a la que se agregan canciones
   const [addSel, setAddSel] = useState([]);           // ids seleccionados para agregar
   const [busyMedia, setBusyMedia] = useState(false);
+  const [renombrar, setRenombrar] = useState(null);   // canción a renombrar
+  const [renForm, setRenForm] = useState({ titulo: '', artista: '' });
 
   async function cargar() {
     setLoading(true);
@@ -57,6 +69,12 @@ export default function ClientePlaylists() {
     if (!addSel.length) { setAddTo(null); return; }
     setBusyMedia(true);
     try { await apiFetch('/cliente/media/playlists-lote', { method: 'PUT', body: JSON.stringify({ media_ids: addSel, playlist_id: addTo, accion: 'agregar' }) }); setAddTo(null); setAddSel([]); await cargar(); }
+    catch (e) { alert(e.message); } finally { setBusyMedia(false); }
+  }
+  function abrirRenombrar(m) { setRenombrar(m); setRenForm({ titulo: m.titulo || '', artista: m.artista || '' }); }
+  async function guardarNombre() {
+    setBusyMedia(true);
+    try { await apiFetch(`/cliente/media/${renombrar.id}/nombre`, { method: 'PUT', body: JSON.stringify(renForm) }); setRenombrar(null); await cargar(); }
     catch (e) { alert(e.message); } finally { setBusyMedia(false); }
   }
   useEffect(() => { cargar(); }, []);
@@ -176,6 +194,10 @@ export default function ClientePlaylists() {
                               <IconMusic width={13} height={13} className="text-gray-300 shrink-0" />
                               <span className="flex-1 min-w-0 truncate">{m.titulo}{m.artista ? <span className="text-gray-400"> · {m.artista}</span> : ''}</span>
                               <span className="text-[11px] text-gray-400 shrink-0">{m.duracion}</span>
+                              <button onClick={() => abrirRenombrar(m)} disabled={busyMedia} title="Renombrar canción"
+                                className="w-7 h-7 shrink-0 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-800 hover:border-brand-500 hover:text-brand-600 disabled:opacity-40 transition">
+                                <IconLapiz width={12} height={12} />
+                              </button>
                               <button onClick={() => quitarCancion(p.id, m.id)} disabled={busyMedia} title="Quitar de esta playlist"
                                 className="w-7 h-7 shrink-0 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-800 hover:border-red-400 hover:text-red-500 disabled:opacity-40 transition">
                                 <IconTrash width={12} height={12} />
@@ -286,6 +308,25 @@ export default function ClientePlaylists() {
             <button onClick={agregarCanciones} disabled={busyMedia || !addSel.length} className="btn-primary flex-1">
               {busyMedia ? 'Agregando…' : `Agregar${addSel.length ? ` (${addSel.length})` : ''}`}
             </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal RENOMBRAR canción */}
+      <Modal open={renombrar !== null} onClose={() => setRenombrar(null)} title="Renombrar canción">
+        <div className="space-y-3">
+          <div>
+            <label className="label">Título</label>
+            <input className="input" value={renForm.titulo} onChange={(e) => setRenForm({ ...renForm, titulo: e.target.value })} placeholder="Nombre de la canción" />
+          </div>
+          <div>
+            <label className="label">Artista</label>
+            <input className="input" value={renForm.artista} onChange={(e) => setRenForm({ ...renForm, artista: e.target.value })} placeholder="Opcional" />
+          </div>
+          <p className="text-[11px] text-gray-400">Cambia cómo se ve en tu música y en el reproductor. El cambio aplica en todas tus playlists.</p>
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => setRenombrar(null)} className="btn-ghost flex-1">Cancelar</button>
+            <button onClick={guardarNombre} disabled={busyMedia || !renForm.titulo.trim()} className="btn-primary flex-1">{busyMedia ? 'Guardando…' : 'Guardar'}</button>
           </div>
         </div>
       </Modal>

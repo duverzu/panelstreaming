@@ -56,6 +56,7 @@ function crearCliente(baseURL, apiKey) {
   const uploadMedia = async (id, filename, base64) => { try { return (await api.post(`/station/${id}/files`, { path: filename, file: base64 })).data; } catch (e) { handleError(`uploadMedia(${id})`, e); } };
   const deleteMedia = async (id, mid) => { try { return (await api.delete(`/station/${id}/file/${mid}`)).data; } catch (e) { handleError(`deleteMedia(${id}/${mid})`, e); } };
   const setFilePlaylists = async (id, mid, ids) => { try { return (await api.put(`/station/${id}/file/${mid}`, { playlists: ids })).data; } catch (e) { handleError(`setFilePlaylists(${id}/${mid})`, e); } };
+  const actualizarFile = async (id, mid, datos) => { try { return (await api.put(`/station/${id}/file/${mid}`, datos)).data; } catch (e) { handleError(`actualizarFile(${id}/${mid})`, e); } };
   const getPlaylists = async (id) => { try { return (await api.get(`/station/${id}/playlists`)).data; } catch (e) { handleError(`getPlaylists(${id})`, e); } };
   const createPlaylist = async (id, data) => { try { return (await api.post(`/station/${id}/playlists`, data)).data; } catch (e) { handleError(`createPlaylist(${id})`, e); } };
   const updatePlaylist = async (id, plId, data) => { try { return (await api.put(`/station/${id}/playlist/${plId}`, data)).data; } catch (e) { handleError(`updatePlaylist(${id}/${plId})`, e); } };
@@ -76,7 +77,7 @@ function crearCliente(baseURL, apiKey) {
     getStation, getStationAdmin, getNowPlaying, getNowPlayingAll, createStation, updateStation, deleteStation,
     getMounts, createMount, updateMount, createStreamer, getStreamers, updateStreamer,
     restartStation, skipSong, request, stopStation, getStationStatus,
-    listMedia, uploadMedia, deleteMedia, setFilePlaylists,
+    listMedia, uploadMedia, deleteMedia, setFilePlaylists, actualizarFile,
     getPlaylists, createPlaylist, updatePlaylist, deletePlaylist,
     getWebhooks, createWebhook, updateWebhook, deleteWebhook,
     getListeners, getCharts, getBestWorst, getStorageLocation, updateStorageLocation, getServerStats,

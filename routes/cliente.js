@@ -181,6 +181,20 @@ router.put('/media/:id/playlists', requireCliente, wrap(async (req, res) => {
   res.json({ message: 'Playlists actualizadas ✅' });
 }));
 
+/** PUT /cliente/media/:id/nombre — renombra una canción (título y artista). */
+router.put('/media/:id/nombre', requireCliente, wrap(async (req, res) => {
+  const cliente = await getCliente(req);
+  if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
+  const { titulo, artista } = req.body || {};
+  const datos = {};
+  if (typeof titulo === 'string') datos.title = titulo.trim().slice(0, 250);
+  if (typeof artista === 'string') datos.artist = artista.trim().slice(0, 250);
+  if (!datos.title) return res.status(400).json({ error: 'El título no puede quedar vacío' });
+  const az = await azDe(cliente);
+  await az.actualizarFile(cliente.azuracast_station_id, req.params.id, datos);
+  res.json({ message: 'Canción actualizada ✅' });
+}));
+
 /**
  * PUT /cliente/media/playlists-lote — agrega o quita UNA playlist a MUCHAS
  * canciones de una vez. Evita ir pista por pista.
