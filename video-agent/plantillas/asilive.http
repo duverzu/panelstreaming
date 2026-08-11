@@ -1,0 +1,25 @@
+# Capa de compatibilidad asilivehd — SALIDA HLS por HTTPS
+# Generado por instalar-compat.sh. No editar a mano.
+#
+# Sirve /live/<usuario>.m3u8 (+ segmentos) para el dominio migrado, con
+# su propio certificado. Idéntico a la URL que ya tiene el cliente.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name {{DOMINIO_ASILIVE}};
+
+    ssl_certificate     {{CERT_FULLCHAIN}};
+    ssl_certificate_key {{CERT_KEY}};
+
+    access_log {{LOG_DIR}}/asilive-access.log video;
+
+    add_header 'Access-Control-Allow-Origin' '*' always;
+    add_header 'Access-Control-Expose-Headers' 'Content-Length' always;
+
+    # HLS: /live/<usuario>.m3u8 y sus segmentos .ts (igual que asilivehd)
+    location /live {
+        alias {{HLS_DIR}};
+        add_header 'Cache-Control' 'no-cache' always;
+        add_header 'Access-Control-Allow-Origin' '*' always;
+    }
+}

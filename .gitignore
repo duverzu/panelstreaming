@@ -34,3 +34,4 @@ video-agent/node_modules/
 video-agent/.env
 video-agent/claves.json
 video-agent/canales-activos.json
+video-agent/compat-tokens.json

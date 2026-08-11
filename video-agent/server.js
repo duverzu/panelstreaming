@@ -21,6 +21,7 @@ const readline = require('readline');
 const claves = require('./claves');
 const webtv = require('./webtv');
 const restream = require('./restream');
+const compat = require('./compat');
 const { crearCuenta, eliminarConfig } = require('./crear');
 const listas = require('./listas');
 const fsp2 = require('fs/promises');
@@ -48,7 +49,7 @@ app.use((req, res, next) => {
   if (req.path === '/health') return next();
   // nginx pregunta desde el propio servidor en cada conexión de vídeo:
   // no lleva token, se acepta solo si viene de localhost.
-  if (req.path.startsWith('/rtmp/')) {
+  if (req.path.startsWith('/rtmp/') || req.path.startsWith('/compat/')) {
     const ip = (req.ip || '').replace('::ffff:', '');
     if (ip === '127.0.0.1' || ip === '::1') return next();
     return res.status(403).end();
@@ -341,6 +342,28 @@ app.post('/rtmp/fin', wrap(async (req, res) => {
     } catch (e) { console.error('[rtmp] reanudar 24/7:', e.message); }
   }, 6000));
 }));
+
+
+// ==================================================================
+//  COMPAT asilivehd — app `live` unificada (migración transparente)
+//  nginx (app live, puerto 1935) pregunta aquí antes de dejar publicar.
+//  El nombre del stream es el usuario y el token va como ?token=.
+//  Se valida contra compat-tokens.json (los tokens EXACTOS del viejo).
+// ==================================================================
+app.post('/compat/publicar', (req, res) => {
+  const name = String(req.body?.name || '');
+  const token = String(req.body?.token || '');
+  if (!compat.valida(name, token)) {
+    console.error(`[compat] rechazado "${name}" (token inválido) desde ${req.body?.addr}`);
+    return res.status(403).end();
+  }
+  console.log(`[compat] ${name}: al aire desde ${req.body?.addr}`);
+  res.status(200).end();
+});
+app.post('/compat/fin', (req, res) => {
+  console.log(`[compat] ${req.body?.name || '?'}: terminó`);
+  res.status(200).end();
+});
 
 
 // ==================================================================
