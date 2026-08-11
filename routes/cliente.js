@@ -323,7 +323,7 @@ router.get('/anuncio-hora', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   if (!cliente?.azuracast_station_id) return res.json({ disponible: false });
   const cfg = await anuncioHora.verConfig(cliente.id);
-  res.json({ disponible: true, ...cfg, ejemplo: anuncioHora.textoHora(new Date(), { saludo: cfg.con_saludo ? 'Atención' : null }) });
+  res.json({ disponible: true, ...cfg, ejemplo: anuncioHora.textoHora(new Date(), { saludo: cfg.con_saludo ? 'Atención' : null, zona: cfg.zona_horaria }) });
 }));
 
 router.put('/anuncio-hora', requireCliente, wrap(async (req, res) => {

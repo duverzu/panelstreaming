@@ -3,6 +3,15 @@ import { apiFetch } from '../api';
 
 const CADA = [{ v: 60, t: 'Cada hora en punto' }, { v: 30, t: 'Cada media hora' }, { v: 15, t: 'Cada 15 minutos' }];
 
+const ZONAS = [
+  ['America/Bogota', 'Colombia (Bogotá)'], ['America/Mexico_City', 'México (CDMX)'],
+  ['America/Lima', 'Perú (Lima)'], ['America/Santiago', 'Chile (Santiago)'],
+  ['America/Argentina/Buenos_Aires', 'Argentina (Bs. As.)'], ['America/Caracas', 'Venezuela'],
+  ['America/Guayaquil', 'Ecuador'], ['America/Panama', 'Panamá'],
+  ['America/New_York', 'EE.UU. (Este)'], ['America/Los_Angeles', 'EE.UU. (Oeste)'],
+  ['America/Sao_Paulo', 'Brasil (São Paulo)'], ['Europe/Madrid', 'España (Madrid)'], ['UTC', 'UTC'],
+];
+
 /** "Da la hora" — anuncio de hora automático por voz (estilo Zara/RadioBOSS). */
 export default function AnuncioHora() {
   const [cfg, setCfg] = useState(undefined);
@@ -39,6 +48,15 @@ export default function AnuncioHora() {
       <div>
         <h2 className="font-semibold flex items-center gap-2">🕒 Da la hora (automático)</h2>
         <p className="text-xs text-gray-400 mt-1">Tu radio dirá la hora con voz sola, como en Zara o RadioBOSS. Ejemplo: «{cfg.ejemplo}».</p>
+      </div>
+
+      <div>
+        <label className="label">Zona horaria de tu emisora</label>
+        <select className="input !w-auto text-sm" value={cfg.zona_horaria || 'America/Bogota'} disabled={ocupado}
+          onChange={(e) => guardar({ zona_horaria: e.target.value })}>
+          {ZONAS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+        </select>
+        <p className="text-[11px] text-gray-400 mt-1">La hora de tus <b>anuncios y cuñas</b> se calcula con esta zona. Por defecto: Colombia.</p>
       </div>
 
       <label className="flex items-center gap-2 cursor-pointer">

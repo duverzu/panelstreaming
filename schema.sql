@@ -232,6 +232,8 @@ ALTER TABLE clientes ADD COLUMN IF NOT EXISTS short_name VARCHAR(150);
 -- Cliente migrado por la capa de compatibilidad "asilivehd" (esquema por-ruta,
 -- no por-puerto): su conexión y player vienen de /compat/, no del motor normal.
 ALTER TABLE clientes ADD COLUMN IF NOT EXISTS compat BOOLEAN DEFAULT false;
+-- Zona horaria del cliente para la programación (cuñas, anuncio de hora).
+ALTER TABLE anuncio_hora ADD COLUMN IF NOT EXISTS zona_horaria VARCHAR(64) DEFAULT 'America/Bogota';
 
 -- Índices para búsquedas frecuentes
 CREATE INDEX IF NOT EXISTS idx_clientes_user_id     ON clientes(user_id);

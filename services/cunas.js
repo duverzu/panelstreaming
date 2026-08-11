@@ -119,18 +119,27 @@ async function probar(cliente, id) {
 }
 
 // ---- Planificador -------------------------------------------------
+const { partesEnZona } = require('./zonaHoraria');
 let timer = null;
-let ultimo = '';
+const ultimoPorCuna = new Map();   // cuña id -> "HH:MM" ya evaluado este minuto
 
 async function tick() {
-  const ahora = new Date();
-  if (ahora.getSeconds() > 20) return;
-  const hhmm = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
-  if (hhmm === ultimo) return;
-
+  if (new Date().getSeconds() > 20) return;
   try {
-    const { rows } = await query("SELECT c.*, cl.servidor_id, cl.azuracast_station_id FROM cunas c JOIN clientes cl ON cl.id=c.cliente_id WHERE c.activo = true AND cl.activo = true AND cl.azuracast_station_id IS NOT NULL");
+    // La hora se compara en la ZONA del cliente (no la del servidor). El
+    // LEFT JOIN trae su zona de anuncio_hora (por defecto America/Bogota).
+    const { rows } = await query(
+      `SELECT c.*, cl.servidor_id, cl.azuracast_station_id,
+              COALESCE(ah.zona_horaria, 'America/Bogota') AS zona
+         FROM cunas c
+         JOIN clientes cl ON cl.id = c.cliente_id
+         LEFT JOIN anuncio_hora ah ON ah.cliente_id = cl.id
+        WHERE c.activo = true AND cl.activo = true AND cl.azuracast_station_id IS NOT NULL`);
     for (const c of rows) {
+      const { hora, minuto } = partesEnZona(c.zona);
+      const hhmm = `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`;
+      if (ultimoPorCuna.get(c.id) === hhmm) continue;   // ya evaluada este minuto
+      ultimoPorCuna.set(c.id, hhmm);
       const horas = Array.isArray(c.horas) ? c.horas : [];
       if (!horas.includes(hhmm) || !c.media_id) continue;
       const az = await azuracast.paraServidorId(c.servidor_id);
@@ -138,7 +147,6 @@ async function tick() {
         .then(() => console.log(`[cuna] ${c.nombre} sonó (${hhmm})`))
         .catch((e) => console.error('[cuna]', c.nombre, e.message));
     }
-    ultimo = hhmm;
   } catch (e) { console.error('[cuna] tick:', e.message); }
 }
 

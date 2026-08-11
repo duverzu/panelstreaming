@@ -18,6 +18,7 @@ const { execFile } = require('child_process');
 const { query } = require('../config/database');
 const clienteModel = require('./../models/clienteModel');
 const azuracast = require('./azuracast');
+const { partesEnZona, DEFAULT_TZ } = require('./zonaHoraria');
 
 const PLAYLIST = '⏰ Anuncio de hora';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -35,8 +36,9 @@ function minutoTxt(m) {
 }
 
 /** "Son las tres y media de la tarde" (o "Es la una en punto de la mañana"). */
-function textoHora(fecha, { saludo } = {}) {
-  const h = fecha.getHours(); const m = fecha.getMinutes();
+function textoHora(fecha, { saludo, zona } = {}) {
+  // Con zona: la hora del cliente (no la del servidor). Sin zona: la del servidor.
+  const { hora: h, minuto: m } = zona ? partesEnZona(zona) : { hora: fecha.getHours(), minuto: fecha.getMinutes() };
   const periodo = h < 12 ? 'de la mañana' : h < 19 ? 'de la tarde' : 'de la noche';
   let h12 = h % 12; if (h12 === 0) h12 = 12;
   const cab = h12 === 1 ? 'Es la una' : `Son las ${HORAS[h12]}`;
@@ -109,12 +111,12 @@ async function playlistAnuncios(az, stationId) {
 }
 
 /** Genera la hora y la pone a sonar en una estación. */
-async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, con_clima = false } = {}) {
+async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, con_clima = false, zona = null } = {}) {
   const az = await azuracast.paraServidorId(cliente.servidor_id);
   const stationId = cliente.azuracast_station_id;
   if (!stationId) return { ok: false, error: 'sin estación' };
 
-  let texto = textoHora(new Date(), { saludo });
+  let texto = textoHora(new Date(), { saludo, zona });
   if (con_clima && ciudad) {
     const clima = await climaTexto(ciudad);
     if (clima) texto += `. Ahora mismo ${clima}`;
@@ -133,45 +135,46 @@ async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, 
 
 // ---- Config (tabla anuncio_hora) ---------------------------------
 async function verConfig(clienteId) {
-  const { rows } = await query('SELECT cliente_id, activo, cada_min, con_saludo, ciudad, con_clima FROM anuncio_hora WHERE cliente_id = $1', [clienteId]);
-  return rows[0] || { cliente_id: clienteId, activo: false, cada_min: 60, con_saludo: false, ciudad: null, con_clima: false };
+  const { rows } = await query('SELECT cliente_id, activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria FROM anuncio_hora WHERE cliente_id = $1', [clienteId]);
+  return rows[0] || { cliente_id: clienteId, activo: false, cada_min: 60, con_saludo: false, ciudad: null, con_clima: false, zona_horaria: DEFAULT_TZ };
 }
-async function guardarConfig(clienteId, { activo, cada_min, con_saludo, ciudad, con_clima }) {
+async function guardarConfig(clienteId, { activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria }) {
   const cada = [15, 30, 60].includes(Number(cada_min)) ? Number(cada_min) : 60;
   const ciu = ciudad !== undefined ? (String(ciudad || '').trim().slice(0, 120) || null) : undefined;
+  const zona = (typeof zona_horaria === 'string' && zona_horaria.trim()) ? zona_horaria.trim().slice(0, 64) : null;
   await query(
-    `INSERT INTO anuncio_hora (cliente_id, activo, cada_min, con_saludo, ciudad, con_clima, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6, now())
+    `INSERT INTO anuncio_hora (cliente_id, activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6, COALESCE($7,'America/Bogota'), now())
      ON CONFLICT (cliente_id) DO UPDATE SET
        activo = $2, cada_min = $3, con_saludo = $4,
-       ciudad = COALESCE($5, anuncio_hora.ciudad), con_clima = $6, updated_at = now()`,
-    [clienteId, Boolean(activo), cada, Boolean(con_saludo), ciu ?? null, Boolean(con_clima)]
+       ciudad = COALESCE($5, anuncio_hora.ciudad), con_clima = $6,
+       zona_horaria = COALESCE($7, anuncio_hora.zona_horaria), updated_at = now()`,
+    [clienteId, Boolean(activo), cada, Boolean(con_saludo), ciu ?? null, Boolean(con_clima), zona]
   );
   return verConfig(clienteId);
 }
 
 // ---- Planificador -------------------------------------------------
 let timer = null;
-let ultimoSlot = '';   // evita repetir en el mismo minuto
+const ultimoSlotPorCliente = new Map();   // cliente_id -> "HH:MM" ya anunciado
 
 async function tick() {
-  const ahora = new Date();
-  if (ahora.getSeconds() > 20) return;              // solo al comienzo del minuto
-  const min = ahora.getMinutes();
-  const slot = `${ahora.getHours()}:${min}`;
-  if (slot === ultimoSlot) return;
-
+  if (new Date().getSeconds() > 20) return;         // solo al comienzo del minuto
   try {
-    const { rows } = await query('SELECT cliente_id, cada_min, con_saludo, ciudad, con_clima FROM anuncio_hora WHERE activo = true');
+    const { rows } = await query('SELECT cliente_id, cada_min, con_saludo, ciudad, con_clima, zona_horaria FROM anuncio_hora WHERE activo = true');
     for (const cfg of rows) {
-      if (min % cfg.cada_min !== 0) continue;       // no toca en esta franja
+      const zona = cfg.zona_horaria || DEFAULT_TZ;
+      const { hora, minuto } = partesEnZona(zona);   // hora LOCAL del cliente
+      if (minuto % cfg.cada_min !== 0) continue;      // no toca en esta franja
+      const slot = `${hora}:${minuto}`;
+      if (ultimoSlotPorCliente.get(cfg.cliente_id) === slot) continue;   // ya sonó este minuto
       const cliente = await clienteModel.findById(cfg.cliente_id);
       if (!cliente?.azuracast_station_id || cliente.tipo === 'video' || !cliente.activo) continue;
-      anunciarEn(cliente, { saludo: cfg.con_saludo ? 'Atención' : null, ciudad: cfg.ciudad, con_clima: cfg.con_clima })
+      ultimoSlotPorCliente.set(cfg.cliente_id, slot);
+      anunciarEn(cliente, { saludo: cfg.con_saludo ? 'Atención' : null, ciudad: cfg.ciudad, con_clima: cfg.con_clima, zona })
         .then((r) => console.log(`[anuncio] ${cliente.nombre_empresa}: ${r.texto || r.error}`))
         .catch((e) => console.error(`[anuncio] ${cliente.nombre_empresa}:`, e.message));
     }
-    ultimoSlot = slot;
   } catch (e) { console.error('[anuncio] tick:', e.message); }
 }
 
