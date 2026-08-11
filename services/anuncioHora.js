@@ -180,7 +180,8 @@ async function tick() {
       const cliente = await clienteModel.findById(cfg.cliente_id);
       if (!cliente?.azuracast_station_id || cliente.tipo === 'video' || !cliente.activo) continue;
       ultimoSlotPorCliente.set(cfg.cliente_id, slot);
-      anunciarEn(cliente, { saludo: cfg.con_saludo ? 'Atención' : null, ciudad: cfg.ciudad, con_clima: cfg.con_clima, zona })
+      // skip:false → NO corta la canción actual; el anuncio suena cuando termina.
+      anunciarEn(cliente, { skip: false, saludo: cfg.con_saludo ? 'Atención' : null, ciudad: cfg.ciudad, con_clima: cfg.con_clima, zona })
         .then((r) => console.log(`[anuncio] ${cliente.nombre_empresa}: ${r.texto || r.error}`))
         .catch((e) => console.error(`[anuncio] ${cliente.nombre_empresa}:`, e.message));
     }

@@ -143,7 +143,8 @@ async function tick() {
       const horas = Array.isArray(c.horas) ? c.horas : [];
       if (!horas.includes(hhmm) || !c.media_id) continue;
       const az = await azuracast.paraServidorId(c.servidor_id);
-      reproducir(az, c.azuracast_station_id, c.media_id, { skip: true })
+      // skip:false → no corta la canción actual; la cuña suena al terminar.
+      reproducir(az, c.azuracast_station_id, c.media_id, { skip: false })
         .then(() => console.log(`[cuna] ${c.nombre} sonó (${hhmm})`))
         .catch((e) => console.error('[cuna]', c.nombre, e.message));
     }
