@@ -90,7 +90,7 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
     throw err('No hay servidores de video con espacio disponible. Agrega uno en Servidores.', 503);
   }
   const az = servidor ? azuracast.crearCliente(servidor.url, servidor.api_key) : azuracast.porDefecto;
-  const servidor_id = servidor ? servidor.id : null;
+  servidor_id = servidor ? servidor.id : null;   // el nodo realmente elegido (manual o automático)
   const baseUrl = servidor ? servidor.url : process.env.AZURACAST_BASE_URL;   // admin (API)
   const baseUrlPublica = publico.deServidor(servidor);                        // la que ve el cliente
 
