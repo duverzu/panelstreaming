@@ -867,7 +867,7 @@ app.put('/cuentas/:user/restream', wrap(async (req, res) => {
     const r = await restream.configurar(user, {
       facebook_key: req.body?.facebook_key,
       activo: req.body?.encender !== false,
-      origen: `rtmp://127.0.0.1:1935/asilivehls/${user}`,
+      origen: path.join(ASILIVE_HLS, `${user}.m3u8`),   // el pull RTMP se cuelga; el HLS sí lee
     });
     return res.json({ ok: true, ...r });
   }

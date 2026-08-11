@@ -34,9 +34,11 @@ async function guardarConfig(datos) {
 }
 
 function argumentos(origen, destino) {
+  // Fuente HLS (canales asilivehd): -re para leer al ritmo real y seguir el vivo.
+  const entrada = /\.m3u8(\?|$)/i.test(origen) ? ['-re', '-i', origen] : ['-i', origen];
   return [
     '-hide_banner', '-loglevel', 'warning',
-    '-i', origen,
+    ...entrada,
     // Video H.264 compatible con Facebook (keyframe cada 2s = 60 a 30fps)
     '-c:v', 'libx264', '-preset', 'veryfast', '-b:v', `${V_KBPS}k`,
     '-maxrate', `${V_KBPS}k`, '-bufsize', `${Number(V_KBPS) * 2}k`,
