@@ -11,9 +11,10 @@ const planModel = require('../models/planModel');
 
 async function capacidadesCliente(cliente) {
   if (!cliente || cliente.tipo !== 'video') return { permite_vod: false };
-  if (cliente.compat) return { permite_vod: false };            // asilivehd = solo vivo
+  // Incluye compat: un canal asilivehd con plan de espacio SÍ puede usar AutoDJ
+  // (el motor 24/7 de la capa, compat247). 0 GB = solo vivo.
   const plan = await planModel.findByNombre(cliente.plan);
-  return { permite_vod: (plan?.espacio_mb || 0) > 0 };           // 0 GB = solo vivo
+  return { permite_vod: (plan?.espacio_mb || 0) > 0 };
 }
 
 module.exports = { capacidadesCliente };

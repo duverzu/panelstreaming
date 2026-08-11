@@ -632,11 +632,14 @@ router.get('/video', requireCliente, wrap(async (req, res) => {
   if (cliente.compat) {
     const info = await ctx.nodo.compatCliente(user);
     if (!info) return res.status(502).json({ error: 'No se pudo consultar tu canal ahora mismo. Intenta en un momento.' });
+    const plan = await planModel.findByNombre(cliente.plan);
     return res.json({
       nombre: cliente.nombre_empresa,
       al_aire: info.al_aire,
       viewers: info.viewers,
-      videos: [], espacio_mb: 0, espacio_total_mb: null,
+      videos: (info.videos || []).map((v) => ({ nombre: v.nombre, tam_mb: +((v.bytes || 0) / 1048576).toFixed(1), modificado: v.modificado })),
+      espacio_mb: +((info.espacio_bytes || 0) / 1048576).toFixed(1),
+      espacio_total_mb: plan?.espacio_mb || null,
       permite_vivo: true,
       compat: true,
       conexion: { servidor: info.servidor_rtmp, clave: info.clave },
@@ -689,6 +692,13 @@ router.post('/video/ticket', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   const ctx = await nodoDe(cliente);
   if (!ctx) return res.status(400).json({ error: 'Tu cuenta no es de video' });
+
+  // Canal asilivehd (compat): la subida va al vhost de la capa, no al por-puerto
+  if (cliente.compat) {
+    const t = await ctx.nodo.ticketSubida(cliente.short_name);
+    if (!t?.ticket) return res.status(502).json({ error: 'No se pudo preparar la subida' });
+    return res.json({ url: `https://server.asilivehd.com/_subir?ticket=${encodeURIComponent(t.ticket)}` });
+  }
 
   const detalle = await ctx.nodo.cuenta(cliente.short_name);
   const t = await ctx.nodo.ticketSubida(cliente.short_name);

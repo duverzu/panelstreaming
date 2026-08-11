@@ -51,6 +51,7 @@ sed -e "s#{{DOMINIO_ASILIVE}}#$DOMINIO#g" \
     -e "s#{{HLS_DIR}}#$HLS_DIR#g" \
     -e "s#{{LOG_DIR}}#$LOG_DIR#g" \
     -e "s#{{PLAYER_DIR}}#$PLAYER_DIR#g" \
+    -e "s#{{PUERTO_AGENTE}}#$AGENTE#g" \
     -e "s#{{CERT_FULLCHAIN}}#$CERT/fullchain.pem#g" \
     -e "s#{{CERT_KEY}}#$CERT/privkey.pem#g" \
     "$PLANTILLAS/asilive.http" > "$CUENTAS/_asilive.http"

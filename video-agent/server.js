@@ -443,12 +443,24 @@ app.get('/compat/clientes/:user', wrap(async (req, res) => {
   const token = compat.tokenDe(user);
   if (token === undefined) return res.status(404).json({ error: 'No es un canal de la capa asilivehd' });
   const viewers = (await compatViewers([user]))[user] || 0;
+  // Videos subidos (para el AutoDJ): se guardan en /home/<user>/uploads
+  let espacio_bytes = 0, videos = [];
+  try {
+    const m = await medirCarpeta(path.join(BASE, user, 'uploads'));
+    espacio_bytes = m.bytes;
+    videos = m.archivos
+      .filter((a) => /\.(mp4|mkv|mov|avi|webm|flv)$/i.test(a.nombre))
+      .sort((a, b) => new Date(b.modificado) - new Date(a.modificado))
+      .map((v) => ({ nombre: v.nombre, bytes: v.bytes, modificado: v.modificado }));
+  } catch (_) {}
   res.json({
     user,
     al_aire: await compatAlAire(user),
     viewers,
     emitiendo_247: compat247.emitiendo(user),
-    tiene_videos: await compatTieneVideos(user),
+    tiene_videos: videos.length > 0,
+    espacio_bytes,
+    videos,
     servidor_rtmp: `rtmp://${COMPAT_DOMINIO}/live`,
     clave: `${user}?token=${token}`,
     m3u8: `https://${COMPAT_DOMINIO}/live/${user}.m3u8`,
@@ -707,6 +719,22 @@ app.post('/subir', (req, res) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'No se recibió ningún video (formatos: mp4, mkv, mov, webm, flv)' });
 
+    // Cuenta de la capa asilivehd (compat): su AutoDJ es compat247, no el motor
+    // por-puerto. Actualiza su 24/7 con el nuevo video, SIN pisar un directo:
+    //  - 24/7 ya emitiendo → recargar (refresca la lista)
+    //  - nadie al aire     → iniciar (muestra sus videos)
+    //  - al aire pero no es el 24/7 → el cliente está EN VIVO: no tocar; el 24/7
+    //    entra solo cuando termine el directo (/compat/fin).
+    if (compat.tokenDe(user) !== undefined) {
+      (async () => {
+        try {
+          if (compat247.emitiendo(user)) await compat247.recargar(user);
+          else if (!(await compatAlAire(user))) await compat247.iniciar(user);
+        } catch (e) { console.error('[subir compat]', e.message); }
+      })();
+      return res.status(201).json({ ok: true, archivo: req.file.filename, bytes: req.file.size });
+    }
+
     // Si el canal está al aire, reiniciarlo para que incluya el nuevo video
     const recargarCanal = async () => {
       try {
@@ -745,6 +773,15 @@ app.delete('/cuentas/:user/videos/:nombre', wrap(async (req, res) => {
   const user = String(req.params.user);
   const r = await subida.borrar(user, req.params.nombre);
   if (!r.ok) return res.status(404).json(r);
+
+  // Canal asilivehd (compat): refresca su 24/7 (compat247), no el motor por-puerto.
+  if (compat.tokenDe(user) !== undefined) {
+    if (compat247.emitiendo(user)) {
+      if (await compatTieneVideos(user)) compat247.recargar(user).catch((e) => console.error('[borrar compat]', e.message));
+      else compat247.detener(user);   // se quedó sin videos: apaga el 24/7
+    }
+    return res.json(r);
+  }
 
   try {
     const lista = await cuentas();
