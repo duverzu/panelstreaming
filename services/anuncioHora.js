@@ -101,26 +101,26 @@ async function generarVoz(texto, { voz } = {}) {
 
 // ---- Inyección en AzuraCast --------------------------------------
 /**
- * Busca/crea la playlist de anuncios. Es SOLO-A-PEDIDO (no rota):
- *   is_enabled:false + include_in_requests:true → el archivo se puede pedir
- *   (request) pero NO entra en la rotación/jingle. Así el anuncio suena UNA vez
- *   cuando se pide y no se repite toda la hora. Las playlists viejas quedaron
- *   como jingle en rotación (repetían "las 4:45"): aquí se corrigen.
+ * Busca/crea la playlist de anuncios. Debe estar HABILITADA y requestable
+ * (si está deshabilitada, AzuraCast rechaza el request y el anuncio no suena),
+ * pero NO como jingle (si es jingle se mete tras cada canción y repite la hora).
+ * No rota porque el archivo se SACA de la playlist justo después de pedirlo
+ * (ver anunciarEn). Las playlists viejas quedaron mal: aquí se corrigen.
  */
 async function playlistAnuncios(az, stationId) {
   const pls = (await az.getPlaylists(stationId)) || [];
   const existe = pls.find((p) => p.name === PLAYLIST);
   if (existe) {
-    if (existe.is_jingle || existe.is_enabled) {
+    if (existe.is_jingle || !existe.is_enabled || !existe.include_in_requests) {
       await az.updatePlaylist(stationId, existe.id, {
-        is_jingle: false, is_enabled: false, include_in_requests: true, include_in_on_demand: true,
+        is_jingle: false, is_enabled: true, include_in_requests: true, include_in_on_demand: true,
       }).catch(() => {});
     }
     return existe.id;
   }
   const pl = await az.createPlaylist(stationId, {
     name: PLAYLIST, type: 'default', source: 'songs',
-    is_jingle: false, include_in_requests: true, include_in_on_demand: true, is_enabled: false, weight: 1,
+    is_jingle: false, include_in_requests: true, include_in_on_demand: true, is_enabled: true, weight: 1,
   });
   return pl.id;
 }
@@ -166,7 +166,10 @@ async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, 
   await sleep(2500);                                             // deja que AzuraCast lo indexe
   try { await az.request(stationId, media.unique_id || media.id); } catch (e) { console.error('[anuncio] request:', e.message); }
   if (skip) await az.skipSong(stationId).catch(() => {});
-  // Barre TODOS los anuncios viejos de este cliente (deja solo el recién creado).
+  // Ya quedó PEDIDO (sonará una vez). Lo sacamos de la playlist para que NO
+  // rote/repita, y barremos todos los anuncios viejos del cliente.
+  await sleep(1500);
+  await az.setFilePlaylists(stationId, media.id, []).catch(() => {});
   await limpiarViejos(az, stationId, cliente.id, media.id);
   return { ok: true, texto };
 }
