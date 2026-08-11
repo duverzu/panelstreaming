@@ -56,7 +56,7 @@ async function aplicarLimitesPlan(stationId, plan, az = azuracast) {
  * así un mismo correo puede tener varias radios, cada una con su propia cuenta.
  * Si no se envía username se genera desde el nombre de la radio (rockfm, rockfm2...).
  */
-async function crearClienteConEstacion({ email, username, password, nombre_empresa, plan_id, reseller_id = null }) {
+async function crearClienteConEstacion({ email, username, password, nombre_empresa, plan_id, servidor_id = null, reseller_id = null }) {
   if (!email || !password || !nombre_empresa || !plan_id) {
     throw err('email, password, nombre_empresa y plan_id son requeridos', 400);
   }
@@ -76,7 +76,16 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
   // 0) Elegir servidor con espacio, DEL TIPO que pide el plan.
   //    Un plan de video se va a un nodo de video; los de audio, como siempre.
   const tipo = plan.tipo === 'video' ? 'video' : 'audio';
-  const servidor = await servidorModel.elegirServidor(tipo);
+  // Nodo elegido a mano (para dirigir migraciones a un nodo concreto) o
+  // automático (el de más cupo libre del tipo del plan).
+  let servidor;
+  if (servidor_id) {
+    servidor = await servidorModel.findById(Number(servidor_id));
+    if (!servidor || !servidor.activo) throw err('El servidor elegido no existe o está inactivo', 400);
+    if (servidor.tipo !== tipo) throw err(`El servidor elegido es de ${servidor.tipo}, pero el plan es de ${tipo}`, 400);
+  } else {
+    servidor = await servidorModel.elegirServidor(tipo);
+  }
   if (tipo === 'video' && !servidor) {
     throw err('No hay servidores de video con espacio disponible. Agrega uno en Servidores.', 503);
   }

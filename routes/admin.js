@@ -167,8 +167,8 @@ router.get('/clientes', requireAdmin, wrap(async (req, res) => {
  * puede tener varias radios.
  */
 router.post('/clientes/crear', requireAdmin, wrap(async (req, res) => {
-  const { email, username, password, nombre_empresa, plan_id } = req.body || {};
-  const resultado = await provisioning.crearClienteConEstacion({ email, username, password, nombre_empresa, plan_id });
+  const { email, username, password, nombre_empresa, plan_id, servidor_id } = req.body || {};
+  const resultado = await provisioning.crearClienteConEstacion({ email, username, password, nombre_empresa, plan_id, servidor_id });
   res.status(201).json({ message: 'Cliente y estación creados ✅', ...resultado });
 }));
 

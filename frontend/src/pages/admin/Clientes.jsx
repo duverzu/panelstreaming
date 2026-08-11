@@ -37,11 +37,12 @@ export default function AdminClientes() {
 
   const [clientes, setClientes] = useState([]);
   const [planes, setPlanes] = useState([]);
+  const [servidores, setServidores] = useState([]);
   const [estados, setEstados] = useState({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null); // id en proceso
 
-  const [form, setForm] = useState({ nombre_empresa: '', username: '', email: '', password: '', plan_id: '' });
+  const [form, setForm] = useState({ nombre_empresa: '', username: '', email: '', password: '', plan_id: '', servidor_id: '' });
   const [userTocado, setUserTocado] = useState(false); // si el admin escribió el usuario a mano
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -56,9 +57,10 @@ export default function AdminClientes() {
   async function cargar() {
     setLoading(true);
     try {
-      const [c, p] = await Promise.all([apiFetch('/admin/clientes'), apiFetch('/admin/planes')]);
+      const [c, p, sv] = await Promise.all([apiFetch('/admin/clientes'), apiFetch('/admin/planes'), apiFetch('/admin/servidores')]);
       setClientes(c.clientes);
       setPlanes(p.planes);
+      setServidores(sv.servidores || []);
       setForm((f) => ({ ...f, plan_id: f.plan_id || p.planes[0]?.id || '' }));
       apiFetch('/admin/clientes/estados').then((e) => setEstados(e.estados)).catch(() => {});
     } finally {
@@ -85,7 +87,7 @@ export default function AdminClientes() {
     try {
       const r = await apiFetch('/admin/clientes/crear', { method: 'POST', body: JSON.stringify(form) });
       setMsg({ type: 'ok', text: `✅ Radio creada. Acceso → usuario: ${r.credenciales?.usuario} · contraseña: ${r.credenciales?.password}` });
-      setForm({ nombre_empresa: '', username: '', email: '', password: '', plan_id: planes.find((p) => (p.tipo || 'audio') === tipo)?.id || '' });
+      setForm({ nombre_empresa: '', username: '', email: '', password: '', plan_id: planes.find((p) => (p.tipo || 'audio') === tipo)?.id || '', servidor_id: '' });
       setUserTocado(false);
       setModalOpen(false);
       cargar();
@@ -319,6 +321,20 @@ export default function AdminClientes() {
               ))}
             </select>
           </div>
+          {esVideo && (
+            <div>
+              <label className="label">Nodo de video</label>
+              <select className="input" value={form.servidor_id} onChange={set('servidor_id')}>
+                <option value="">Automático (el de más cupo libre)</option>
+                {servidores.filter((s) => s.tipo === 'video' && s.activo).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nombre} · libres {Math.max(0, (s.capacidad_radios || 0) - (s.radios || 0))}/{s.capacidad_radios || 0}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">En qué servidor se crea el canal. Elige uno a propósito para dirigir la migración a un nodo concreto.</p>
+            </div>
+          )}
           <p className="text-xs text-gray-400">{esVideo ? 'Se creará su canal en el nodo de video con los límites del plan.' : 'Se creará su estación en AzuraCast con los límites del plan y quedará al aire.'}</p>
           {msg && msg.type === 'err' && (
             <div className="text-sm rounded-xl px-3 py-2 text-red-600 bg-red-50 dark:bg-red-500/10">{msg.text}</div>
