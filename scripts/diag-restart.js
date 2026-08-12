@@ -10,9 +10,19 @@ const azuracast = require('../services/azuracast');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const L = (...a) => console.log(...a);
 
+async function buscar(short) {
+  if (/^\d+$/.test(short)) { const c = await clienteModel.findById(Number(short)); if (c) return c; }
+  const { query } = require('../config/database');
+  const { rows } = await query(`SELECT id, short_name, nombre_empresa FROM clientes WHERE tipo IS DISTINCT FROM 'video' ORDER BY id`);
+  const m = rows.find((r) => (r.short_name || '').toLowerCase().includes(short.toLowerCase()) || (r.nombre_empresa || '').toLowerCase().includes(short.toLowerCase()));
+  if (m) return clienteModel.findById(m.id);
+  L(`No encontré "${short}". Disponibles:`); for (const r of rows) L(`  id ${r.id} · ${r.short_name} · ${r.nombre_empresa}`);
+  return null;
+}
+
 (async () => {
-  const cliente = await clienteModel.findById(Number(process.argv[2] || 0));
-  if (!cliente) { L('Uso: node scripts/diag-restart.js <id-cliente>'); process.exit(1); }
+  const cliente = await buscar(process.argv[2] || '');
+  if (!cliente) process.exit(1);
   const az = await azuracast.paraServidorId(cliente.servidor_id);
   const stationId = cliente.azuracast_station_id;
   L(`Reiniciando: ${cliente.nombre_empresa} (station ${stationId})…`);
