@@ -5,6 +5,10 @@
 # su propio certificado. Idéntico a la URL que ya tiene el cliente.
 server {
     listen 443 ssl;
+    # El asilivehd viejo servía el HLS por el puerto 3333, y los clientes tienen
+    # esa URL puesta en su web, su app y sus redes. Se atiende también ahí para
+    # que esos enlaces sigan vivos sin pedirles que cambien nada.
+    listen 3333 ssl;
     http2 on;
     server_name {{DOMINIO_ASILIVE}};
 
@@ -15,6 +19,12 @@ server {
 
     add_header 'Access-Control-Allow-Origin' '*' always;
     add_header 'Access-Control-Expose-Headers' 'Content-Length' always;
+
+    # Alias de canales que en el servidor viejo se llamaban DISTINTO a como se
+    # llaman aquí. Van en archivos sueltos y no en esta plantilla porque esta se
+    # regenera con instalar-compat.sh y se llevaría los alias por delante.
+    # El glob vacío no molesta a nginx, así que puede no existir ninguno.
+    include cuentas/_asilive-alias/*.conf;
 
     # HLS: /live/<usuario>.m3u8 y sus segmentos .ts (igual que asilivehd)
     location /live {
