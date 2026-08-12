@@ -19,6 +19,9 @@ tmp/
 .DS_Store
 Thumbs.db
 
+# Imágenes originales sin optimizar (la versión servida vive en frontend/public)
+/3d-rendering-laptop-nature.jpg
+
 # Editor
 .vscode/
 .idea/

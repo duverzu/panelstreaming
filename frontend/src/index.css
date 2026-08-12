@@ -34,6 +34,37 @@
   }
 }
 
+/* ===== Login: fondo con movimiento ===== */
+/* Deriva lentísima del fondo (Ken Burns). 40s y muy poco recorrido: se percibe
+   como que la imagen "respira", no como una animación. */
+@keyframes login-deriva {
+  0%   { transform: scale(1.12) translate3d(0, 0, 0); }
+  50%  { transform: scale(1.18) translate3d(-1.5%, -1%, 0); }
+  100% { transform: scale(1.12) translate3d(0, 0, 0); }
+}
+/* Halos verdes que flotan por detrás de la tarjeta. */
+@keyframes login-halo {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  33%  { transform: translate3d(3%, -4%, 0) scale(1.12); }
+  66%  { transform: translate3d(-3%, 3%, 0) scale(0.94); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+/* Entrada de la tarjeta y de cada campo, en cascada. */
+@keyframes login-entra {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.login-deriva { animation: login-deriva 40s ease-in-out infinite; }
+.login-halo   { animation: login-halo 18s ease-in-out infinite; }
+.login-entra  { animation: login-entra .55s cubic-bezier(.22,1,.36,1) both; }
+
+/* Respeta a quien pide menos movimiento: se queda todo quieto, sin romperse. */
+@media (prefers-reduced-motion: reduce) {
+  .login-deriva, .login-halo, .login-entra { animation: none; }
+  .login-deriva { transform: scale(1.12); }
+}
+
 /* ===== Documentación (markdown renderizado) ===== */
 .prose-doc { @apply text-[15px] leading-relaxed text-gray-700 dark:text-gray-300; }
 .prose-doc h1 { @apply text-2xl font-bold mt-1 mb-4 text-gray-900 dark:text-gray-100; }
