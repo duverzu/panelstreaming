@@ -6,7 +6,7 @@ import { IconPlus, IconTrash, IconServer, IconRefresh } from '../../icons';
 import { useAmbito } from '../../ambito';
 
 export default function AdminServidores() {
-  const { esVideo, coincide, tipoPorDefecto } = useAmbito();
+  const { esVideo, esTodo, coincide, tipoPorDefecto } = useAmbito();
   const tipo = tipoPorDefecto;
   const [servidores, setServidores] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +55,7 @@ export default function AdminServidores() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold flex items-center gap-2"><IconServer width={18} height={18} /> {esVideo ? 'Nodos de video' : 'Servidores AzuraCast'} <span className="text-gray-400 font-normal">({lista.length})</span></h2>
+        <h2 className="font-semibold flex items-center gap-2"><IconServer width={18} height={18} /> {esTodo ? 'Servidores' : esVideo ? 'Nodos de video' : 'Servidores AzuraCast'} <span className="text-gray-400 font-normal">({lista.length})</span></h2>
         <div className="flex items-center gap-2">
           <button onClick={cargar} className="btn-ghost !py-2 !px-3 text-xs"><IconRefresh width={15} height={15} /> Actualizar</button>
           <button onClick={abrirCrear} className="btn-primary !py-2 !px-3 text-xs"><IconPlus width={15} height={15} /> {esVideo ? 'Agregar nodo' : 'Agregar servidor'}</button>
@@ -65,7 +65,7 @@ export default function AdminServidores() {
       {loading ? (
         <div className="card p-8 text-center text-gray-400">Cargando…</div>
       ) : lista.length === 0 ? (
-        <div className="card p-8 text-center text-gray-400">{esVideo ? 'Aún no hay nodos de video. Agrega uno para alojar canales.' : 'Aún no hay servidores. Las radios usan el servidor por defecto del sistema.'}</div>
+        <div className="card p-8 text-center text-gray-400">{esTodo ? 'Aún no hay servidores.' : esVideo ? 'Aún no hay nodos de video. Agrega uno para alojar canales.' : 'Aún no hay servidores. Las radios usan el servidor por defecto del sistema.'}</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {lista.map((s) => {

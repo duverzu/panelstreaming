@@ -231,7 +231,18 @@ export default function AdminClientes() {
       {/* Tabla de clientes */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold">Clientes de {T.unidad === 'radio' ? 'audio' : 'video'} <span className="text-gray-400 font-normal">({lista.length})</span></h2>
+          {/* En modo "Todo" la lista mezcla los dos servicios: llamarla
+              "Clientes de audio" seria mentir sobre lo que se esta viendo. */}
+          <h2 className="font-semibold">
+            {esTodo ? 'Todos los clientes' : `Clientes de ${esVideo ? 'video' : 'audio'}`}
+            <span className="text-gray-400 font-normal"> ({lista.length})</span>
+            {esTodo && (
+              <span className="ml-2 text-xs font-normal text-gray-400">
+                🎙️ {lista.filter((c) => (c.tipo || 'audio') !== 'video').length} audio ·
+                🎬 {lista.filter((c) => c.tipo === 'video').length} video
+              </span>
+            )}
+          </h2>
           <div className="flex items-center gap-2">
             <button onClick={cargar} className="btn-ghost !py-2 !px-3 text-xs"><IconRefresh width={15} height={15} /> Actualizar</button>
             <button onClick={() => { setMsg(null); setModalOpen(true); }} className="btn-primary !py-2 !px-3 text-xs">

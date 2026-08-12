@@ -7,7 +7,7 @@ import { useAmbito } from '../../ambito';
 const VACIO = { titulo: '', categoria: 'General', contenido: '', orden: 0, publicado: true, audiencia: 'audio' };
 
 export default function AdminDocumentacion() {
-  const { ambito, esVideo, tipoPorDefecto } = useAmbito();
+  const { ambito, esVideo, esTodo, tipoPorDefecto } = useAmbito();
   // El backend devuelve TODAS las guías si la audiencia no es audio/video.
   const tipo = tipoPorDefecto;
   const [docs, setDocs] = useState([]);
@@ -73,8 +73,8 @@ export default function AdminDocumentacion() {
     <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
       <div className="lg:col-span-2">
         <h2 className="font-semibold flex items-center gap-2">
-          {esVideo ? '🎬 Documentación de video' : '🎙️ Documentación de audio'}
-          <span className="text-xs font-normal text-gray-400">— la ven los clientes de {esVideo ? 'video' : 'audio'} en “Aprende”</span>
+          {esTodo ? '📚 Toda la documentación' : esVideo ? '🎬 Documentación de video' : '🎙️ Documentación de audio'}
+          <span className="text-xs font-normal text-gray-400">— la ven los clientes en “Aprende”{esTodo ? '' : esVideo ? ' (solo los de video)' : ' (solo los de audio)'}</span>
         </h2>
       </div>
 
