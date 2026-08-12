@@ -1,9 +1,10 @@
 /**
- * scripts/diag-anuncio.js — hacer sonar el anuncio YA vía request + limpiar cola.
+ * scripts/diag-anuncio.js — confirmar que el JINGLE suena (al terminar la canción).
  * Uso (en el VPS del panel):  node scripts/diag-anuncio.js <short_name-o-id>
  *
- * Activa pedidos, sube el anuncio, lo pide, MUESTRA la cola por dentro, borra
- * los ítems que están delante (ítem por ítem), salta y observa si suena.
+ * Deja la playlist como jingle "cada 1 canción", asigna un anuncio fresco como
+ * ÚNICO archivo, y observa hasta 75s si suena (debe entrar cuando la canción
+ * actual termine). Además vuelca un ítem de la cola crudo para ver sus campos.
  * Limpia el archivo de prueba al final.
  */
 require('dotenv').config();
@@ -27,18 +28,6 @@ async function buscarCliente(short) {
   return null;
 }
 
-async function observar(az, stationId, marca, segs) {
-  for (let i = 1; i <= segs / 3; i++) {
-    await sleep(3000);
-    const np = await az.getNowPlaying(stationId).catch(() => null);
-    const ahora = np?.now_playing ? tit(np.now_playing) : '';
-    const sono = ahora.includes(marca) || (np?.song_history || []).some((h) => tit(h).includes(marca));
-    L(`  +${i * 3}s → ahora: "${ahora.slice(0, 45)}"${sono ? '   ✅ ¡SONÓ!' : ''}`);
-    if (sono) return i * 3;
-  }
-  return -1;
-}
-
 (async () => {
   const cliente = await buscarCliente(process.argv[2] || '');
   if (!cliente) process.exit(1);
@@ -51,48 +40,40 @@ async function observar(az, stationId, marca, segs) {
   const plId = pl?.id || (await az.createPlaylist(stationId, { name: '📣 Anuncios', type: 'default', source: 'songs', is_enabled: true, weight: 1 })).id;
 
   try {
-    paso(1, 'Activar pedidos + playlist requestable + subir anuncio');
-    await az.updateStation(stationId, { enable_requests: true, request_delay: 0, request_threshold_seconds: 0 }).catch((e) => L('  updateStation:', e.message));
-    await az.updatePlaylist(stationId, plId, { is_jingle: false, is_enabled: true, include_in_requests: true, include_in_on_demand: true });
+    paso(1, 'Playlist = JINGLE cada 1 canción; subir anuncio como ÚNICO archivo');
+    await az.updatePlaylist(stationId, plId, { is_jingle: true, is_enabled: true, play_per_songs: 1 });
+    // Quitar cualquier archivo anterior de la jingle (deja solo el nuevo)
+    const files = (await az.listMedia(stationId)) || [];
+    for (const f of files) if (/anuncio/.test(f.path || '')) await az.deleteMedia(stationId, f.id).catch(() => {});
     const texto = textoHora(new Date(), { saludo: 'Prueba', zona: 'America/Bogota' });
     const mp3 = await generarVoz(texto, { voz: 'femenina' });
     const nombre = `anuncio-diag-${cliente.id}-${Date.now()}.mp3`;
-    const marca = nombre.replace(/\.[^.]+$/, '');
     const media = await az.uploadMedia(stationId, nombre, mp3.toString('base64'));
     await az.setFilePlaylists(stationId, media.id, [plId]);
-    L('  subido y asignado:', marca);
-    await sleep(8000);
+    L('  subido y asignado como jingle:', nombre);
 
-    paso(2, 'PEDIR (request)');
-    try { const r = await az.request(stationId, media.unique_id || media.id); L('  request:', r?.message || 'ok'); }
-    catch (e) { L('  request ERROR:', e.message); }
+    paso(2, 'Ver un ítem de la cola crudo (para ver sus campos)');
+    const q = await az.getQueue(stationId).catch(() => []);
+    L('  ítems:', Array.isArray(q) ? q.length : q);
+    if (Array.isArray(q) && q[0]) L('  item[0] campos:', Object.keys(q[0]).join(', '));
 
-    paso(3, 'Ver la COLA por dentro (dónde cayó el anuncio)');
-    let q = await az.getQueue(stationId).catch((e) => { L('  getQueue ERROR:', e.message); return []; });
-    if (!Array.isArray(q)) { L('  (respuesta cruda):', JSON.stringify(q).slice(0, 300)); q = []; }
-    L('  ítems en cola:', q.length);
-    q.forEach((it, i) => L(`   [${i}] id=${it.id ?? it.sh_id ?? '?'} · "${(tit(it) || it.title || '').slice(0, 40)}" · is_request=${it.is_request}`));
-
-    paso(4, 'Borrar de la cola los ítems que NO son el anuncio (ítem por ítem)');
-    let borrados = 0;
-    for (const it of q) {
-      const esAnuncio = (tit(it) || it.title || '').includes('anuncio-diag');
-      const qid = it.id ?? it.sh_id;
-      if (!esAnuncio && qid != null) {
-        try { await az.deleteQueueItem(stationId, qid); borrados++; }
-        catch (e) { L(`   no pude borrar id=${qid}:`, e.message); }
-      }
+    paso(3, 'Observar 75s (sin skip: debe entrar al terminar la canción actual)');
+    let cuando = -1;
+    const np0 = await az.getNowPlaying(stationId).catch(() => null);
+    L('  al empezar suena:', tit(np0?.now_playing).slice(0, 45), '· dur/elapsed:', np0?.now_playing?.duration, '/', np0?.now_playing?.elapsed);
+    for (let i = 1; i <= 25; i++) {
+      await sleep(3000);
+      const np = await az.getNowPlaying(stationId).catch(() => null);
+      const ahora = tit(np?.now_playing);
+      const sono = ahora.includes('anuncio-diag') || (np?.song_history || []).some((h) => tit(h).includes('anuncio-diag'));
+      if (i % 2 === 0 || sono) L(`  +${i * 3}s → "${ahora.slice(0, 40)}"${sono ? '   ✅ ¡SONÓ!' : ''}`);
+      if (sono) { cuando = i * 3; break; }
     }
-    L('  borrados de la cola:', borrados);
 
-    paso(5, 'skip + observar 40s');
-    await az.skipSong(stationId).catch((e) => L('  skip ERROR:', e.message));
-    const cuando = await observar(az, stationId, 'anuncio-diag', 40);
-
-    paso(6, 'Limpieza');
+    paso(4, 'Limpieza');
     await az.setFilePlaylists(stationId, media.id, []).catch(() => {});
     await az.deleteMedia(stationId, media.id).catch(() => {});
-    L(cuando >= 0 ? `\n  ✅ RESULTADO: el anuncio SONÓ a los ${cuando}s con request+borrar-cola.` : '\n  ❌ RESULTADO: no sonó en 40s.');
+    L(cuando >= 0 ? `\n  ✅ El JINGLE sonó a los ${cuando}s (al terminar la canción). Ese es el mecanismo.` : '\n  ❌ El jingle NO sonó en 75s.');
   } catch (e) {
     L('\n!! ERROR GENERAL:', e.message);
   }
