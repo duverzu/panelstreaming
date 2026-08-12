@@ -28,6 +28,7 @@ const BADGE = {
   general: { txt: 'Música', cls: 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400' },
   jingle: { txt: 'Jingle/Spot', cls: 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400' },
   programa: { txt: 'Programado', cls: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' },
+  sistema: { txt: 'Automática', cls: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' },
 };
 
 const VACIO = { nombre: '', tipo: 'general', orden: 'aleatorio', cada_canciones: 4, dias: [1, 2, 3, 4, 5], hora_inicio: '09:00', hora_fin: '11:00' };
@@ -124,12 +125,19 @@ export default function ClientePlaylists() {
 
   const nombreDias = (arr) => arr.map((n) => DIAS.find((d) => d.n === n)?.l).join(' ');
 
+  // Las playlists que crea el panel para el "da la hora" y las cuñas viven en la
+  // misma lista de la radio, pero no son del cliente: si las ve mezcladas con las
+  // suyas, no sabe cuáles puede tocar (y borrar una le apaga la función).
+  // Las internas (la de pruebas del panel) no se muestran en absoluto.
+  const mias = playlists.filter((p) => !p.sistema);
+  const automaticas = playlists.filter((p) => p.sistema && p.sistema_clase !== 'interna');
+
   return (
     <div className="space-y-6">
       <div className="card p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold flex items-center gap-2">
-            <IconPlaylist width={18} height={18} /> Mis playlists <span className="text-gray-400 font-normal">({playlists.length})</span>
+            <IconPlaylist width={18} height={18} /> Mis playlists <span className="text-gray-400 font-normal">({mias.length})</span>
           </h2>
           <button onClick={abrirCrear} className="btn-primary !py-2 !px-3 text-xs">
             <IconPlus width={15} height={15} /> Crear playlist
@@ -138,11 +146,11 @@ export default function ClientePlaylists() {
 
         {loading ? (
           <p className="py-8 text-center text-gray-400">Cargando…</p>
-        ) : playlists.length === 0 ? (
+        ) : mias.length === 0 ? (
           <p className="py-8 text-center text-gray-400">Aún no tienes playlists. ¡Crea la primera!</p>
         ) : (
           <div className="space-y-2.5">
-            {playlists.map((p) => {
+            {mias.map((p) => {
               const b = BADGE[p.tipo];
               const n = cancionesDe(p.id).length;
               const abierta = expandida === p.id;
@@ -214,6 +222,48 @@ export default function ClientePlaylists() {
           </div>
         )}
       </div>
+
+      {/* Playlists que mantiene el panel: se muestran para que el cliente sepa
+          qué está sonando en su radio, pero en gris y sin controles — no son
+          suyas y tocarlas romperia el "da la hora" o las cuñas. */}
+      {!loading && automaticas.length > 0 && (
+        <div className="card p-5 bg-gray-50/50 dark:bg-gray-950/20">
+          <div className="mb-1 flex items-center gap-2">
+            <h2 className="font-semibold text-gray-500 dark:text-gray-400 flex items-center gap-2">
+              ⚙️ Generadas por el panel <span className="font-normal text-gray-400">({automaticas.length})</span>
+            </h2>
+          </div>
+          <p className="text-xs text-gray-400 mb-4">
+            Estas las crea y actualiza el panel solo. No hace falta que las toques: se
+            configuran desde <strong>Da la hora</strong> y <strong>Cuñas</strong>.
+          </p>
+
+          <div className="space-y-2">
+            {automaticas.map((p) => (
+              <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
+                <div className="w-8 h-8 shrink-0 rounded-lg bg-gray-100 dark:bg-gray-800 grid place-items-center text-gray-400 text-sm">
+                  {p.sistema_clase === 'hora' ? '⏰' : '📣'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500 dark:text-gray-400 truncate">{p.nombre}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${BADGE.sistema.cls}`}>{BADGE.sistema.txt}</span>
+                    {!p.activa && <span className="text-[10px] text-amber-500">pausada</span>}
+                  </div>
+                  <div className="text-xs text-gray-400 truncate">
+                    {p.cuando || (p.sistema_clase === 'hora' ? 'Anuncio de la hora' : 'Cuña programada')}
+                  </div>
+                </div>
+                {p.sistema_donde && (
+                  <span className="text-[11px] text-gray-400 shrink-0 hidden sm:inline">
+                    se configura en «{p.sistema_donde}»
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Modal crear/editar */}
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? 'Editar playlist' : 'Crear playlist'}>

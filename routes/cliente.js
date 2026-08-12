@@ -18,6 +18,7 @@ const { generateToken } = require('../services/auth');
 const azuracast = require('../services/azuracast');
 const anuncioHora = require('../services/anuncioHora');
 const cunas = require('../services/cunas');
+const programacion = require('../services/programacion');
 const publico = require('../services/publico');
 const planModel = require('../models/planModel');
 const consumoClienteModel = require('../models/consumoClienteModel');
@@ -237,12 +238,21 @@ function horaAInt(str) { const [h, m] = String(str).split(':').map(Number); retu
 function intAHora(n) { return String(Math.floor(n / 100)).padStart(2, '0') + ':' + String(n % 100).padStart(2, '0'); }
 
 function mapPlaylist(p) {
+  // Las que crea y mantiene el panel (da la hora, cuñas) van marcadas: el
+  // cliente no debe confundirlas con las suyas ni poder romperlas.
+  const sist = programacion.clasificar(p.name);
+
   let tipo = 'general';
-  if (p.is_jingle || p.type === 'once_per_x_songs' || p.type === 'once_per_x_minutes') tipo = 'jingle';
+  if (p.type === 'once_per_hour') tipo = 'sistema';
+  else if (p.is_jingle || p.type === 'once_per_x_songs' || p.type === 'once_per_x_minutes') tipo = 'jingle';
   else if ((p.schedule_items || []).length) tipo = 'programa';
   const h = (p.schedule_items || [])[0];
   return {
     id: p.id, nombre: p.name, activa: p.is_enabled, tipo,
+    sistema: Boolean(sist),
+    sistema_clase: sist?.clase || null,     // 'hora' | 'cuna' | 'interna'
+    sistema_donde: sist?.donde || null,     // sección del panel donde se configura
+    cuando: programacion.cuandoSuena(p),    // "Suena a las 08:00, 12:00"
     orden: p.order === 'sequential' ? 'orden' : 'aleatorio',
     cada_canciones: p.play_per_songs || 4,
     dias: h?.days || [1, 2, 3, 4, 5],
@@ -286,10 +296,31 @@ router.post('/playlists', requireCliente, wrap(async (req, res) => {
   res.status(201).json({ message: 'Playlist creada ✅', playlist: { id: pl.id, nombre, tipo } });
 }));
 
+/**
+ * Las playlists del panel (da la hora, cuñas) son de SOLO LECTURA aquí.
+ * No basta con esconder los botones: el panel las reescribe entera cada vez que
+ * se guarda su configuración, así que un cambio manual se perdería sin aviso, y
+ * un borrado deja al cliente sin "da la hora" o sin cuñas sin que se entere.
+ * Se toca donde corresponde: en su propia sección del panel.
+ */
+async function bloquearSiEsDelSistema(az, stationId, plId, res) {
+  const pls = (await az.getPlaylists(stationId)) || [];
+  const pl = pls.find((p) => String(p.id) === String(plId));
+  const sist = pl && programacion.clasificar(pl.name);
+  if (!sist) return false;
+  res.status(403).json({
+    error: sist.donde
+      ? `«${pl.name}» la gestiona el panel automáticamente. Ajústala desde la sección "${sist.donde}".`
+      : `«${pl.name}» es una playlist interna del panel y no debe modificarse.`,
+  });
+  return true;
+}
+
 router.put('/playlists/:id', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
   const az = await azDe(cliente);
+  if (await bloquearSiEsDelSistema(az, cliente.azuracast_station_id, req.params.id, res)) return;
   await az.updatePlaylist(cliente.azuracast_station_id, req.params.id, payloadPlaylist(req.body || {}));
   res.json({ message: 'Playlist actualizada ✅' });
 }));
@@ -298,6 +329,7 @@ router.delete('/playlists/:id', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Sin estación' });
   const az = await azDe(cliente);
+  if (await bloquearSiEsDelSistema(az, cliente.azuracast_station_id, req.params.id, res)) return;
   await az.deletePlaylist(cliente.azuracast_station_id, req.params.id);
   res.json({ message: 'Playlist eliminada ✅' });
 }));

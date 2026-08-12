@@ -191,8 +191,41 @@ async function limpiarPruebas(az, stationId) {
   if (p) await ponerUnicoArchivo(az, stationId, p.id, null);
 }
 
+// ---- Identificación de las playlists que gestiona el panel --------
+// El cliente ve sus playlists y las nuestras en la misma lista de AzuraCast.
+// Necesita distinguirlas: son de solo lectura (las reescribe el panel cada vez
+// que se guarda la config) y borrar una rompe su "da la hora" o sus cuñas.
+const PATRONES = [
+  { rx: /^⏰ Hora :(\d{2})$/, clase: 'hora', donde: 'Da la hora' },
+  { rx: /^📣 .+ #\d+(?: :\d{2})?$/, clase: 'cuna', donde: 'Cuñas' },
+  { rx: /^🔧 Prueba \(panel\)$/, clase: 'interna', donde: null },
+];
+
+/** Devuelve {clase, donde} si la playlist la gestiona el panel, o null. */
+function clasificar(nombre) {
+  for (const p of PATRONES) if (p.rx.test(String(nombre || ''))) return { clase: p.clase, donde: p.donde };
+  return null;
+}
+
+const esDelSistema = (nombre) => clasificar(nombre) !== null;
+
+/** Texto legible de CUÁNDO suena, para pintarlo en el panel del cliente. */
+function cuandoSuena(p) {
+  const horas = (p.schedule_items || [])
+    .map((s) => Math.floor(s.start_time / 100))
+    .sort((a, b) => a - b);
+  const mm = String(p.play_per_hour_minute ?? 0).padStart(2, '0');
+
+  if (p.type !== 'once_per_hour') return null;
+  if (!horas.length) return `Cada hora, en el minuto :${mm}`;
+  return 'Suena a las ' + horas.map((h) => `${String(h).padStart(2, '0')}:${mm}`).join(', ');
+}
+
 module.exports = {
   aHHMM,
+  clasificar,
+  esDelSistema,
+  cuandoSuena,
   playlistSincronizada,
   borrarPlaylistPorNombre,
   ponerUnicoArchivo,
