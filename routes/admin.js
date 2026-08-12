@@ -620,7 +620,13 @@ router.get('/consumo-clientes', requireAdmin, wrap(async (req, res) => {
       const [cuentas, compat] = await Promise.all([cli.cuentas(), cli.compatClientes()]);
       (cuentas || []).forEach((cu) => { espacioPorShort[cu.user] = Number(cu.espacio_bytes || 0); });
       (compat || []).forEach((cu) => {
-        if (espacioPorShort[cu.user] == null) espacioPorShort[cu.user] = Number(cu.espacio_bytes || 0);
+        // Solo si el campo VIENE. Un nodo con el agente sin actualizar no lo
+        // manda, y `Number(undefined || 0)` daría 0: el panel diría "0 B" como
+        // si lo hubiera medido. Mejor seguir diciendo "sin dato" hasta que el
+        // agente se reinicie y empiece a reportarlo de verdad.
+        if (espacioPorShort[cu.user] == null && cu.espacio_bytes != null) {
+          espacioPorShort[cu.user] = Number(cu.espacio_bytes);
+        }
       });
     } catch (_) { /* nodo caído */ }
   }));
