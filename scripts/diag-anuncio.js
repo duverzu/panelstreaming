@@ -1,9 +1,9 @@
 /**
- * scripts/diag-anuncio.js — prueba FINAL del request (visible cuando suena).
+ * scripts/diag-anuncio.js — el anuncio como CANCIÓN de rotación con peso ALTO.
  * Uso:  node scripts/diag-anuncio.js <short_name-o-id>
  *
- * Activa pedidos, sube/asigna el anuncio (requestable), lo pide, borra de la cola
- * lo que AÚN no fue enviado a Liquidsoap, salta, y observa 2.5 min si suena.
+ * Playlist normal (no jingle) peso alto + vaciar la cola no-enviada + skip →
+ * la rotación debe elegir el anuncio enseguida (y SÍ es visible al sonar).
  */
 require('dotenv').config();
 const clienteModel = require('../models/clienteModel');
@@ -38,9 +38,8 @@ async function buscarCliente(short) {
   const plId = pl?.id || (await az.createPlaylist(stationId, { name: '📣 Anuncios', type: 'default', source: 'songs', is_enabled: true, weight: 1 })).id;
 
   try {
-    paso(1, 'Pedidos ON + playlist requestable (no jingle) + subir/asignar');
-    for (let i = 0; i < 4; i++) { try { await az.updateStation(stationId, { enable_requests: true, request_delay: 0, request_threshold_seconds: 0 }); break; } catch (e) { await sleep(1500); } }
-    await az.updatePlaylist(stationId, plId, { is_jingle: false, is_enabled: true, include_in_requests: true, include_in_on_demand: true }).catch((e) => L('  updatePlaylist:', e.message));
+    paso(1, 'Playlist NORMAL (no jingle) peso ALTO; subir/asignar anuncio');
+    await az.updatePlaylist(stationId, plId, { is_jingle: false, is_enabled: true, include_in_requests: false, include_in_on_demand: false, weight: 25 });
     const files = (await az.listMedia(stationId)) || [];
     for (const f of files) if (/anuncio-diag/.test(f.path || '')) await az.deleteMedia(stationId, f.id).catch(() => {});
     const texto = textoHora(new Date(), { saludo: 'Prueba', zona: 'America/Bogota' });
@@ -48,37 +47,38 @@ async function buscarCliente(short) {
     const nombre = `anuncio-diag-${cliente.id}-${Date.now()}.mp3`;
     const media = await az.uploadMedia(stationId, nombre, mp3.toString('base64'));
     await az.setFilePlaylists(stationId, media.id, [plId]);
-    L('  ok:', nombre, '· media dur:', media.length);
+    L('  ok:', nombre);
     await sleep(9000);
 
-    paso(2, 'PEDIR');
-    try { const r = await az.request(stationId, media.unique_id || media.id); L('  request:', r?.message || 'ok'); }
-    catch (e) { L('  request ERROR:', e.message); }
-
-    paso(3, 'Cola: borrar lo que NO fue enviado a Liquidsoap (sent_to_autodj=false)');
+    paso(2, 'Vaciar la cola no-enviada (para forzar re-armado con el anuncio)');
     const q = await az.getQueue(stationId).catch(() => []);
     for (const it of (Array.isArray(q) ? q : [])) {
       const qid = qidDe(it);
-      L(`   "${(tit(it) || '').slice(0, 30)}" sent=${it.sent_to_autodj} is_request=${it.is_request} qid=${qid}`);
+      L(`   "${(tit(it) || '').slice(0, 30)}" sent=${it.sent_to_autodj} qid=${qid}`);
       if (qid && it.sent_to_autodj === false) await az.deleteQueueItem(stationId, qid).catch(() => {});
     }
 
-    paso(4, 'skip + observar 150s (el request ES visible al sonar)');
+    paso(3, 'Ver la cola nueva (¿entró el anuncio?)');
+    await sleep(2500);
+    const q2 = await az.getQueue(stationId).catch(() => []);
+    for (const it of (Array.isArray(q2) ? q2 : [])) L(`   → "${(tit(it) || '').slice(0, 34)}"${(tit(it) || '').includes('anuncio-diag') ? '  ⬅ ANUNCIO EN COLA' : ''}`);
+
+    paso(4, 'skip + observar 90s (visible al sonar)');
     await az.skipSong(stationId).catch(() => {});
     let cuando = -1;
-    for (let i = 1; i <= 50; i++) {
+    for (let i = 1; i <= 30; i++) {
       await sleep(3000);
       const np = await az.getNowPlaying(stationId).catch(() => null);
       const ahora = tit(np?.now_playing);
       const sono = ahora.includes('anuncio-diag') || (np?.song_history || []).some((h) => tit(h).includes('anuncio-diag'));
-      if (i % 4 === 0 || sono) L(`  +${i * 3}s → "${ahora.slice(0, 38)}"${sono ? '   ✅ ¡SONÓ!' : ''}`);
+      if (i % 3 === 0 || sono) L(`  +${i * 3}s → "${ahora.slice(0, 38)}"${sono ? '   ✅ ¡SONÓ!' : ''}`);
       if (sono) { cuando = i * 3; break; }
     }
 
     paso(5, 'Limpieza');
     await az.setFilePlaylists(stationId, media.id, []).catch(() => {});
     await az.deleteMedia(stationId, media.id).catch(() => {});
-    L(cuando >= 0 ? `\n  ✅ El request SONÓ a los ${cuando}s. Mecanismo: request (+ vaciar cola).` : '\n  ❌ El request NO sonó en 150s. Conclusión: inyección por API no viable aquí.');
+    L(cuando >= 0 ? `\n  ✅ SONÓ a los ${cuando}s (rotación peso alto + vaciar cola). ¡Ese es!` : '\n  ❌ No sonó en 90s.');
   } catch (e) {
     L('\n!! ERROR GENERAL:', e.message);
   }
