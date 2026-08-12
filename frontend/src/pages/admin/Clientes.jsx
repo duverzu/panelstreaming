@@ -364,7 +364,11 @@ export default function AdminClientes() {
                         <span className="text-sm font-medium tabular-nums">
                           {(esV ? viewers[c.id] : oyentes[c.id]) ?? 0}
                         </span>
-                        <div className="text-[10px] text-gray-400">{esV ? 'viewers' : 'oyentes'}</div>
+                        <div className="text-[10px] text-gray-400">
+                          {esV
+                            ? ((viewers[c.id] ?? 0) === 1 ? 'viewer' : 'viewers')
+                            : ((oyentes[c.id] ?? 0) === 1 ? 'oyente' : 'oyentes')}
+                        </div>
                       </td>
                       <td className="py-3 px-3 text-right">
                         <span className="text-sm tabular-nums">{peso(consumo[c.id]?.transferencia_bytes)}</span>
