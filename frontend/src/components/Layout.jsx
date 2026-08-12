@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth';
+import { useAmbito } from '../ambito';
 import Sidebar from './Sidebar';
 import TopHeader from './TopHeader';
 import { IconEnter } from '../icons';
@@ -32,13 +33,34 @@ const TITULOS = {
   '/cliente/configuracion': { title: 'Configuración', subtitle: 'Tu radio y tu cuenta' },
 };
 
+/** Subtítulos que cambian con el modo: decir "radios" mirando canales confunde. */
+const SUBTITULO_POR_AMBITO = {
+  '/admin/clientes': {
+    todo: 'Radios y canales de todos tus clientes',
+    audio: 'Gestiona radios: iniciar, parar, suspender, borrar',
+    video: 'Gestiona canales: iniciar, parar, suspender, borrar',
+  },
+  '/admin/planes': {
+    todo: 'Plantillas de radio y de canal, con sus límites',
+    audio: 'Plantillas de radio y sus límites',
+    video: 'Plantillas de canal y sus límites',
+  },
+  '/admin/servidores': {
+    todo: 'Todos los nodos y su capacidad',
+    audio: 'Nodos AzuraCast y su capacidad',
+    video: 'Nodos de video y su capacidad',
+  },
+};
+
 export default function Layout() {
   const { role, user, impersonating, stopImpersonating } = useAuth();
   const { pathname } = useLocation();
+  const { ambito } = useAmbito();
 
   const porRuta = TITULOS[pathname];
   const title = porRuta?.title || (role === 'admin' ? 'Dashboard' : 'Mi Radio');
   const subtitle =
+    (role === 'admin' && SUBTITULO_POR_AMBITO[pathname]?.[ambito]) ||
     porRuta?.subtitle ||
     (role === 'admin' ? 'Resumen general del negocio' : user?.nombre_empresa || 'Panel de tu estación');
 
