@@ -56,11 +56,14 @@ async function migrar(cliente) {
   const files = (await az.listMedia(st)) || [];
   const idsViejas = new Set(playlists.filter((p) => PLAYLISTS_VIEJAS.includes(p.name)).map((p) => p.id));
 
-  // --- 2. Sacar cuñas y anuncios de las playlists de música del cliente ---
-  const rxNuestros = /(^|\/)(cuna-\d+-|anuncio-hora-|panel-hora-)/;
+  // --- 2. Sacar cuñas y anuncios VIEJOS de las playlists de música del cliente ---
+  // Ojo: NO se tocan los `panel-hora-*`. Esos son los del esquema nuevo y ya
+  // están donde deben (el planificador los coloca); sacarlos aquí desharía el
+  // trabajo recién hecho y dejaría la franja muda hasta el siguiente tick.
+  const rxViejos = /(^|\/)(cuna-\d+-|anuncio-hora-)/;
   for (const f of files) {
     const path = f.path || '';
-    if (!rxNuestros.test(path)) continue;
+    if (!rxViejos.test(path)) continue;
     const actuales = (f.playlists || []).map((p) => p.id);
     // Se quedan fuera de TODA playlist: las nuevas se las asigna el paso 4/5.
     if (actuales.length === 0) continue;
