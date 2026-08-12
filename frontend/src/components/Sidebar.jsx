@@ -124,7 +124,7 @@ export default function Sidebar() {
       <div className="h-16 flex items-center gap-2 px-6 border-b border-gray-200 dark:border-gray-800">
         <div className="w-8 h-8 rounded-lg bg-brand-600 grid place-items-center text-white text-lg">{esVideo ? '🎬' : '🎙️'}</div>
         <div>
-          <div className="font-bold leading-tight">{esVideo ? 'Panel Video' : 'Panel Radio'}</div>
+          <div className="font-bold leading-tight">Asi Streaming</div>
           <div className="text-[11px] text-gray-400 leading-tight">
             {role === 'admin' ? 'Super Admin' : role === 'reseller' ? 'Revendedor' : 'Portal Cliente'}
           </div>

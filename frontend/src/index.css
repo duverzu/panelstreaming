@@ -35,13 +35,6 @@
 }
 
 /* ===== Login: fondo con movimiento ===== */
-/* Deriva lentísima del fondo (Ken Burns). 40s y muy poco recorrido: se percibe
-   como que la imagen "respira", no como una animación. */
-@keyframes login-deriva {
-  0%   { transform: scale(1.12) translate3d(0, 0, 0); }
-  50%  { transform: scale(1.18) translate3d(-1.5%, -1%, 0); }
-  100% { transform: scale(1.12) translate3d(0, 0, 0); }
-}
 /* Halos verdes que flotan por detrás de la tarjeta. */
 @keyframes login-halo {
   0%   { transform: translate3d(0, 0, 0) scale(1); }
@@ -62,14 +55,12 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.login-deriva { animation: login-deriva 40s ease-in-out infinite; }
 .login-halo   { animation: login-halo 18s ease-in-out infinite; }
 .login-entra  { animation: login-entra .55s cubic-bezier(.22,1,.36,1) both; }
 
 /* Respeta a quien pide menos movimiento: se queda todo quieto, sin romperse. */
 @media (prefers-reduced-motion: reduce) {
-  .login-deriva, .login-halo, .login-entra, .login-nube { animation: none; }
-  .login-deriva { transform: scale(1.12); }
+  .login-halo, .login-entra, .login-nube { animation: none; }
   .login-nube { transform: translate3d(30vw, 0, 0); }   /* quietas, pero visibles */
 }
 

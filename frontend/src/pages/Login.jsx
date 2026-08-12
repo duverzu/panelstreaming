@@ -48,10 +48,12 @@ export default function Login() {
         <img
           src="/login-bg.jpg" alt="" aria-hidden="true"
           onLoad={() => setFondoListo(true)}
-          className={`login-deriva w-full h-full object-cover transition-opacity duration-1000 ${fondoListo ? 'opacity-100' : 'opacity-0'}`}
-          /* Suficiente para que no compita con el formulario, pero no tanto como
-             para perder la foto: a 14px quedaba un puré verde irreconocible. */
-          style={{ filter: 'blur(5px) saturate(1.05)' }}
+          className={`w-full h-full object-cover transition-opacity duration-1000 ${fondoListo ? 'opacity-100' : 'opacity-0'}`}
+          /* Foto QUIETA: el movimiento lo ponen solo las nubes.
+             El desenfoque (5px) deja ver la ciudad sin competir con el
+             formulario, y el `scale` compensa que el blur difumina los bordes
+             y dejaría una franja transparente alrededor. */
+          style={{ filter: 'blur(5px) saturate(1.05)', transform: 'scale(1.04)' }}
         />
       </div>
 
@@ -167,35 +169,64 @@ export default function Login() {
 
 /* ---- Nubes ----------------------------------------------------------
  * Se dibujan con SVG en vez de una imagen: pesan cero, escalan sin pixelarse
- * y se pueden teñir. La opacidad va en el <g> y no en cada elipse, porque si
- * no se verían las costuras donde se solapan.
- * Cada nube lleva su altura, tamaño, opacidad y duración; los retardos son
- * NEGATIVOS para que al cargar la página ya estén repartidas por el cielo en
- * vez de entrar todas juntas por la izquierda.
+ * y se pueden teñir.
+ *
+ * Para que no parezcan pegatinas de dibujos animados hay tres trucos:
+ *   1. El contorno se deforma con `feTurbulence` + `feDisplacementMap`, que le
+ *      come el borde de forma irregular. Sin esto se notan los óvalos.
+ *   2. Se rellenan con un degradado vertical (blanco arriba, azul grisáceo
+ *      abajo): las nubes reales reciben la luz desde el cielo, no son planas.
+ *   3. Cada una lleva su propia `semilla` de ruido, así no hay dos iguales.
+ *
+ * La opacidad va en el <g> y no en cada óvalo, porque si no se ven las
+ * costuras donde se solapan. Los retardos son NEGATIVOS para que al cargar la
+ * página ya estén repartidas por el cielo en vez de entrar todas juntas.
  */
 const NUBES = [
-  { top: '8%',  ancho: 520, opacidad: 0.85, seg: 150, retardo: -20, desenfoque: 5 },
-  { top: '18%', ancho: 300, opacidad: 0.55, seg: 105, retardo: -70, desenfoque: 4 },
-  { top: '31%', ancho: 680, opacidad: 0.5,  seg: 210, retardo: -130, desenfoque: 9 },
-  { top: '5%',  ancho: 220, opacidad: 0.45, seg: 85,  retardo: -45, desenfoque: 3 },
-  { top: '43%', ancho: 400, opacidad: 0.3,  seg: 175, retardo: -95, desenfoque: 7 },
+  { top: '7%',  ancho: 560, opacidad: 0.80, seg: 170, retardo: -25,  desenfoque: 3, semilla: 7 },
+  { top: '19%', ancho: 320, opacidad: 0.50, seg: 115, retardo: -75,  desenfoque: 2, semilla: 21 },
+  { top: '32%', ancho: 700, opacidad: 0.42, seg: 230, retardo: -140, desenfoque: 6, semilla: 44 },
+  { top: '4%',  ancho: 230, opacidad: 0.42, seg: 95,  retardo: -50,  desenfoque: 2, semilla: 58 },
+  { top: '44%', ancho: 430, opacidad: 0.26, seg: 190, retardo: -100, desenfoque: 5, semilla: 91 },
 ];
 
-function Nube({ top, ancho, opacidad, seg, retardo, desenfoque }) {
+function Nube({ top, ancho, opacidad, seg, retardo, desenfoque, semilla }) {
+  const idF = `nubeF${semilla}`;
+  const idG = `nubeG${semilla}`;
   return (
     <svg
-      viewBox="0 0 200 90" aria-hidden="true"
-      className="login-nube absolute left-0"
+      viewBox="0 0 220 110" aria-hidden="true"
+      className="login-nube absolute left-0 overflow-visible"
       style={{
         top, width: ancho, filter: `blur(${desenfoque}px)`,
         animationDuration: `${seg}s`, animationDelay: `${retardo}s`,
       }}
     >
-      <g fill="#fff" opacity={opacidad}>
-        <ellipse cx="62" cy="56" rx="42" ry="25" />
-        <ellipse cx="104" cy="42" rx="38" ry="31" />
-        <ellipse cx="146" cy="57" rx="38" ry="23" />
-        <rect x="30" y="54" width="142" height="26" rx="13" />
+      <defs>
+        {/* El área del filtro se agranda: el desplazamiento saca píxeles fuera
+            del viewBox y, sin esto, el borde saldría recortado en recto. */}
+        <filter id={idF} x="-25%" y="-40%" width="150%" height="190%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="4" seed={semilla} result="ruido" />
+          <feDisplacementMap in="SourceGraphic" in2="ruido" scale="22" xChannelSelector="R" yChannelSelector="G" />
+          <feGaussianBlur stdDeviation="1.6" />
+        </filter>
+        <linearGradient id={idG} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="62%" stopColor="#f2f7ff" />
+          <stop offset="100%" stopColor="#c3d4e8" />
+        </linearGradient>
+      </defs>
+
+      {/* Silueta con lóbulos de tamaños dispares: los montículos regulares son
+          justo lo que delata a una nube dibujada. */}
+      <g fill={`url(#${idG})`} opacity={opacidad} filter={`url(#${idF})`}>
+        <ellipse cx="58" cy="70" rx="40" ry="22" />
+        <ellipse cx="92" cy="52" rx="34" ry="28" />
+        <ellipse cx="128" cy="44" rx="28" ry="24" />
+        <ellipse cx="156" cy="62" rx="33" ry="21" />
+        <ellipse cx="182" cy="72" rx="24" ry="15" />
+        <ellipse cx="40" cy="76" rx="22" ry="13" />
+        <rect x="34" y="66" width="158" height="24" rx="12" />
       </g>
     </svg>
   );
