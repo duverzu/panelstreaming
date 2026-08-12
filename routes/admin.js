@@ -563,6 +563,90 @@ router.get('/video/viewers', requireAdmin, wrap(async (req, res) => {
   res.json({ total, canales, nodos_consultados: porNodo.size });
 }));
 
+/**
+ * GET /admin/consumo-clientes — disco y transferencia del mes, por cliente.
+ *
+ * Es lo caro del listado, y por eso va en su propio endpoint y con caché:
+ *   • El disco de AUDIO se pide estación por estación (AzuraCast solo da el uso
+ *     en el detalle de cada storage location; el listado no lo trae), así que
+ *     son tantas llamadas como radios.
+ *   • El de VIDEO sale de una sola llamada por nodo: `cuentas()` devuelve todas
+ *     con su `espacio_bytes`.
+ *   • La transferencia sale de UNA consulta agrupada, no de 33.
+ *
+ * La caché evita machacar AzuraCast: el listado se refresca solo y el dato de
+ * disco no cambia de un minuto a otro.
+ */
+const cacheConsumo = { hasta: 0, datos: null };
+
+router.get('/consumo-clientes', requireAdmin, wrap(async (req, res) => {
+  if (cacheConsumo.datos && Date.now() < cacheConsumo.hasta) return res.json(cacheConsumo.datos);
+
+  const clientes = await clienteModel.findAllWithEmail();
+  const transferencia = await consumoClienteModel.totalMesPorCliente();
+  const porCliente = {};
+
+  // ── Disco de las radios: una consulta por estación, en paralelo ──
+  const audio = clientes.filter((c) => (c.tipo || 'audio') !== 'video' && c.azuracast_station_id);
+  await Promise.all(audio.map(async (c) => {
+    try {
+      const az = await azuracast.paraServidorId(c.servidor_id);
+      const st = await az.getStationAdmin(c.azuracast_station_id);
+      const locId = typeof st?.media_storage_location === 'object'
+        ? st.media_storage_location.id
+        : st?.media_storage_location;
+      if (!locId) return;
+      const loc = await az.getStorageLocation(locId);
+      porCliente[c.id] = {
+        disco_bytes: Number(loc?.storageUsedBytes ?? loc?.storage_used_bytes ?? 0),
+        disco_total_bytes: Number(loc?.storageQuotaBytes ?? loc?.storage_quota_bytes ?? 0),
+      };
+    } catch (_) { /* estación caída: se queda sin dato, no rompe el listado */ }
+  }));
+
+  // ── Disco de los canales: UNA llamada por nodo de video ──
+  const nodosVideo = [...new Set(
+    clientes.filter((c) => c.tipo === 'video' && c.servidor_id).map((c) => c.servidor_id)
+  )];
+  const espacioPorShort = {};
+  await Promise.all(nodosVideo.map(async (sid) => {
+    try {
+      const s = await servidorModel.findById(sid);
+      if (!s || s.tipo !== 'video') return;
+      const cuentas = await videoNode.crearCliente(s.url, s.api_key).cuentas();
+      (cuentas || []).forEach((cu) => { espacioPorShort[cu.user] = Number(cu.espacio_bytes || 0); });
+    } catch (_) { /* nodo caído */ }
+  }));
+  clientes.filter((c) => c.tipo === 'video').forEach((c) => {
+    if (c.short_name && espacioPorShort[c.short_name] != null) {
+      porCliente[c.id] = { disco_bytes: espacioPorShort[c.short_name], disco_total_bytes: 0 };
+    }
+  });
+
+  // ── Cuota del plan como tope cuando el motor no la reporta ──
+  const planes = await planModel.findAll();
+  const porNombre = {};
+  planes.forEach((p) => { porNombre[p.nombre] = p; });
+
+  const datos = {
+    clientes: clientes.map((c) => {
+      const d = porCliente[c.id] || {};
+      const plan = porNombre[c.plan];
+      const tope = d.disco_total_bytes || (plan?.espacio_mb ? plan.espacio_mb * 1048576 : 0);
+      return {
+        cliente_id: c.id,
+        disco_bytes: d.disco_bytes ?? null,
+        disco_total_bytes: tope || null,
+        transferencia_bytes: transferencia[c.id] || 0,
+      };
+    }),
+  };
+
+  cacheConsumo.datos = datos;
+  cacheConsumo.hasta = Date.now() + 60000;   // 1 minuto
+  res.json(datos);
+}));
+
 router.get('/estadisticas/cliente/:id', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });

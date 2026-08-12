@@ -35,6 +35,38 @@ const ESTADO_BADGE = {
   error: { txt: 'Error', cls: 'bg-red-50 text-red-600 dark:bg-red-500/10', dot: 'bg-red-500' },
 };
 
+/** Bytes a la unidad que se lee mejor. "—" si aún no hay dato. */
+function peso(bytes) {
+  if (bytes == null) return '—';
+  const n = Number(bytes) || 0;
+  if (n >= 1073741824) return (n / 1073741824).toFixed(n >= 10737418240 ? 0 : 1) + ' GB';
+  if (n >= 1048576) return Math.round(n / 1048576) + ' MB';
+  if (n >= 1024) return Math.round(n / 1024) + ' KB';
+  return n + ' B';
+}
+
+/** Disco usado con su barra. El color avisa antes de que se llene: una radio
+ *  sin espacio deja de aceptar música y el cliente no entiende por qué. */
+function Disco({ usado, total }) {
+  if (usado == null) return <span className="text-gray-300 dark:text-gray-600">—</span>;
+  const pct = total ? Math.min(100, Math.round((usado / total) * 100)) : null;
+  const color = pct == null ? 'bg-gray-300 dark:bg-gray-700'
+    : pct >= 90 ? 'bg-red-500' : pct >= 75 ? 'bg-amber-500' : 'bg-brand-500';
+  return (
+    <div className="min-w-[92px]">
+      <div className="text-xs tabular-nums">
+        {peso(usado)}
+        {total ? <span className="text-gray-400"> / {peso(total)}</span> : null}
+      </div>
+      {pct != null && (
+        <div className="h-1 mt-1 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+          <div className={`h-full rounded-full ${color}`} style={{ width: pct + '%' }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminClientes() {
   const { impersonate } = useAuth();
   const navigate = useNavigate();
@@ -64,6 +96,9 @@ export default function AdminClientes() {
   const [datos, setDatos] = useState(null);           // datos traídos del backend
   const [nuevaPass, setNuevaPass] = useState(null);   // clave recién generada (se ve una vez)
   const [generando, setGenerando] = useState(false);
+  const [consumo, setConsumo] = useState({});   // cliente_id -> disco y transferencia
+  const [oyentes, setOyentes] = useState({});   // cliente_id -> oyentes (audio)
+  const [viewers, setViewers] = useState({});   // cliente_id -> viewers (video)
 
   async function cargar() {
     setLoading(true);
@@ -74,6 +109,18 @@ export default function AdminClientes() {
       setServidores(sv.servidores || []);
       setForm((f) => ({ ...f, plan_id: f.plan_id || p.planes[0]?.id || '' }));
       apiFetch('/admin/clientes/estados').then((e) => setEstados(e.estados)).catch(() => {});
+      // Consumo, oyentes y viewers van aparte y sin bloquear: la tabla se pinta
+      // ya y estas columnas se rellenan cuando llegan (el disco tarda, hay que
+      // preguntarle a cada estación).
+      apiFetch('/admin/consumo-clientes')
+        .then((d) => setConsumo(Object.fromEntries((d.clientes || []).map((x) => [x.cliente_id, x]))))
+        .catch(() => {});
+      apiFetch('/admin/estadisticas')
+        .then((d) => setOyentes(Object.fromEntries((d.ranking || []).map((r) => [r.cliente_id, r.oyentes]))))
+        .catch(() => {});
+      apiFetch('/admin/video/viewers')
+        .then((d) => setViewers(Object.fromEntries((d.canales || []).map((c) => [c.cliente_id, c.viewers]))))
+        .catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -257,15 +304,18 @@ export default function AdminClientes() {
               <tr className="text-left text-xs uppercase tracking-wide text-gray-400 border-b border-gray-100 dark:border-gray-800">
                 <th className="py-2.5 pr-3 font-medium">Empresa</th>
                 <th className="py-2.5 px-3 font-medium">Plan</th>
+                <th className="py-2.5 px-3 font-medium">Disco</th>
+                <th className="py-2.5 px-3 font-medium text-right">Audiencia</th>
+                <th className="py-2.5 px-3 font-medium text-right">Transferencia</th>
                 <th className="py-2.5 px-3 font-medium">Estado</th>
                 <th className="py-2.5 pl-3 font-medium text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="4" className="py-8 text-center text-gray-400">Cargando…</td></tr>
+                <tr><td colSpan="7" className="py-8 text-center text-gray-400">Cargando…</td></tr>
               ) : lista.length === 0 ? (
-                <tr><td colSpan="4" className="py-8 text-center text-gray-400">Sin clientes de {esVideo ? 'video' : 'audio'} todavía</td></tr>
+                <tr><td colSpan="7" className="py-8 text-center text-gray-400">Sin clientes de {esVideo ? 'video' : 'audio'} todavía</td></tr>
               ) : (
                 lista.map((c) => {
                   const est = ESTADO_BADGE[estados[c.id]] || ESTADO_BADGE.offline;
@@ -297,6 +347,19 @@ export default function AdminClientes() {
                         </div>
                       </td>
                       <td className="py-3 px-3 capitalize">{c.plan}</td>
+                      <td className="py-3 px-3">
+                        <Disco usado={consumo[c.id]?.disco_bytes} total={consumo[c.id]?.disco_total_bytes} />
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <span className="text-sm font-medium tabular-nums">
+                          {(esV ? viewers[c.id] : oyentes[c.id]) ?? 0}
+                        </span>
+                        <div className="text-[10px] text-gray-400">{esV ? 'viewers' : 'oyentes'}</div>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <span className="text-sm tabular-nums">{peso(consumo[c.id]?.transferencia_bytes)}</span>
+                        <div className="text-[10px] text-gray-400">este mes</div>
+                      </td>
                       <td className="py-3 px-3">
                         <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full ${est.cls}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${est.dot}`} /> {est.txt}

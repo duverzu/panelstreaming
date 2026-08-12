@@ -79,6 +79,20 @@ async function totalMesCliente(clienteId) {
   return Number(rows[0].bytes);
 }
 
+/** Consumo del mes de TODOS los clientes, en una sola consulta.
+ *  Para el listado del admin: pedir cliente por cliente serían 33 consultas. */
+async function totalMesPorCliente() {
+  const { rows } = await query(
+    `SELECT cliente_id, COALESCE(SUM(bytes), 0)::bigint AS bytes
+       FROM consumo_cliente
+      WHERE fecha >= date_trunc('month', CURRENT_DATE)
+      GROUP BY cliente_id`
+  );
+  const out = {};
+  rows.forEach((r) => { out[r.cliente_id] = Number(r.bytes); });
+  return out;
+}
+
 /** Serie diaria de UNA radio (para el panel del cliente / detalle). */
 async function serieCliente(clienteId, dias = 30) {
   const { rows } = await query(
@@ -93,5 +107,5 @@ async function serieCliente(clienteId, dias = 30) {
 
 module.exports = {
   registrar, serieReseller, totalMesReseller, totalMesPorReseller,
-  totalMesPorClienteDeReseller, serieCliente, totalMesCliente,
+  totalMesPorClienteDeReseller, serieCliente, totalMesCliente, totalMesPorCliente,
 };
