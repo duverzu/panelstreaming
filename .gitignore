@@ -20,6 +20,7 @@ tmp/
 Thumbs.db
 
 # Imágenes originales sin optimizar (la versión servida vive en frontend/public)
+/*.png
 /3d-rendering-laptop-nature.jpg
 
 # Editor

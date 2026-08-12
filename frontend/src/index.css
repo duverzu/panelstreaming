@@ -49,6 +49,13 @@
   66%  { transform: translate3d(-3%, 3%, 0) scale(0.94); }
   100% { transform: translate3d(0, 0, 0) scale(1); }
 }
+/* Nubes cruzando el cielo. Salen y entran fuera de pantalla, así que no se ve
+   ni el nacimiento ni la desaparición. Cada una lleva su propia duración. */
+@keyframes login-nube {
+  from { transform: translate3d(-40vw, 0, 0); }
+  to   { transform: translate3d(135vw, 0, 0); }
+}
+.login-nube { animation: login-nube linear infinite; will-change: transform; }
 /* Entrada de la tarjeta y de cada campo, en cascada. */
 @keyframes login-entra {
   from { opacity: 0; transform: translateY(14px); }
@@ -61,8 +68,9 @@
 
 /* Respeta a quien pide menos movimiento: se queda todo quieto, sin romperse. */
 @media (prefers-reduced-motion: reduce) {
-  .login-deriva, .login-halo, .login-entra { animation: none; }
+  .login-deriva, .login-halo, .login-entra, .login-nube { animation: none; }
   .login-deriva { transform: scale(1.12); }
+  .login-nube { transform: translate3d(30vw, 0, 0); }   /* quietas, pero visibles */
 }
 
 /* ===== Documentación (markdown renderizado) ===== */
