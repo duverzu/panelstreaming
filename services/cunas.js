@@ -32,12 +32,20 @@ const prog = require('./programacion');
 const { generarVoz, verConfig } = require('./anuncioHora');
 const { DEFAULT_TZ } = require('./zonaHoraria');
 
-/** Nombre estable de la playlist de una cuña. Lleva el id para que renombrar
- *  la cuña no cree una playlist nueva y deje huérfana la anterior. */
-const nombrePlaylist = (cuna) => `📣 ${cuna.nombre || 'Cuña'} #${cuna.id}`;
+/**
+ * Nombre estable de la playlist de una cuña, POR MINUTO. Lleva el id para que
+ * renombrar la cuña no cree una playlist nueva y deje huérfana la anterior.
+ *
+ * ¿Por qué una por minuto? Ver `sincronizar`: cada playlist es `once_per_hour`,
+ * y ese tipo admite UN solo `play_per_hour_minute`. Así, una cuña programada a
+ * las 08:00 y 12:30 necesita dos playlists (minuto 0 y minuto 30).
+ */
+const nombrePlaylist = (cuna, minuto) =>
+  `📣 ${cuna.nombre || 'Cuña'} #${cuna.id} :${String(minuto).padStart(2, '0')}`;
 
-/** Todas las playlists de cuñas de una estación (para limpiar huérfanas). */
-const RX_PLAYLIST_CUNA = /^📣 .* #(\d+)$/;
+/** Playlists de cuñas de una estación (para limpiar huérfanas). Acepta también
+ *  el formato antiguo sin minuto, para poder barrer las de la versión previa. */
+const RX_PLAYLIST_CUNA = /^📣 .* #(\d+)(?: :\d{2})?$/;
 
 // ---- Sincronización con AzuraCast --------------------------------
 /**
@@ -57,28 +65,63 @@ async function sincronizar(cliente, cuna) {
   const cfg = await verConfig(cliente.id).catch(() => ({}));
   await prog.sincronizarZona(az, stationId, cfg.zona_horaria || DEFAULT_TZ);
 
-  const plId = await prog.playlistSincronizada(az, stationId, nombrePlaylist(cuna), {
-    // `default` + schedule_items es la combinación correcta para "suena a esta
-    // hora": el tipo no restringe nada y la programación la ponen los horarios.
-    type: 'default',
-    is_enabled: Boolean(cuna.activo) && horas.length > 0,
-    schedule_items: horas.map((h) => ({
-      start_time: prog.aHHMM(h),
-      end_time: prog.aHHMM(h),     // start == end → AzuraCast abre ventana de 15 min
-      days: [1, 2, 3, 4, 5, 6, 7],
-      loop_once: true,             // suena UNA vez dentro de la ventana
-    })),
-  });
+  // Agrupa las horas por MINUTO: "08:00","12:00","12:30" → {0:[8,12], 30:[12]}
+  const porMinuto = new Map();
+  for (const h of horas) {
+    const [hh, mm] = String(h).split(':').map(Number);
+    if (!porMinuto.has(mm)) porMinuto.set(mm, []);
+    porMinuto.get(mm).push(hh);
+  }
 
+  const files = (await az.listMedia(stationId)) || [];
   // El archivo se busca por unique_id o id (media_id guarda el que devolvió la
   // subida, que según la versión de AzuraCast es uno u otro).
-  const files = (await az.listMedia(stationId)) || [];
   const f = files.find((x) => x.unique_id === cuna.media_id || String(x.id) === String(cuna.media_id));
-  if (!f) { console.error('[cuna] no encontré el media', cuna.media_id); return plId; }
+  if (!f) { console.error('[cuna] no encontré el media', cuna.media_id); return null; }
 
-  await prog.ponerUnicoArchivo(az, stationId, plId, f.id, files);
-  await query('UPDATE cunas SET playlist_id = $1 WHERE id = $2', [plId, cuna.id]);
-  return plId;
+  const activa = Boolean(cuna.activo) && horas.length > 0;
+  const creadas = [];
+
+  for (const [minuto, horasDelMinuto] of porMinuto) {
+    // `once_per_hour` y NO `default`+horario. Verificado en producción: cuando
+    // el cliente tiene un bloque programado (p.ej. una playlist "PROGRAMA" de
+    // 08:00 a 09:00), ese bloque se queda con TODOS los turnos del AutoDJ y una
+    // playlist `default` con horario nunca gana un hueco — la cuña no sonaba.
+    // Las `once_per_hour` sí se cuelan (es lo que hace el "da la hora").
+    // Como este tipo solo admite un minuto, va una playlist por minuto, y los
+    // `schedule_items` limitan en qué HORAS aplica.
+    const plId = await prog.playlistSincronizada(az, stationId, nombrePlaylist(cuna, minuto), {
+      type: 'once_per_hour',
+      play_per_hour_minute: minuto,
+      is_enabled: activa,
+      schedule_items: horasDelMinuto.map((hh) => ({
+        start_time: hh * 100,
+        end_time: hh * 100 + 59,   // toda esa hora; el minuto lo pone once_per_hour
+        days: [1, 2, 3, 4, 5, 6, 7],
+        loop_once: false,          // innecesario: once_per_hour ya limita a uno por hora
+      })),
+    });
+    await prog.ponerUnicoArchivo(az, stationId, plId, f.id, files);
+    creadas.push(plId);
+  }
+
+  await limpiarPlaylistsSobrantes(az, stationId, cuna, porMinuto);
+  await query('UPDATE cunas SET playlist_id = $1 WHERE id = $2', [creadas[0] ?? null, cuna.id]);
+  return creadas[0] ?? null;
+}
+
+/**
+ * Borra las playlists de ESTA cuña que ya no correspondan: las de minutos que
+ * el cliente quitó, y las del formato antiguo (sin `:MM` en el nombre).
+ */
+async function limpiarPlaylistsSobrantes(az, stationId, cuna, porMinuto) {
+  const validas = new Set([...porMinuto.keys()].map((m) => nombrePlaylist(cuna, m)));
+  const pls = (await az.getPlaylists(stationId)) || [];
+  for (const p of pls) {
+    const m = RX_PLAYLIST_CUNA.exec(p.name || '');
+    if (!m || m[1] !== String(cuna.id) || validas.has(p.name)) continue;
+    await az.deletePlaylist(stationId, p.id).catch(() => {});
+  }
 }
 
 /** Sube un MP3 (Buffer) y devuelve su media id. */
@@ -173,7 +216,8 @@ async function borrar(clienteId, id) {
       const cliente = await clienteModel.findById(clienteId);
       if (cliente?.azuracast_station_id) {
         const az = await azuracast.paraServidorId(cliente.servidor_id);
-        await prog.borrarPlaylistPorNombre(az, cliente.azuracast_station_id, nombrePlaylist(cuna));
+        // Una cuña puede tener varias playlists (una por minuto): se van todas.
+        await limpiarPlaylistsSobrantes(az, cliente.azuracast_station_id, cuna, new Map());
       }
     } catch (e) { console.error('[cuna] borrar playlist:', e.message); }
   }
