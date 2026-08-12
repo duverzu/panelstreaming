@@ -28,7 +28,7 @@ async function activar(cliente) {
   const az = await azuracast.paraServidorId(cliente.servidor_id);
   const st = cliente.azuracast_station_id;
   L(`• ${cliente.nombre_empresa} (station ${st})`);
-  await jingle(az, st, '📣 Anuncios');
+  await jingle(az, st, '⏰ Anuncio de hora');
   await jingle(az, st, '📣 Cuñas');
   L('   playlists jingle listas; reiniciando…');
   try { await az.restartStation(st); L('   restart OK'); } catch (e) { L('   restart ERROR:', e.message); }
