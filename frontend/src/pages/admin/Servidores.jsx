@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../../api';
 import CuentasVideo from '../../components/CuentasVideo';
 import Modal from '../../components/Modal';
 import { IconPlus, IconTrash, IconServer, IconRefresh } from '../../icons';
+import { useAmbito } from '../../ambito';
 
 export default function AdminServidores() {
-  const [searchParams] = useSearchParams();
-  const tipo = searchParams.get('tipo') === 'video' ? 'video' : 'audio';
-  const esVideo = tipo === 'video';
+  const { esVideo, coincide, tipoPorDefecto } = useAmbito();
+  const tipo = tipoPorDefecto;
   const [servidores, setServidores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -51,7 +50,7 @@ export default function AdminServidores() {
     catch (e) { alert(e.message); }
   }
 
-  const lista = servidores.filter((s) => (s.tipo || 'audio') === tipo);
+  const lista = servidores.filter((s) => coincide(s.tipo));
 
   return (
     <div className="space-y-6">

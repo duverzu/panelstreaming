@@ -2,7 +2,38 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { useTheme } from '../theme';
+import { useAmbito, AMBITOS, ETIQUETA } from '../ambito';
 import { IconSun, IconMoon, IconLogout, IconChevronDown } from '../icons';
+
+/**
+ * Selector Todo / Audio / Video. Solo para el admin: es el único que gestiona
+ * los dos servicios (los clientes ya entran a su panel por su `tipo`).
+ *
+ * Va aquí arriba y siempre visible a propósito. El riesgo de un modo global es
+ * olvidarse de en cuál estás y malinterpretar lo que ves ("¿solo 13 clientes?"),
+ * así que tiene que estar delante todo el rato, no escondido en el menú.
+ */
+function SelectorAmbito() {
+  const { ambito, setAmbito } = useAmbito();
+  return (
+    <div className="hidden sm:flex items-center gap-0.5 p-0.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
+      {AMBITOS.map((a) => (
+        <button
+          key={a}
+          onClick={() => setAmbito(a)}
+          title={`Ver solo ${ETIQUETA[a].txt}`}
+          className={`px-2.5 py-1.5 rounded-[10px] text-xs font-medium transition ${
+            ambito === a
+              ? 'bg-white dark:bg-gray-800 text-brand-700 dark:text-brand-400 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+          }`}
+        >
+          <span className="mr-1">{ETIQUETA[a].icono}</span>{ETIQUETA[a].txt}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function TopHeader({ title, subtitle }) {
   const { user, role, logout } = useAuth();
@@ -22,6 +53,8 @@ export default function TopHeader({ title, subtitle }) {
       </div>
 
       <div className="flex items-center gap-2">
+        {role === 'admin' && <SelectorAmbito />}
+
         {/* Botón llamativo Aprende (cliente y revendedor) */}
         {aprendeUrl && (
           <Link to={aprendeUrl}

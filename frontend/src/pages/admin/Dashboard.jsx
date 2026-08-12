@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api';
+import { useAmbito } from '../../ambito';
 import DonutChart from '../../components/charts/DonutChart';
 import ServerStats from '../../components/ServerStats';
 import GuardianBanda from '../../components/GuardianBanda';
@@ -43,6 +44,9 @@ export default function AdminDashboard() {
     return () => clearInterval(id);
   }, []);
 
+  // El modo de la cabecera decide qué mitad del negocio se muestra.
+  const { esTodo, esAudio, esVideo } = useAmbito();
+
   // ── Separar por servicio ──
   const audio = clientes.filter((c) => (c.tipo || 'audio') !== 'video');
   const video = clientes.filter((c) => c.tipo === 'video');
@@ -67,8 +71,9 @@ export default function AdminDashboard() {
       <GuardianBanda />
 
       {/* ═══ 2) RESUMEN POR SERVICIO — audio y video, separaditos ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 gap-6 ${esTodo ? 'lg:grid-cols-2' : ''}`}>
         {/* ─── AUDIO ─── */}
+        {!esVideo && (
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold flex items-center gap-2">🎙️ Streaming Audio</h2>
@@ -83,8 +88,10 @@ export default function AdminDashboard() {
             <Metric label="Transferencia" value={tam(transferAudio)} hint="este mes" />
           </div>
         </div>
+        )}
 
         {/* ─── VIDEO ─── */}
+        {!esAudio && (
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold flex items-center gap-2">🎬 Streaming Video</h2>
@@ -99,9 +106,11 @@ export default function AdminDashboard() {
             <Metric label="Transferencia" value={tam(transferVideo)} hint="este mes" />
           </div>
         </div>
+        )}
       </div>
 
       {/* ═══ 3) DETALLE AUDIO: dona de estado + ranking ═══ */}
+      {!esVideo && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card p-5">
           <h2 className="font-semibold mb-4">Estado de las radios</h2>
@@ -136,6 +145,7 @@ export default function AdminDashboard() {
           ) : <p className="text-sm text-gray-400 py-6 text-center">Sin oyentes todavía.</p>}
         </div>
       </div>
+      )}
 
       {/* ═══ 4) INFRAESTRUCTURA: VPS + monitor de radio ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

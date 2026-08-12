@@ -6,29 +6,28 @@ import {
 } from '../icons';
 
 // `to` = ruta real (navegable). `soon` = aún no implementado (atenuado).
-// El super admin separa Audio y Video: las páginas se reusan con ?tipo=…
+//
+// El menú del admin va por ENTIDAD, no por servicio. Antes estaba al revés
+// (una sección de Audio y otra de Video), y como las dos necesitan Clientes,
+// Planes, Servidores y Documentación, todo salía duplicado: 13 entradas para
+// 9 destinos reales, y ninguna vista del negocio completo.
+// Audio o video se elige ahora con el selector de la cabecera (ver ambito.jsx).
 const MENUS = {
   admin: [
     { seccion: 'General', items: [
       { label: 'Dashboard', icon: IconDashboard, to: '/admin' },
     ]},
-    { seccion: '🎙️ Streaming Audio', items: [
-      { label: 'Clientes', icon: IconUsers, to: '/admin/clientes?tipo=audio' },
+    { seccion: 'Negocio', items: [
+      { label: 'Clientes', icon: IconUsers, to: '/admin/clientes' },
+      { label: 'Planes', icon: IconInvoice, to: '/admin/planes' },
       { label: 'Revendedores', icon: IconShare, to: '/admin/revendedores' },
-      { label: 'Planes', icon: IconInvoice, to: '/admin/planes?tipo=audio' },
-      { label: 'Estadísticas', icon: IconChart, to: '/admin/estadisticas' },
-      { label: 'Servidores', icon: IconServer, to: '/admin/servidores?tipo=audio' },
-      { label: 'Documentación', icon: IconInvoice, to: '/admin/documentacion?tipo=audio' },
     ]},
-    { seccion: '🎬 Streaming Video', items: [
-      { label: 'Clientes', icon: IconUsers, to: '/admin/clientes?tipo=video' },
-      { label: 'Planes', icon: IconInvoice, to: '/admin/planes?tipo=video' },
-      { label: 'Servidores', icon: IconServer, to: '/admin/servidores?tipo=video' },
-      { label: 'Estadísticas', icon: IconChart, to: '/admin/video/estadisticas' },
-      { label: 'Documentación', icon: IconInvoice, to: '/admin/documentacion?tipo=video' },
-      { label: 'Revendedores', icon: IconShare, soon: true },
+    { seccion: 'Operación', items: [
+      { label: 'Servidores', icon: IconServer, to: '/admin/servidores' },
+      { label: 'Estadísticas', icon: IconChart, to: '/admin/estadisticas' },
     ]},
     { seccion: 'Sistema', items: [
+      { label: 'Documentación', icon: IconInvoice, to: '/admin/documentacion' },
       { label: 'Configuración', icon: IconSettings, to: '/admin/configuracion' },
       { label: 'API / Integración', icon: IconShare, to: '/admin/api' },
     ]},
@@ -103,14 +102,9 @@ export default function Sidebar() {
 
   // Activo teniendo en cuenta el ?tipo= (dos ítems pueden compartir ruta y
   // diferenciarse solo por el tipo: Clientes de audio vs Clientes de video).
-  const esActivo = (to) => {
-    if (!to) return false;
-    const [path, query] = to.split('?');
-    if (loc.pathname !== path) return false;
-    const tActual = new URLSearchParams(loc.search).get('tipo');
-    const tItem = query ? new URLSearchParams(query).get('tipo') : null;
-    return tItem ? tActual === tItem : !tActual;
-  };
+  // Basta con comparar la ruta: ya no hay dos ítems compartiendo destino y
+  // diferenciándose por el `?tipo=` (eso desapareció al unificar el menú).
+  const esActivo = (to) => Boolean(to) && loc.pathname === to;
 
   const itemClass = (isActive) =>
     `w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${

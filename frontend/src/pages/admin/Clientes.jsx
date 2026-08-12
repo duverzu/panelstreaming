@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../api';
 import { useAuth } from '../../auth';
+import { useAmbito } from '../../ambito';
 import Modal from '../../components/Modal';
 import Copiable from '../../components/Copiable';
 import { IconPlay, IconStop, IconPower, IconEnter, IconTrash, IconPlus, IconRefresh, IconMusic, IconSliders } from '../../icons';
@@ -37,9 +38,9 @@ const ESTADO_BADGE = {
 export default function AdminClientes() {
   const { impersonate } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const tipo = searchParams.get('tipo') === 'video' ? 'video' : 'audio';
-  const esVideo = tipo === 'video';
+  // El servicio ya no viene en la URL: es el modo global de la cabecera.
+  const { ambito, esVideo, esTodo, coincide, tipoPorDefecto } = useAmbito();
+  const tipo = tipoPorDefecto;
   // Textos según el servicio (misma página para radios y canales de video)
   const T = esVideo
     ? { unidad: 'canal', crear: 'Crear canal', tituloModal: 'Crear nuevo canal', nombreLabel: 'Nombre del canal', ph: 'Mi Canal TV' }
@@ -215,7 +216,7 @@ export default function AdminClientes() {
   }
 
   // Solo los clientes y planes del servicio actual (audio | video)
-  const lista = clientes.filter((c) => (c.tipo || 'audio') === tipo);
+  const lista = clientes.filter((c) => coincide(c.tipo));
   const planesTipo = planes.filter((p) => (p.tipo || 'audio') === tipo);
 
   // Al cambiar de servicio o cargar planes, el plan por defecto es del tipo correcto
@@ -223,7 +224,7 @@ export default function AdminClientes() {
     setForm((f) => (planesTipo.some((p) => String(p.id) === String(f.plan_id))
       ? f : { ...f, plan_id: planesTipo[0]?.id || '' }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tipo, planes]);
+  }, [ambito, planes]);
 
   return (
     <div className="space-y-6">
@@ -261,7 +262,10 @@ export default function AdminClientes() {
                   return (
                     <tr key={c.id} className="border-b border-gray-50 dark:border-gray-800/60 last:border-0">
                       <td className="py-3 pr-3">
-                        <div className="font-medium">{c.nombre_empresa}</div>
+                        <div className="font-medium flex items-center gap-1.5">
+                          {esTodo && <span title={c.tipo === 'video' ? 'Video' : 'Audio'}>{c.tipo === 'video' ? '🎬' : '🎙️'}</span>}
+                          {c.nombre_empresa}
+                        </div>
                         <div className="text-xs text-gray-400">
                           <span className="font-mono">{c.username}</span>{c.email ? ` · ${c.email}` : ''}
                         </div>

@@ -9,11 +9,10 @@ import AdminDocumentacion from './pages/admin/Documentacion';
 import AdminApiIntegracion from './pages/admin/ApiIntegracion';
 import AdminClientes from './pages/admin/Clientes';
 import AdminPlanes from './pages/admin/Planes';
-import AdminEstadisticas from './pages/admin/Estadisticas';
+import AdminEstadisticasAmbito from './pages/admin/EstadisticasAmbito';
 import AdminRevendedores from './pages/admin/Revendedores';
 import AdminServidores from './pages/admin/Servidores';
 import AdminConfiguracion from './pages/admin/Configuracion';
-import AdminVideoEstadisticas from './pages/admin/VideoEstadisticas';
 import ResellerDashboard from './pages/reseller/Dashboard';
 import ResellerClientes from './pages/reseller/Clientes';
 import ResellerPlanes from './pages/reseller/Planes';
@@ -85,8 +84,9 @@ export default function App() {
         <Route path="documentacion" element={<AdminDocumentacion />} />
         <Route path="configuracion" element={<AdminConfiguracion />} />
         <Route path="api" element={<AdminApiIntegracion />} />
-        <Route path="estadisticas" element={<AdminEstadisticas />} />
-        <Route path="video/estadisticas" element={<AdminVideoEstadisticas />} />
+        {/* Una sola entrada de menú: el componente elige audio, video o ambos. */}
+        <Route path="estadisticas" element={<AdminEstadisticasAmbito />} />
+        <Route path="video/estadisticas" element={<AdminEstadisticasAmbito />} />
       </Route>
 
       {/* Panel Revendedor */}

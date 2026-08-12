@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../../api';
 import Markdown from '../../components/Markdown';
 import { IconPlus, IconTrash } from '../../icons';
+import { useAmbito } from '../../ambito';
 
 const VACIO = { titulo: '', categoria: 'General', contenido: '', orden: 0, publicado: true, audiencia: 'audio' };
 
 export default function AdminDocumentacion() {
-  const [searchParams] = useSearchParams();
-  const tipo = searchParams.get('tipo') === 'video' ? 'video' : 'audio';
-  const esVideo = tipo === 'video';
+  const { ambito, esVideo, tipoPorDefecto } = useAmbito();
+  // El backend devuelve TODAS las guías si la audiencia no es audio/video.
+  const tipo = tipoPorDefecto;
   const [docs, setDocs] = useState([]);
   const [editId, setEditId] = useState(null); // null = ninguno; 'nuevo' = crear
   const [form, setForm] = useState(VACIO);
@@ -20,11 +20,11 @@ export default function AdminDocumentacion() {
   const fileRef = useRef(null);
 
   async function cargar() {
-    const { docs } = await apiFetch('/admin/docs?audiencia=' + tipo);
+    const { docs } = await apiFetch('/admin/docs?audiencia=' + ambito);
     setDocs(docs);
   }
   // Al cambiar de audiencia (audio/video) recarga y cierra el editor abierto
-  useEffect(() => { cargar(); setEditId(null); /* eslint-disable-next-line */ }, [tipo]);
+  useEffect(() => { cargar(); setEditId(null); /* eslint-disable-next-line */ }, [ambito]);
 
   function nuevo() { setEditId('nuevo'); setForm({ ...VACIO, audiencia: tipo }); setPreview(false); setMsg(null); }
   async function editar(id) {

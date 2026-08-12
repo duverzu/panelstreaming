@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import PlanesManager from '../../components/PlanesManager';
 import PlanesResellerManager from '../../components/PlanesResellerManager';
+import { useAmbito } from '../../ambito';
 
 export default function AdminPlanes() {
-  const [searchParams] = useSearchParams();
-  const tipo = searchParams.get('tipo') === 'video' ? 'video' : 'audio';
-  const esVideo = tipo === 'video';
+  const { ambito, esVideo, esTodo } = useAmbito();
+  // En "Todo" no se filtra: PlanesManager recibe null y muestra los 7.
+  const tipo = esTodo ? null : ambito;
   const [tab, setTab] = useState('planes');
 
   // En video solo hay planes de canal; en audio, además, paquetes de revendedor.
