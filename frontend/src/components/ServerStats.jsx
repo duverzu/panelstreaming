@@ -49,9 +49,33 @@ export default function ServerStats() {
         <p className="text-sm text-gray-400">Cargando métricas…</p>
       ) : (
         <div className="space-y-4">
+          {/* El espacio va destacado y arriba: es el dato que decide si caben
+              más radios o hay que ampliar, y en una barra más se perdía. */}
+          <div className={`rounded-xl px-3.5 py-3 ${
+            s.disco.usado_pct >= 85 ? 'bg-red-50 dark:bg-red-500/10'
+              : s.disco.usado_pct >= 70 ? 'bg-amber-50 dark:bg-amber-500/10'
+              : 'bg-brand-50 dark:bg-brand-500/10'
+          }`}>
+            <div className="flex items-end justify-between">
+              <div>
+                <div className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wide">Espacio libre</div>
+                <div className="text-2xl font-bold tabular-nums leading-tight">{s.disco.libre || '—'}</div>
+              </div>
+              <div className="text-right text-[11px] text-gray-500 dark:text-gray-400">
+                <div>{s.disco.usado} usados</div>
+                <div>de {s.disco.total} · {s.disco.usado_pct}%</div>
+              </div>
+            </div>
+            <div className="h-1.5 mt-2 rounded-full bg-white/70 dark:bg-black/30 overflow-hidden">
+              <div
+                className={`h-full rounded-full ${s.disco.usado_pct >= 85 ? 'bg-red-500' : s.disco.usado_pct >= 70 ? 'bg-amber-500' : 'bg-brand-500'}`}
+                style={{ width: s.disco.usado_pct + '%' }}
+              />
+            </div>
+          </div>
+
           <Barra label={`CPU · ${s.cpu.cores || ''} cores`} pct={s.cpu.usado_pct} detail={`${s.cpu.usado_pct}%`} />
           <Barra label={`Memoria · ${s.memoria.total}`} pct={s.memoria.usado_pct} detail={`${s.memoria.usado_pct}%`} />
-          <Barra label={`Disco · ${s.disco.total}`} pct={s.disco.usado_pct} detail={`${s.disco.usado} usado`} />
           {Array.isArray(s.cpu.load) && s.cpu.load.length === 3 && (
             <div className="text-xs text-gray-400 pt-1">
               Carga: {s.cpu.load.map((n) => Number(n).toFixed(2)).join(' · ')} (1/5/15 min)

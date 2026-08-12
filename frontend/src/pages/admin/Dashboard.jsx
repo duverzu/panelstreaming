@@ -144,7 +144,13 @@ export default function AdminDashboard() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Metric label="Viewers en vivo" value={videoViewers?.total ?? 0} hint="todos los canales" destacado />
-            <Metric label="Canales al aire" value={videoViewers?.al_aire ?? '—'} hint={`de ${video.length} canales`} />
+            {/* `/admin/video/viewers` no trae "al aire": lo que sí se puede
+                contar es cuántos canales tienen a alguien viéndolos ahora. */}
+            <Metric
+              label="Canales con audiencia"
+              value={(videoViewers?.canales || []).filter((c) => c.viewers > 0).length}
+              hint={`de ${video.length} canales`}
+            />
             <Metric label="Clientes de video" value={video.length} hint={`${activos(video)} activos`} />
             <Metric label="Transferencia" value={tam(transferVideo)} hint="este mes" />
           </div>

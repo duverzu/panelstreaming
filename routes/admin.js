@@ -512,6 +512,9 @@ router.get('/servidor', requireAdmin, wrap(async (req, res) => {
       total: s.disk?.total_readable || '—',
       usado: s.disk?.used_readable || '—',
       usado_pct: pct(diskUsed, diskTotal),
+      // Lo que de verdad se pregunta uno del disco es cuánto QUEDA, no cuánto
+      // se ha gastado. Se calcula aquí para no repetir el formateo en el panel.
+      libre: humanBytes(Math.max(0, diskTotal - diskUsed)),
     },
     transferencia: {
       velocidad: humanBytes(txBytes) + '/s',
