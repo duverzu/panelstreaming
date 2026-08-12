@@ -613,8 +613,15 @@ router.get('/consumo-clientes', requireAdmin, wrap(async (req, res) => {
     try {
       const s = await servidorModel.findById(sid);
       if (!s || s.tipo !== 'video') return;
-      const cuentas = await videoNode.crearCliente(s.url, s.api_key).cuentas();
+      const cli = videoNode.crearCliente(s.url, s.api_key);
+      // Los canales viven en DOS sitios según cómo entraron: `cuentas()` son los
+      // creados por el panel, y `compatClientes()` los heredados de asilivehd.
+      // Sin los segundos, 17 de los 20 canales se quedaban sin dato de disco.
+      const [cuentas, compat] = await Promise.all([cli.cuentas(), cli.compatClientes()]);
       (cuentas || []).forEach((cu) => { espacioPorShort[cu.user] = Number(cu.espacio_bytes || 0); });
+      (compat || []).forEach((cu) => {
+        if (espacioPorShort[cu.user] == null) espacioPorShort[cu.user] = Number(cu.espacio_bytes || 0);
+      });
     } catch (_) { /* nodo caído */ }
   }));
   clientes.filter((c) => c.tipo === 'video').forEach((c) => {
