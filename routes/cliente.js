@@ -332,6 +332,14 @@ router.get('/estadisticas', requireCliente, wrap(async (req, res) => {
  * La banda sale del Guardián (muestreo de oyentes × bitrate) y el disco de la
  * cuota real de AzuraCast. Es lo que pinta los gráficos del dashboard.
  */
+/** Texto honesto para las pruebas: la cuña/hora entra en la cola del AutoDJ,
+ *  así que suena al terminar la canción en curso, no al instante. */
+function cuando(segundos) {
+  if (segundos == null) return 'Suena al terminar la canción actual (no la corta).';
+  if (segundos < 60) return 'Suena en unos segundos, al terminar la canción actual.';
+  return `Suena en ~${Math.round(segundos / 60)} min, al terminar la canción actual (no la corta).`;
+}
+
 // ── "Da la hora" (anuncio de hora) ──
 router.get('/anuncio-hora', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
@@ -352,9 +360,9 @@ router.post('/anuncio-hora/probar', requireCliente, wrap(async (req, res) => {
   const cliente = await getCliente(req);
   if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Tu radio no está lista aún.' });
   const cfg = await anuncioHora.verConfig(cliente.id);
-  const r = await anuncioHora.anunciarEn(cliente, { saludo: cfg.con_saludo ? 'Atención' : null, ciudad: cfg.ciudad, con_clima: cfg.con_clima, zona: cfg.zona_horaria, voz: cfg.voz });
+  const r = await anuncioHora.anunciarEn(cliente, { zona: cfg.zona_horaria, voz: cfg.voz });
   if (!r.ok) return res.status(502).json({ error: r.error || 'No se pudo generar el anuncio' });
-  res.json({ message: `Anuncio listo: «${r.texto}». Suena al terminar la canción actual (no la corta). 🔊` });
+  res.json({ message: `Anuncio listo: «${r.texto}». ${cuando(r.segundos)} 🔊` });
 }));
 
 // ── Cuñas / anuncios programados ──
@@ -390,7 +398,7 @@ router.post('/cunas/:id/probar', requireCliente, wrap(async (req, res) => {
   if (!cliente?.azuracast_station_id) return res.status(400).json({ error: 'Tu radio no está lista aún.' });
   const r = await cunas.probar(cliente, Number(req.params.id));
   if (!r.ok) return res.status(400).json({ error: r.error });
-  res.json({ message: 'Cuña sonando 🔊' });
+  res.json({ message: `Cuña encolada. ${cuando(r.segundos)} 🔊` });
 }));
 
 router.get('/consumo', requireCliente, wrap(async (req, res) => {

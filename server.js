@@ -115,18 +115,16 @@ try {
 }
 
 // ---- "Da la hora" (anuncio de hora programado) -------------------
+// Solo deja el audio de cada franja listo con antelación; quien lo pone al
+// aire, puntual, es la programación nativa de AzuraCast (once_per_hour).
 try {
   require('./services/anuncioHora').iniciar();
 } catch (e) {
   console.error('[anuncio-hora] no se pudo iniciar:', e.message);
 }
 
-// ---- Cuñas / anuncios programados --------------------------------
-try {
-  require('./services/cunas').iniciar();
-} catch (e) {
-  console.error('[cunas] no se pudo iniciar:', e.message);
-}
+// Las cuñas NO tienen planificador: cada una es una playlist de AzuraCast con
+// sus schedule_items, que se sincroniza al guardarla. Ver services/cunas.js.
 
 // ---- Monitor de alertas (Telegram) -------------------------------
 try {

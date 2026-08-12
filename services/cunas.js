@@ -4,58 +4,87 @@
  * El cliente crea "cuñas": mensajes propios que suenan a horas fijas.
  *   - tipo 'texto' → se genera con voz (TTS) UNA vez y se guarda en AzuraCast.
  *   - tipo 'audio' → el cliente sube su MP3 (su locutor) y se guarda en AzuraCast.
- * En ambos casos la cuña queda como un `media_id` (archivo en AzuraCast); el
- * planificador solo lo pide (request) a las horas configuradas. Suena en la
- * emisión respetando la canción (salta para que sea puntual).
  *
- * Horas: lista de "HH:MM" (ej. ["08:00","12:00","20:00"]).
+ * CÓMO FUNCIONA (reescrito 2026-08-12 — ver services/programacion.js):
+ *
+ * Cada cuña tiene SU PROPIA playlist permanente en AzuraCast, con un
+ * `schedule_item` por cada hora programada. Poniendo `start_time == end_time`
+ * AzuraCast abre una ventana de 15 minutos, y con `loop_once: true` la cuña
+ * suena UNA sola vez dentro de esa ventana. Programa AzuraCast; el panel solo
+ * mantiene la playlist sincronizada cuando el cliente guarda la cuña.
+ *
+ * Aquí ya NO hay planificador de Node. El anterior fallaba por tres motivos:
+ *   • metía el archivo a la playlist en el minuto exacto, cuando la cola ya
+ *     estaba armada 10-20 min por delante (y lo retiraba antes de que sonara);
+ *   • si el minuto se perdía (deploy, pico de BD), la cuña no sonaba ese día;
+ *   • `setFilePlaylists(f.id, [plId])` REEMPLAZABA las playlists del archivo,
+ *     así que sacaba las cuñas de las playlists de música del cliente.
+ *
+ * Horas: lista de "HH:MM" (ej. ["08:00","12:00","20:00"]), en la zona horaria
+ * del cliente — que se refleja en la zona de la estación en AzuraCast, porque
+ * es la que AzuraCast usa para evaluar los `schedule_items`.
  * ------------------------------------------------------------------
  */
 const { query } = require('../config/database');
 const clienteModel = require('../models/clienteModel');
 const azuracast = require('./azuracast');
-const { generarVoz, verConfig, programarRetiro } = require('./anuncioHora');
+const prog = require('./programacion');
+const { generarVoz, verConfig } = require('./anuncioHora');
+const { DEFAULT_TZ } = require('./zonaHoraria');
 
-const PLAYLIST = '📣 Cuñas';
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Nombre estable de la playlist de una cuña. Lleva el id para que renombrar
+ *  la cuña no cree una playlist nueva y deje huérfana la anterior. */
+const nombrePlaylist = (cuna) => `📣 ${cuna.nombre || 'Cuña'} #${cuna.id}`;
 
-// ---- Inyección en AzuraCast --------------------------------------
-async function playlistCunas(az, stationId) {
-  const pls = (await az.getPlaylists(stationId)) || [];
-  const existe = pls.find((p) => p.name === PLAYLIST);
-  // JINGLE (suena puntual entre canciones). Se activa con un reinicio único de
-  // la estación (scripts/activar-jingles.js). La cuña se mete a la playlist solo
-  // al sonar y se saca tras sonar una vez (ver reproducir).
-  if (existe) {
-    if (!existe.is_jingle || !existe.is_enabled || existe.play_per_songs !== 1) {
-      await az.updatePlaylist(stationId, existe.id, { is_jingle: true, is_enabled: true, play_per_songs: 1, include_in_requests: false }).catch(() => {});
-    }
-    return existe.id;
-  }
-  const pl = await az.createPlaylist(stationId, {
-    name: PLAYLIST, type: 'default', source: 'songs',
-    is_jingle: true, is_enabled: true, play_per_songs: 1, include_in_requests: false, include_in_on_demand: false, weight: 1,
+/** Todas las playlists de cuñas de una estación (para limpiar huérfanas). */
+const RX_PLAYLIST_CUNA = /^📣 .* #(\d+)$/;
+
+// ---- Sincronización con AzuraCast --------------------------------
+/**
+ * Deja la playlist de la cuña reflejando exactamente lo que hay en BD:
+ * horas programadas, activo/inactivo y el archivo de audio.
+ * Idempotente — se llama en cada guardado.
+ */
+async function sincronizar(cliente, cuna) {
+  const stationId = cliente.azuracast_station_id;
+  if (!stationId || !cuna.media_id) return null;
+
+  const az = await azuracast.paraServidorId(cliente.servidor_id);
+  const horas = Array.isArray(cuna.horas) ? cuna.horas : [];
+
+  // Las horas viven en la zona del cliente; AzuraCast evalúa los schedule_items
+  // en la zona de la ESTACIÓN, así que tienen que coincidir.
+  const cfg = await verConfig(cliente.id).catch(() => ({}));
+  await prog.sincronizarZona(az, stationId, cfg.zona_horaria || DEFAULT_TZ);
+
+  const plId = await prog.playlistSincronizada(az, stationId, nombrePlaylist(cuna), {
+    // `default` + schedule_items es la combinación correcta para "suena a esta
+    // hora": el tipo no restringe nada y la programación la ponen los horarios.
+    type: 'default',
+    is_enabled: Boolean(cuna.activo) && horas.length > 0,
+    schedule_items: horas.map((h) => ({
+      start_time: prog.aHHMM(h),
+      end_time: prog.aHHMM(h),     // start == end → AzuraCast abre ventana de 15 min
+      days: [1, 2, 3, 4, 5, 6, 7],
+      loop_once: true,             // suena UNA vez dentro de la ventana
+    })),
   });
-  return pl.id;
+
+  // El archivo se busca por unique_id o id (media_id guarda el que devolvió la
+  // subida, que según la versión de AzuraCast es uno u otro).
+  const files = (await az.listMedia(stationId)) || [];
+  const f = files.find((x) => x.unique_id === cuna.media_id || String(x.id) === String(cuna.media_id));
+  if (!f) { console.error('[cuna] no encontré el media', cuna.media_id); return plId; }
+
+  await prog.ponerUnicoArchivo(az, stationId, plId, f.id, files);
+  await query('UPDATE cunas SET playlist_id = $1 WHERE id = $2', [plId, cuna.id]);
+  return plId;
 }
 
-/** Sube un MP3 (Buffer) y devuelve su media id. NO lo deja en la playlist: la
- *  cuña se mete a la playlist solo cuando toca sonar (reproducir). */
+/** Sube un MP3 (Buffer) y devuelve su media id. */
 async function subirMedia(az, stationId, buffer, nombre) {
   const media = await az.uploadMedia(stationId, nombre, buffer.toString('base64'));
   return media.unique_id || media.id;
-}
-
-/** Pone a sonar una cuña: la mete a la jingle y en segundo plano la saca tras
- *  sonar una vez (así suena a su hora y no se repite). No borra el media (se reusa). */
-async function reproducir(az, stationId, mediaId, { skip = true } = {}) {
-  const plId = await playlistCunas(az, stationId);
-  const files = (await az.listMedia(stationId)) || [];
-  const f = files.find((x) => x.unique_id === mediaId || String(x.id) === String(mediaId));
-  if (!f) { console.error('[cuna] no encontré el media', mediaId); return; }
-  await az.setFilePlaylists(stationId, f.id, [plId]);            // queda como jingle
-  programarRetiro(az, stationId, f.id, {})                       // sin borrar (se reutiliza)
-    .catch((e) => console.error('[cuna] retiro:', e.message));
 }
 
 // ---- CRUD ---------------------------------------------------------
@@ -66,14 +95,17 @@ function normHoras(horas) {
 }
 
 async function listar(clienteId) {
-  const { rows } = await query('SELECT id, nombre, tipo, texto, horas, activo, (media_id IS NOT NULL) AS lista FROM cunas WHERE cliente_id = $1 ORDER BY id', [clienteId]);
+  const { rows } = await query(
+    'SELECT id, nombre, tipo, texto, horas, activo, (media_id IS NOT NULL) AS lista FROM cunas WHERE cliente_id = $1 ORDER BY id',
+    [clienteId]
+  );
   return rows;
 }
 
 /** Crea o actualiza una cuña. Para tipo 'texto' regenera la voz si cambió. */
 async function guardar(cliente, { id, nombre, tipo, texto, horas, activo }) {
   const t = tipo === 'audio' ? 'audio' : 'texto';
-  const hrs = JSON.stringify(normHoras(horas));
+  const hrs = normHoras(horas);
   const stationId = cliente.azuracast_station_id;
   const voz = (await verConfig(cliente.id).catch(() => ({}))).voz;   // misma voz que el anuncio de hora
 
@@ -81,31 +113,38 @@ async function guardar(cliente, { id, nombre, tipo, texto, horas, activo }) {
     const { rows } = await query('SELECT * FROM cunas WHERE id = $1 AND cliente_id = $2', [id, cliente.id]);
     const prev = rows[0];
     if (!prev) throw new Error('Cuña no encontrada');
+
     let media_id = prev.media_id;
-    // Si es texto y cambió el texto, regenera la voz
     if (t === 'texto' && texto && texto !== prev.texto) {
       const az = await azuracast.paraServidorId(cliente.servidor_id);
       media_id = await subirMedia(az, stationId, await generarVoz(texto, { voz }), `cuna-${cliente.id}-${id}.mp3`);
     }
-    await query(
-      'UPDATE cunas SET nombre=$1, tipo=$2, texto=$3, horas=$4, activo=$5, media_id=$6, updated_at=now() WHERE id=$7',
-      [nombre || prev.nombre, t, t === 'texto' ? (texto ?? prev.texto) : prev.texto, hrs, activo !== false, media_id, id]
+
+    const { rows: act } = await query(
+      `UPDATE cunas SET nombre=$1, tipo=$2, texto=$3, horas=$4, activo=$5, media_id=$6, updated_at=now()
+        WHERE id=$7 RETURNING *`,
+      [nombre || prev.nombre, t, t === 'texto' ? (texto ?? prev.texto) : prev.texto, JSON.stringify(hrs), activo !== false, media_id, id]
     );
+    await sincronizar(cliente, act[0]);
     return id;
   }
 
-  // Nueva
-  let media_id = null;
+  // Nueva. El archivo se sube DESPUÉS del INSERT, ya con el id real: antes se
+  // subía como `cuna-<cliente>-nueva.mp3`, así que dos cuñas de texto creadas
+  // seguidas se pisaban el archivo la una a la otra.
+  const { rows } = await query(
+    'INSERT INTO cunas (cliente_id, nombre, tipo, texto, horas, activo) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+    [cliente.id, nombre || 'Cuña', t, t === 'texto' ? texto : null, JSON.stringify(hrs), activo !== false]
+  );
+  const cuna = rows[0];
+
   if (t === 'texto' && texto) {
     const az = await azuracast.paraServidorId(cliente.servidor_id);
-    // se sube tras crear la fila para nombrar el archivo con el id; aquí subimos genérico
-    media_id = await subirMedia(az, stationId, await generarVoz(texto, { voz }), `cuna-${cliente.id}-nueva.mp3`);
+    cuna.media_id = await subirMedia(az, stationId, await generarVoz(texto, { voz }), `cuna-${cliente.id}-${cuna.id}.mp3`);
+    await query('UPDATE cunas SET media_id=$1 WHERE id=$2', [cuna.media_id, cuna.id]);
+    await sincronizar(cliente, cuna);
   }
-  const { rows } = await query(
-    'INSERT INTO cunas (cliente_id, nombre, tipo, texto, horas, activo, media_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
-    [cliente.id, nombre || 'Cuña', t, t === 'texto' ? texto : null, hrs, activo !== false, media_id]
-  );
-  return rows[0].id;
+  return cuna.id;
 }
 
 /** Sube el audio (Buffer) de una cuña 'audio' y guarda su media_id. */
@@ -114,60 +153,67 @@ async function subirAudio(cliente, cunaId, buffer, nombreArchivo) {
   if (!rows[0]) throw new Error('Cuña no encontrada');
   const az = await azuracast.paraServidorId(cliente.servidor_id);
   const media_id = await subirMedia(az, cliente.azuracast_station_id, buffer, `cuna-${cliente.id}-${cunaId}.mp3`);
-  await query('UPDATE cunas SET tipo=$1, media_id=$2, updated_at=now() WHERE id=$3', ['audio', media_id, cunaId]);
+  const { rows: act } = await query(
+    'UPDATE cunas SET tipo=$1, media_id=$2, updated_at=now() WHERE id=$3 RETURNING *',
+    ['audio', media_id, cunaId]
+  );
+  await sincronizar(cliente, act[0]);
   return media_id;
 }
 
 async function borrar(clienteId, id) {
+  const { rows } = await query('SELECT * FROM cunas WHERE id=$1 AND cliente_id=$2', [id, clienteId]);
+  const cuna = rows[0];
   await query('DELETE FROM cunas WHERE id=$1 AND cliente_id=$2', [id, clienteId]);
+
+  // Se lleva también su playlist en AzuraCast: si no, queda programada y la
+  // cuña seguiría sonando aunque el cliente la haya borrado del panel.
+  if (cuna) {
+    try {
+      const cliente = await clienteModel.findById(clienteId);
+      if (cliente?.azuracast_station_id) {
+        const az = await azuracast.paraServidorId(cliente.servidor_id);
+        await prog.borrarPlaylistPorNombre(az, cliente.azuracast_station_id, nombrePlaylist(cuna));
+      }
+    } catch (e) { console.error('[cuna] borrar playlist:', e.message); }
+  }
 }
 
-/** Reproduce una cuña ahora (prueba). */
+/** Reproduce una cuña ahora (botón "Probar" del panel). */
 async function probar(cliente, id) {
   const { rows } = await query('SELECT media_id FROM cunas WHERE id=$1 AND cliente_id=$2', [id, cliente.id]);
   if (!rows[0]?.media_id) return { ok: false, error: 'La cuña no tiene audio todavía (guarda texto o sube un MP3).' };
+
   const az = await azuracast.paraServidorId(cliente.servidor_id);
-  await reproducir(az, cliente.azuracast_station_id, rows[0].media_id, { skip: true });
-  return { ok: true };
+  const stationId = cliente.azuracast_station_id;
+  const files = (await az.listMedia(stationId)) || [];
+  const f = files.find((x) => x.unique_id === rows[0].media_id || String(x.id) === String(rows[0].media_id));
+  if (!f) return { ok: false, error: 'No encontré el audio de la cuña en la radio.' };
+
+  const r = await prog.reproducirAhora(az, stationId, f.id);
+  return { ok: true, segundos: r.segundos };
 }
 
-// ---- Planificador -------------------------------------------------
-const { partesEnZona } = require('./zonaHoraria');
-let timer = null;
-const ultimoPorCuna = new Map();   // cuña id -> "HH:MM" ya evaluado este minuto
+/**
+ * Reconstruye en AzuraCast la programación de TODAS las cuñas de un cliente.
+ * La usa el script de migración y sirve para reparar una estación a mano.
+ */
+async function resincronizarCliente(cliente) {
+  const { rows } = await query('SELECT * FROM cunas WHERE cliente_id = $1 ORDER BY id', [cliente.id]);
+  const vivas = new Set(rows.map((c) => String(c.id)));
 
-async function tick() {
-  if (new Date().getSeconds() > 20) return;
-  try {
-    // La hora se compara en la ZONA del cliente (no la del servidor). El
-    // LEFT JOIN trae su zona de anuncio_hora (por defecto America/Bogota).
-    const { rows } = await query(
-      `SELECT c.*, cl.servidor_id, cl.azuracast_station_id,
-              COALESCE(ah.zona_horaria, 'America/Bogota') AS zona
-         FROM cunas c
-         JOIN clientes cl ON cl.id = c.cliente_id
-         LEFT JOIN anuncio_hora ah ON ah.cliente_id = cl.id
-        WHERE c.activo = true AND cl.activo = true AND cl.azuracast_station_id IS NOT NULL`);
-    for (const c of rows) {
-      const { hora, minuto } = partesEnZona(c.zona);
-      const hhmm = `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`;
-      if (ultimoPorCuna.get(c.id) === hhmm) continue;   // ya evaluada este minuto
-      ultimoPorCuna.set(c.id, hhmm);
-      const horas = Array.isArray(c.horas) ? c.horas : [];
-      if (!horas.includes(hhmm) || !c.media_id) continue;
-      const az = await azuracast.paraServidorId(c.servidor_id);
-      // skip:false → no corta la canción actual; la cuña suena al terminar.
-      reproducir(az, c.azuracast_station_id, c.media_id, { skip: false })
-        .then(() => console.log(`[cuna] ${c.nombre} sonó (${hhmm})`))
-        .catch((e) => console.error('[cuna]', c.nombre, e.message));
+  for (const cuna of rows) await sincronizar(cliente, cuna);
+
+  // Borra playlists `📣 … #<id>` de cuñas que ya no existen en la BD.
+  const az = await azuracast.paraServidorId(cliente.servidor_id);
+  const pls = (await az.getPlaylists(cliente.azuracast_station_id)) || [];
+  for (const p of pls) {
+    const m = RX_PLAYLIST_CUNA.exec(p.name || '');
+    if (m && !vivas.has(m[1])) {
+      await az.deletePlaylist(cliente.azuracast_station_id, p.id).catch(() => {});
     }
-  } catch (e) { console.error('[cuna] tick:', e.message); }
+  }
+  return rows.length;
 }
 
-function iniciar() {
-  if (timer) return;
-  timer = setInterval(() => tick().catch((e) => console.error('[cuna]', e.message)), 15000);
-  console.log('📣 Cuñas programadas activas (revisa cada 15s las horas configuradas)');
-}
-
-module.exports = { iniciar, listar, guardar, subirAudio, borrar, probar };
+module.exports = { listar, guardar, subirAudio, borrar, probar, sincronizar, resincronizarCliente, nombrePlaylist, RX_PLAYLIST_CUNA };

@@ -1,17 +1,29 @@
 /**
- * services/anuncioHora.js — "da la hora" dinámico (estilo Zara/RadioBOSS)
+ * services/anuncioHora.js — "da la hora" (estilo Zara/RadioBOSS)
  * ------------------------------------------------------------------
- * Cada tanto (cada hora / media / cuarto) genera con voz la hora actual
- * ("Son las tres y media de la tarde") y la INYECTA al aire de la estación:
- *   1) genera el MP3 con TTS,
- *   2) lo sube a AzuraCast (a una playlist de anuncios, requestable + jingle),
- *   3) lo encola (request) para que suene, y opcionalmente salta la canción
- *      actual para que la hora sea puntual.
+ * Cada hora (o media / cuarto) suena la hora con voz de locutor real.
  *
- * TTS: por defecto usa la voz de Google Translate (buena en español, sin
- * instalar nada). Se puede cambiar a otra (Piper, Polly…) con ANUNCIO_TTS_CMD.
+ * CÓMO FUNCIONA (reescrito 2026-08-12 — ver services/programacion.js para el
+ * porqué largo):
  *
- * CONFIG por cliente en la tabla `anuncio_hora` (activo, cada_min, con_saludo).
+ *   • Una playlist por franja: `⏰ Hora :00` (y `:15`/`:30`/`:45` si aplica),
+ *     de tipo `once_per_hour` con `play_per_hour_minute` = el minuto de la
+ *     franja. AzuraCast la dispara sola, y lo hace evaluando el momento en que
+ *     el slot de la cola VA a sonar, así que es puntual pese a que la cola se
+ *     arma con 10-20 min de anticipación.
+ *
+ *   • El audio de cada hora es FIJO (se arma concatenando los fragmentos de
+ *     `times/`), así que se sube UNA vez por estación y se reutiliza siempre:
+ *     `panel-hora-<voz>-HHMM.mp3`. Lo único que hace el planificador es
+ *     cambiar qué archivo está en la playlist, y lo hace con ANTICIPO_MIN de
+ *     adelanto para ganarle al pre-armado de la cola.
+ *
+ *   • No hay "retiro": `once_per_hour` ya garantiza un disparo por hora, así
+ *     que el archivo puede quedarse en su playlist sin repetirse. El viejo
+ *     `programarRetiro` (temporizador en memoria) era justo lo que impedía que
+ *     el anuncio llegara a sonar, y dejaba basura al reiniciar pm2.
+ *
+ * CONFIG por cliente en la tabla `anuncio_hora` (activo, cada_min, voz, zona).
  * ------------------------------------------------------------------
  */
 const { execFile, spawn } = require('child_process');
@@ -20,10 +32,30 @@ const path = require('path');
 const { query } = require('../config/database');
 const clienteModel = require('./../models/clienteModel');
 const azuracast = require('./azuracast');
+const prog = require('./programacion');
 const { partesEnZona, DEFAULT_TZ } = require('./zonaHoraria');
 
-const PLAYLIST = '⏰ Anuncio de hora';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Minutos de adelanto con que se deja listo el audio de la próxima franja.
+ *
+ *  Suelo: debe superar el pre-armado de la cola (autodj_queue_length × duración
+ *  de canción ≈ 20 min en el peor caso).
+ *  Techo: preparar la franja `min` la sobrescribe, y su ventana de disparo dura
+ *  15 min desde :min; con ANTICIPO > 45 la estaríamos pisando mientras aún
+ *  puede sonar. De ahí el clamp. */
+const ANTICIPO_MIN = Math.min(45, Math.max(20, Number(process.env.ANUNCIO_ANTICIPO_MIN) || 30));
+
+/** Nombre de la playlist de una franja. `:00`, `:15`, `:30`, `:45`. */
+const nombrePlaylist = (min) => `⏰ Hora :${String(min).padStart(2, '0')}`;
+
+/** Franjas (minutos de la hora) según `cada_min`. */
+function franjasDe(cadaMin) {
+  if (cadaMin === 15) return [0, 15, 30, 45];
+  if (cadaMin === 30) return [0, 30];
+  return [0];
+}
+const TODAS_LAS_FRANJAS = [0, 15, 30, 45];
 
 // ---- Voz de LOCUTOR por fragmentos (carpeta times/) --------------
 // Set profesional: HRSxx = "son las xx", HRSxx_O = "son las xx en punto",
@@ -62,10 +94,16 @@ async function generarHoraFragmentos(hora, minuto, voz) {
     ? [path.join(dir, `HRS${hh}_O.mp3`)]                          // "…en punto"
     : [path.join(dir, `HRS${hh}.mp3`), path.join(dir, `MIN${mm}.mp3`)];
   for (const f of files) if (!fs.existsSync(f)) throw new Error(`falta fragmento ${path.basename(f)} (${carpeta})`);
+  // "En punto" es UN solo fragmento: no hay nada que concatenar, así que no se
+  // invoca ffmpeg. Con `cada_min: 60` (el caso normal) esto quita por completo
+  // la dependencia de ffmpeg del camino crítico.
+  if (files.length === 1) return fs.promises.readFile(files[0]);
   return concatMp3(files);
 }
 
 // ---- Texto de la hora en español ---------------------------------
+// Solo para lo que se MUESTRA en el panel (el "ejemplo" y los logs). El audio
+// que sale al aire son los fragmentos de locutor, no este texto.
 const HORAS = ['', 'una', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez', 'once', 'doce'];
 const U = ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez', 'once', 'doce', 'trece',
   'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve', 'veinte', 'veintiuno', 'veintidós', 'veintitrés',
@@ -78,9 +116,10 @@ function minutoTxt(m) {
 }
 
 /** "Son las tres y media de la tarde" (o "Es la una en punto de la mañana"). */
-function textoHora(fecha, { saludo, zona } = {}) {
-  // Con zona: la hora del cliente (no la del servidor). Sin zona: la del servidor.
-  const { hora: h, minuto: m } = zona ? partesEnZona(zona) : { hora: fecha.getHours(), minuto: fecha.getMinutes() };
+function textoHora(fecha, { saludo, zona, hora: hOverride, minuto: mOverride } = {}) {
+  const base0 = zona ? partesEnZona(zona) : { hora: fecha.getHours(), minuto: fecha.getMinutes() };
+  const h = hOverride ?? base0.hora;
+  const m = mOverride ?? base0.minuto;
   const periodo = h < 12 ? 'de la mañana' : h < 19 ? 'de la tarde' : 'de la noche';
   let h12 = h % 12; if (h12 === 0) h12 = 12;
   const cab = h12 === 1 ? 'Es la una' : `Son las ${HORAS[h12]}`;
@@ -90,6 +129,9 @@ function textoHora(fecha, { saludo, zona } = {}) {
 }
 
 // ---- Clima (Open-Meteo, gratis, sin API key) ---------------------
+// NOTA: la config expone `ciudad`/`con_clima`, pero el audio que sale al aire
+// son los fragmentos de locutor pregrabados, que no pueden incluir el clima.
+// Se conserva el helper para cuando haya una voz sintética aceptable.
 const CIELO = {   // códigos WMO → descripción en español (resumen)
   0: 'despejado', 1: 'mayormente despejado', 2: 'parcialmente nublado', 3: 'nublado',
   45: 'con niebla', 48: 'con niebla', 51: 'con llovizna', 53: 'con llovizna', 55: 'con llovizna',
@@ -124,117 +166,105 @@ async function climaTexto(ciudad) {
 }
 
 // ---- Voz (TTS) ----------------------------------------------------
-/** Genera el MP3 de un texto. Devuelve un Buffer. */
+/** Genera el MP3 de un texto. Devuelve un Buffer. Lo usan las cuñas de texto. */
 async function generarVoz(texto, { voz } = {}) {
   const cmd = process.env.ANUNCIO_TTS_CMD;   // ej: comando que recibe el texto por args y devuelve mp3 por stdout
-  // Voz de locutor (Piper) SOLO si el cliente eligió 'masculina' y está configurada.
-  // 'femenina' (o sin preferencia) → Google Translate TTS.
-  if (cmd && voz === 'masculina') {
+  if (cmd && (voz === 'masculina' || voz === 'hombre')) {
     return await new Promise((resolve, reject) => {
       execFile(cmd, [texto], { encoding: 'buffer', maxBuffer: 20 * 1024 * 1024 }, (e, out) => e ? reject(e) : resolve(out));
     });
   }
-  // Por defecto: voz de Google Translate (español). Texto corto, un request por franja.
   const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=es&q=${encodeURIComponent(texto)}`;
   const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
   if (!r.ok) throw new Error(`TTS ${r.status}`);
   return Buffer.from(await r.arrayBuffer());
 }
 
-// ---- Inyección en AzuraCast --------------------------------------
-// Nombre "marca" (sin carpeta ni extensión) para reconocer el archivo en el
-// "ahora suena" de AzuraCast (title = nombre del archivo cuando no hay ID3).
-const marca = (n) => String(n).split('/').pop().replace(/\.[^.]+$/, '');
+// ---- Archivos de hora en AzuraCast --------------------------------
+/** `panel-hora-hombre-1430.mp3` — determinista, se sube una vez y se reutiliza. */
+const nombreArchivo = (voz, hora, minuto) =>
+  `panel-hora-${VOZ_CARPETA[voz] ? voz : 'hombre'}-${String(hora).padStart(2, '0')}${String(minuto).padStart(2, '0')}.mp3`;
 
 /**
- * Busca/crea la playlist de anuncios como JINGLE (suena entre canciones, puntual
- * y fiable — confirmado en vivo). OJO: los cambios de jingle solo se ACTIVAN tras
- * un reinicio de la estación (rebuild de config): eso se hace UNA vez por estación
- * con scripts/activar-jingles.js. Aquí solo se cambia el ARCHIVO de la playlist
- * (eso sí toma efecto sin reiniciar). Para que no se repita, el anuncio se saca
- * tras sonar una vez (ver programarRetiro).
+ * Devuelve el media id del audio de esa hora en esa estación, subiéndolo si
+ * aún no está. Como el nombre es determinista, a partir del segundo día ya no
+ * se sube nada: solo se consulta.
  */
-async function playlistAnuncios(az, stationId) {
-  const pls = (await az.getPlaylists(stationId)) || [];
-  const existe = pls.find((p) => p.name === PLAYLIST);
-  if (existe) {
-    if (!existe.is_jingle || !existe.is_enabled || existe.play_per_songs !== 1) {
-      await az.updatePlaylist(stationId, existe.id, { is_jingle: true, is_enabled: true, play_per_songs: 1, include_in_requests: false }).catch(() => {});
+async function asegurarArchivoHora(az, stationId, voz, hora, minuto, listaPrecargada = null) {
+  const nombre = nombreArchivo(voz, hora, minuto);
+  const files = listaPrecargada || (await az.listMedia(stationId)) || [];
+  const ya = files.find((f) => (f.path || '').split('/').pop() === nombre);
+  if (ya) return { id: ya.id, subido: false };
+
+  const mp3 = await generarHoraFragmentos(hora, minuto, voz);
+  const media = await az.uploadMedia(stationId, nombre, mp3.toString('base64'));
+  return { id: media.id, subido: true };
+}
+
+/**
+ * Crea/corrige las playlists de franja de una estación y deshabilita las que
+ * ya no correspondan (p.ej. el cliente pasó de cada 30 min a cada hora, o
+ * apagó la función). Idempotente: se puede llamar en cada guardado.
+ */
+async function sincronizarPlaylists(az, stationId, cfg) {
+  const activas = cfg.activo ? franjasDe(Number(cfg.cada_min)) : [];
+  const ids = {};
+  for (const min of TODAS_LAS_FRANJAS) {
+    const usada = activas.includes(min);
+    // Las franjas que no se usan se BORRAN, no se dejan deshabilitadas: así la
+    // estación no acumula playlists muertas visibles en la UI de AzuraCast.
+    if (!usada) {
+      await prog.borrarPlaylistPorNombre(az, stationId, nombrePlaylist(min)).catch(() => {});
+      continue;
     }
-    return existe.id;
+    ids[min] = await prog.playlistSincronizada(az, stationId, nombrePlaylist(min), {
+      type: 'once_per_hour',
+      play_per_hour_minute: min,
+    });
   }
-  const pl = await az.createPlaylist(stationId, {
-    name: PLAYLIST, type: 'default', source: 'songs',
-    is_jingle: true, is_enabled: true, play_per_songs: 1, include_in_requests: false, include_in_on_demand: false, weight: 1,
+  return ids;
+}
+
+/**
+ * Deja listo en AzuraCast el audio de la franja `min` de la hora `hora`.
+ * Es la única operación periódica: cambiar qué archivo está en la playlist.
+ */
+async function prepararFranja(az, stationId, cfg, hora, min) {
+  const plId = await prog.playlistSincronizada(az, stationId, nombrePlaylist(min), {
+    type: 'once_per_hour',
+    play_per_hour_minute: min,
   });
-  return pl.id;
+  // Una sola lectura del media de la estación para las dos operaciones (puede
+  // ser una biblioteca de miles de archivos).
+  let files = (await az.listMedia(stationId)) || [];
+  const { id, subido } = await asegurarArchivoHora(az, stationId, cfg.voz, hora, min, files);
+  if (subido) files = (await az.listMedia(stationId)) || [];   // el nuevo aún no estaba en la lista
+  await prog.ponerUnicoArchivo(az, stationId, plId, id, files);
+  return id;
 }
 
 /**
- * Quita (en segundo plano) el archivo de su playlist tras sonar UNA vez, para que
- * el jingle no se repita entre canciones. Como los jingles NO salen en el "ahora
- * suena", no se puede detectar: se calcula por TIEMPO = lo que le falta a la
- * canción actual (el jingle suena al terminarla) + un margen. Si no hay dato de
- * la canción, usa un tiempo prudente. `borrarClienteId` borra los anuncios viejos.
+ * Prueba manual desde el panel: hace sonar la hora ACTUAL cuanto antes.
+ * A diferencia de la programación normal, aquí sí tiramos la cola pre-armada
+ * (`reproducirAhora`) porque el cliente está esperando oírlo.
  */
-async function programarRetiro(az, stationId, mediaNumId, { borrarClienteId = null } = {}) {
-  let espera = 150000;                                   // fallback ~2.5 min
-  try {
-    const np = await az.getNowPlaying(stationId);
-    const dur = np?.now_playing?.duration || 0;
-    const el = np?.now_playing?.elapsed || 0;
-    if (dur) espera = (Math.max(0, dur - el) + 25) * 1000;   // fin de canción + margen
-  } catch (_) {}
-  await sleep(espera);
-  if (mediaNumId != null) await az.setFilePlaylists(stationId, mediaNumId, []).catch(() => {});
-  if (borrarClienteId) await limpiarViejos(az, stationId, borrarClienteId, null);
-}
-
-/**
- * Borra TODOS los anuncios de hora viejos de un cliente (menos `keepId`).
- * Antes solo se recordaba el último en memoria; con los reinicios de pm2 se
- * acumulaban archivos (`anuncio-hora-31-...mp3`) que seguían sonando la hora
- * pasada. Esto barre todos por nombre, sobreviva o no el proceso.
- */
-async function limpiarViejos(az, stationId, clienteId, keepId) {
-  try {
-    const files = (await az.listMedia(stationId)) || [];
-    const rx = new RegExp(`(^|/)anuncio-hora-${clienteId}(-|\\.)`);
-    for (const f of files) {
-      if (f.id !== keepId && rx.test(f.path || f.title || '')) {
-        await az.deleteMedia(stationId, f.id).catch(() => {});
-      }
-    }
-  } catch (_) {}
-}
-
-/** Genera la hora (voz de locutor por fragmentos) y la pone a sonar. */
-async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, con_clima = false, zona = null, voz = null } = {}) {
+async function anunciarEn(cliente, { zona = null, voz = null } = {}) {
   const az = await azuracast.paraServidorId(cliente.servidor_id);
   const stationId = cliente.azuracast_station_id;
   if (!stationId) return { ok: false, error: 'sin estación' };
 
-  // Hora actual EN LA ZONA del cliente (0-23, 0-59).
   const { hora, minuto } = zona ? partesEnZona(zona) : { hora: new Date().getHours(), minuto: new Date().getMinutes() };
-  const texto = textoHora(new Date(), { zona });                 // solo para el mensaje/log
-  let mp3;
+  const texto = textoHora(new Date(), { zona, hora, minuto });
+
+  let mediaId;
   try {
-    mp3 = await generarHoraFragmentos(hora, minuto, voz);        // voz de locutor real
+    mediaId = (await asegurarArchivoHora(az, stationId, voz, hora, minuto)).id;
   } catch (e) {
     return { ok: false, error: `no se pudo armar la hora: ${e.message}` };
   }
-  // Nombre ÚNICO cada vez: si se reusa el mismo, AzuraCast puede reproducir la
-  // versión vieja (aún sin re-analizar) y decir una hora pasada.
-  const nombre = `anuncio-hora-${cliente.id}-${Date.now()}.mp3`;
 
-  const media = await az.uploadMedia(stationId, nombre, mp3.toString('base64'));
-  await limpiarViejos(az, stationId, cliente.id, media.id);      // fuera anuncios viejos ANTES
-  const plId = await playlistAnuncios(az, stationId);            // playlist jingle
-  await az.setFilePlaylists(stationId, media.id, [plId]);        // queda como jingle → suena tras la canción
-  // En segundo plano: lo saca tras sonar una vez (por tiempo) para no repetir.
-  programarRetiro(az, stationId, media.id, { borrarClienteId: cliente.id })
-    .catch((e) => console.error('[anuncio] retiro:', e.message));
-  return { ok: true, texto };
+  const r = await prog.reproducirAhora(az, stationId, mediaId);
+  return { ok: true, texto, segundos: r.segundos };
 }
 
 // ---- Config (tabla anuncio_hora) ---------------------------------
@@ -242,6 +272,7 @@ async function verConfig(clienteId) {
   const { rows } = await query('SELECT cliente_id, activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria, voz FROM anuncio_hora WHERE cliente_id = $1', [clienteId]);
   return rows[0] || { cliente_id: clienteId, activo: false, cada_min: 60, con_saludo: false, ciudad: null, con_clima: false, zona_horaria: DEFAULT_TZ, voz: 'hombre' };
 }
+
 async function guardarConfig(clienteId, { activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria, voz }) {
   const cada = [15, 30, 60].includes(Number(cada_min)) ? Number(cada_min) : 60;
   const ciu = ciudad !== undefined ? (String(ciudad || '').trim().slice(0, 120) || null) : undefined;
@@ -257,38 +288,101 @@ async function guardarConfig(clienteId, { activo, cada_min, con_saludo, ciudad, 
        voz = COALESCE($8, anuncio_hora.voz), updated_at = now()`,
     [clienteId, Boolean(activo), cada, Boolean(con_saludo), ciu ?? null, Boolean(con_clima), zona, vz]
   );
-  return verConfig(clienteId);
+
+  const cfg = await verConfig(clienteId);
+  // Aplica el cambio en AzuraCast al momento: si el cliente apagó la función o
+  // cambió la frecuencia, no tiene por qué esperar al siguiente tick.
+  try {
+    const cliente = await clienteModel.findById(clienteId);
+    if (cliente?.azuracast_station_id) {
+      const az = await azuracast.paraServidorId(cliente.servidor_id);
+      await prog.sincronizarZona(az, cliente.azuracast_station_id, cfg.zona_horaria);
+      await sincronizarPlaylists(az, cliente.azuracast_station_id, cfg);
+    }
+  } catch (e) { console.error('[anuncio] sincronizar config:', e.message); }
+
+  return cfg;
 }
 
 // ---- Planificador -------------------------------------------------
+// Ya no dispara el anuncio: solo deja el archivo correcto en la playlist con
+// ANTICIPO_MIN de adelanto. Quien lo pone al aire, puntual, es AzuraCast.
 let timer = null;
-const ultimoSlotPorCliente = new Map();   // cliente_id -> "HH:MM" ya anunciado
+let corriendo = false;         // el tick puede tardar más de un minuto; no se solapa
+const preparado = new Map();   // `${clienteId}:${min}` -> hora ya dejada lista
 
 async function tick() {
-  if (new Date().getSeconds() > 20) return;         // solo al comienzo del minuto
+  if (corriendo) return;       // una biblioteca de ~1000 archivos tarda ~3s por lectura
+  corriendo = true;
   try {
-    const { rows } = await query('SELECT cliente_id, cada_min, con_saludo, ciudad, con_clima, zona_horaria, voz FROM anuncio_hora WHERE activo = true');
+    const { rows } = await query(
+      'SELECT cliente_id, cada_min, zona_horaria, voz FROM anuncio_hora WHERE activo = true'
+    );
+
     for (const cfg of rows) {
-      const zona = cfg.zona_horaria || DEFAULT_TZ;
-      const { hora, minuto } = partesEnZona(zona);   // hora LOCAL del cliente
-      if (minuto % cfg.cada_min !== 0) continue;      // no toca en esta franja
-      const slot = `${hora}:${minuto}`;
-      if (ultimoSlotPorCliente.get(cfg.cliente_id) === slot) continue;   // ya sonó este minuto
-      const cliente = await clienteModel.findById(cfg.cliente_id);
-      if (!cliente?.azuracast_station_id || cliente.tipo === 'video' || !cliente.activo) continue;
-      ultimoSlotPorCliente.set(cfg.cliente_id, slot);
-      // skip:false → NO corta la canción actual; el anuncio suena cuando termina.
-      anunciarEn(cliente, { skip: false, saludo: cfg.con_saludo ? 'Atención' : null, ciudad: cfg.ciudad, con_clima: cfg.con_clima, zona, voz: cfg.voz })
-        .then((r) => console.log(`[anuncio] ${cliente.nombre_empresa}: ${r.texto || r.error}`))
-        .catch((e) => console.error(`[anuncio] ${cliente.nombre_empresa}:`, e.message));
+      try {
+        const zona = cfg.zona_horaria || DEFAULT_TZ;
+        const { hora, minuto } = partesEnZona(zona);
+
+        // Qué franjas toca preparar. Se calcula ANTES de ir a la BD y a
+        // AzuraCast: en la inmensa mayoría de los ticks no hay nada que hacer.
+        const pendientes = [];
+        for (const min of franjasDe(Number(cfg.cada_min))) {
+          // Minutos hasta la PRÓXIMA vez que den las HH:min. Si estamos justo
+          // en :min, la próxima es dentro de una hora (60, no 0): si no, al dar
+          // la hora sobrescribiríamos el archivo que está a punto de sonar.
+          const faltan = (min - minuto + 60) % 60 || 60;
+          if (faltan > ANTICIPO_MIN) continue;
+          const horaObjetivo = (hora + Math.floor((minuto + faltan) / 60)) % 24;
+          if (preparado.get(`${cfg.cliente_id}:${min}`) === horaObjetivo) continue;
+          pendientes.push({ min, horaObjetivo, faltan });
+        }
+        if (!pendientes.length) continue;
+
+        const cliente = await clienteModel.findById(cfg.cliente_id);
+        if (!cliente?.azuracast_station_id || cliente.tipo === 'video' || !cliente.activo) continue;
+        const az = await azuracast.paraServidorId(cliente.servidor_id);
+
+        for (const { min, horaObjetivo, faltan } of pendientes) {
+          await prepararFranja(az, cliente.azuracast_station_id, cfg, horaObjetivo, min);
+          preparado.set(`${cfg.cliente_id}:${min}`, horaObjetivo);
+          console.log(`[anuncio] ${cliente.nombre_empresa}: listo ${String(horaObjetivo).padStart(2, '0')}:${String(min).padStart(2, '0')} (${faltan} min antes)`);
+        }
+      } catch (e) {
+        console.error(`[anuncio] cliente ${cfg.cliente_id}:`, e.message);
+      }
     }
-  } catch (e) { console.error('[anuncio] tick:', e.message); }
+  } finally {
+    corriendo = false;
+  }
+}
+
+/**
+ * Al arrancar: barre las playlists de prueba que hayan quedado con un archivo
+ * dentro por un pm2 restart a media prueba (si no, sonarían entre cada canción).
+ */
+async function limpiarAlArrancar() {
+  const { rows } = await query(
+    `SELECT id, servidor_id, azuracast_station_id FROM clientes
+      WHERE activo = true AND tipo IS DISTINCT FROM 'video' AND azuracast_station_id IS NOT NULL`
+  );
+  for (const c of rows) {
+    try {
+      const az = await azuracast.paraServidorId(c.servidor_id);
+      await prog.limpiarPruebas(az, c.azuracast_station_id);
+    } catch (_) { /* estación caída: se reintenta en el próximo arranque */ }
+  }
 }
 
 function iniciar() {
   if (timer) return;
-  timer = setInterval(() => tick().catch((e) => console.error('[anuncio]', e.message)), 15000);
-  console.log('⏰ Anuncio de hora activo (revisa cada 15s las franjas configuradas)');
+  timer = setInterval(() => tick().catch((e) => console.error('[anuncio] tick:', e.message)), 60000);
+  tick().catch((e) => console.error('[anuncio] tick inicial:', e.message));
+  sleep(5000).then(limpiarAlArrancar).catch((e) => console.error('[anuncio] limpieza inicial:', e.message));
+  console.log(`⏰ Anuncio de hora activo (prepara cada franja ${ANTICIPO_MIN} min antes; lo dispara AzuraCast)`);
 }
 
-module.exports = { iniciar, verConfig, guardarConfig, anunciarEn, textoHora, generarVoz, climaTexto, programarRetiro, playlistAnuncios };
+module.exports = {
+  iniciar, verConfig, guardarConfig, anunciarEn, textoHora, generarVoz, climaTexto,
+  sincronizarPlaylists, prepararFranja, franjasDe, nombrePlaylist, asegurarArchivoHora, TODAS_LAS_FRANJAS,
+};

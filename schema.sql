@@ -238,6 +238,12 @@ ALTER TABLE anuncio_hora ADD COLUMN IF NOT EXISTS zona_horaria VARCHAR(64) DEFAU
 -- 'femenina' (Google TTS). Por defecto la de locutor si está configurada.
 ALTER TABLE anuncio_hora ADD COLUMN IF NOT EXISTS voz VARCHAR(16) DEFAULT 'masculina';
 
+-- Playlist de AzuraCast que programa esta cuña (una por cuña, con sus
+-- schedule_items). Antes la programación la hacía un planificador en Node que
+-- metía el archivo a una playlist compartida en el minuto exacto: no podía
+-- funcionar porque la cola de AzuraCast va armada 10-20 min por delante.
+ALTER TABLE cunas ADD COLUMN IF NOT EXISTS playlist_id INTEGER;
+
 -- Índices para búsquedas frecuentes
 CREATE INDEX IF NOT EXISTS idx_clientes_user_id     ON clientes(user_id);
 CREATE INDEX IF NOT EXISTS idx_suscripciones_cliente ON suscripciones(cliente_id);
