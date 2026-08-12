@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth';
+import { apiFetch } from '../api';
+import Player from './Player';
 import {
   IconDashboard, IconUsers, IconRadio, IconInvoice, IconChart,
   IconMic, IconMusic, IconPlaylist, IconSliders, IconSettings, IconShare, IconServer,
@@ -155,6 +158,57 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {role === 'admin' && <MonitorRadio />}
     </aside>
+  );
+}
+
+/**
+ * Monitor de radio, anclado al pie del sidebar.
+ *
+ * Antes vivía en una tarjeta del Dashboard, así que al navegar a cualquier otra
+ * página se desmontaba y se cortaba el audio. Aquí el sidebar no se remonta al
+ * cambiar de ruta: puedes dejar una estación sonando mientras trabajas, que es
+ * justo para lo que sirve un monitor.
+ */
+function MonitorRadio() {
+  const [radios, setRadios] = useState([]);
+  const [sel, setSel] = useState('');
+  const [abierto, setAbierto] = useState(false);
+
+  useEffect(() => {
+    apiFetch('/admin/clientes')
+      .then((d) => setRadios((d.clientes || []).filter((c) => c.url_streaming && (c.tipo || 'audio') !== 'video')))
+      .catch(() => {});
+  }, []);
+
+  if (radios.length === 0) return null;
+  const actual = radios.find((r) => String(r.id) === String(sel)) || radios[0];
+
+  return (
+    <div className="shrink-0 border-t border-gray-200 dark:border-gray-800 p-3">
+      <button
+        onClick={() => setAbierto((v) => !v)}
+        className="w-full flex items-center gap-2 text-[11px] uppercase tracking-wide text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition mb-2"
+      >
+        <IconRadio width={14} height={14} />
+        <span className="flex-1 text-left">Monitor de radio</span>
+        <span>{abierto ? '▾' : '▸'}</span>
+      </button>
+
+      {abierto && (
+        <div className="space-y-2">
+          <select
+            className="input !py-1.5 !text-xs"
+            value={actual?.id || ''}
+            onChange={(e) => setSel(e.target.value)}
+          >
+            {radios.map((r) => <option key={r.id} value={r.id}>{r.nombre_empresa}</option>)}
+          </select>
+          {actual && <Player src={actual.url_streaming} title={actual.nombre_empresa} subtitle="Monitoreando" />}
+        </div>
+      )}
+    </div>
   );
 }

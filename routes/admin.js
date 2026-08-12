@@ -862,6 +862,11 @@ router.get('/banda', requireAdmin, wrap(async (req, res) => {
       nombre: s.nombre,
       activo: s.activo,
       tipo: s.tipo || 'audio',
+      // Ocupación del nodo: cuántas radios/canales aloja y de cuántos caben.
+      // El Guardián lo pinta junto a la banda — un nodo puede ir sobrado de
+      // tráfico y estar lleno de cuentas, o al revés.
+      radios: s.radios ?? 0,
+      capacidad: s.capacidad_radios ?? 0,
       consumido_gb: r2(gb),
       tope_gb: tope,
       pct: tope ? Math.min(100, Math.round(pct)) : null,

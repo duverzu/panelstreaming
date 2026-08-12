@@ -35,27 +35,37 @@ export default function GuardianBanda() {
   if (!cargado || servidores.length === 0) return null;
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center justify-between mb-4">
+    <div>
+      <div className="flex items-center justify-between mb-3">
         <h2 className="font-semibold flex items-center gap-2">
           🛡️ Guardián de banda
           <span className="text-xs font-normal text-gray-400">(consumo estimado del mes)</span>
         </h2>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* Una tarjeta por nodo, en fila. Antes iban dentro de una sola tarjeta
+          en dos columnas, y el tercer nodo caía suelto en una fila aparte. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {servidores.map((s) => {
           const e = ESTADO[s.estado] || ESTADO['sin-tope'];
           const conTope = Boolean(s.tope_gb);
           const datosChart = s.por_dia.map((d) => ({ label: String(d.dia), valor: d.gb }));
+          const esVideo = s.tipo === 'video';
+          const pctOcup = s.capacidad ? Math.min(100, Math.round((s.radios / s.capacidad) * 100)) : null;
 
           return (
-            <div key={s.id} className="rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-medium">{s.nombre}</span>
+            <div key={s.id} className="card p-5">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-medium flex items-center gap-1.5">
+                  <span className="text-xs">{esVideo ? '🎬' : '🎙️'}</span>{s.nombre}
+                </span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${e.clase}`}>
                   {e.icono} {e.texto}
                 </span>
+              </div>
+              <div className="text-[11px] text-gray-400 mb-3">
+                {esVideo ? 'Nodo de video' : 'Nodo de audio'}
+                {!s.activo && <span className="ml-1.5 text-amber-500">· pausado</span>}
               </div>
 
               {conTope ? (
@@ -103,7 +113,27 @@ export default function GuardianBanda() {
                 </div>
               )}
 
-              <div className="text-[11px] text-gray-400 mt-3 mb-1">Consumo por día (GB)</div>
+              {/* Ocupación del nodo. La banda dice cuánto TRÁFICO queda; esto,
+                  cuántas CUENTAS caben. Un nodo puede ir sobrado de una cosa y
+                  al límite de la otra, y son decisiones distintas. */}
+              {pctOcup != null && (
+                <div className="mt-3">
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="text-gray-400">{esVideo ? 'Canales alojados' : 'Radios alojadas'}</span>
+                    <span className="tabular-nums font-medium">{s.radios} / {s.capacidad}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${pctOcup >= 100 ? 'bg-red-500' : pctOcup > 80 ? 'bg-amber-500' : esVideo ? 'bg-fuchsia-500' : 'bg-brand-500'}`}
+                      style={{ width: pctOcup + '%' }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="text-[11px] text-gray-400 mt-3 mb-1">
+                Consumo por día (GB) <span className="text-gray-300 dark:text-gray-600">· quedan {s.dias_restantes} días de mes</span>
+              </div>
               <BarChart data={datosChart} height={110} unidad=" GB" />
             </div>
           );

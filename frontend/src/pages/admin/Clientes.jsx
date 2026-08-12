@@ -270,12 +270,27 @@ export default function AdminClientes() {
                 lista.map((c) => {
                   const est = ESTADO_BADGE[estados[c.id]] || ESTADO_BADGE.offline;
                   const suspendido = estados[c.id] === 'suspendido' || !c.activo;
+                  const esV = c.tipo === 'video';
                   return (
                     <tr key={c.id} className="border-b border-gray-50 dark:border-gray-800/60 last:border-0">
                       <td className="py-3 pr-3">
-                        <div className="font-medium flex items-center gap-1.5">
-                          {esTodo && <span title={c.tipo === 'video' ? 'Video' : 'Audio'}>{c.tipo === 'video' ? '🎬' : '🎙️'}</span>}
-                          {c.nombre_empresa}
+                        <div className="font-medium flex items-center gap-2">
+                          {/* Franja de color a la izquierda: de un vistazo se ve
+                              dónde acaban las radios y empiezan los canales,
+                              sin tener que leer etiqueta por etiqueta. */}
+                          {esTodo && (
+                            <span className={`w-1 h-8 rounded-full shrink-0 ${esV ? 'bg-fuchsia-500' : 'bg-brand-500'}`} />
+                          )}
+                          <span className="truncate">{c.nombre_empresa}</span>
+                          {esTodo && (
+                            <span className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full ${
+                              esV
+                                ? 'bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-500/10 dark:text-fuchsia-400'
+                                : 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400'
+                            }`}>
+                              {esV ? '🎬 Video' : '🎙️ Audio'}
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-gray-400">
                           <span className="font-mono">{c.username}</span>{c.email ? ` · ${c.email}` : ''}

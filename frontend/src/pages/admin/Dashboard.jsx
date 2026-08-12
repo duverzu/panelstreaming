@@ -4,8 +4,6 @@ import { useAmbito } from '../../ambito';
 import DonutChart from '../../components/charts/DonutChart';
 import ServerStats from '../../components/ServerStats';
 import GuardianBanda from '../../components/GuardianBanda';
-import Player from '../../components/Player';
-import { IconRadio } from '../../icons';
 
 /** GB legible: 850 GB, 2.4 TB… */
 function tam(gb) {
@@ -25,12 +23,60 @@ function Metric({ label, value, hint, destacado }) {
   );
 }
 
+/** "hace 3 días", "hoy"… en vez de una fecha que hay que interpretar. */
+function haceCuanto(iso) {
+  if (!iso) return '';
+  const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (dias <= 0) return 'hoy';
+  if (dias === 1) return 'ayer';
+  if (dias < 30) return `hace ${dias} días`;
+  const meses = Math.round(dias / 30);
+  return meses <= 1 ? 'hace 1 mes' : `hace ${meses} meses`;
+}
+
+/** Últimas altas: qué se ha dado de alta y cuándo. */
+function Recientes({ clientes, esTodo, esVideo, esAudio }) {
+  const visibles = clientes
+    .filter((c) => (esTodo ? true : esVideo ? c.tipo === 'video' : (c.tipo || 'audio') !== 'video'))
+    .filter((c) => c.created_at)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 8);
+
+  const titulo = esTodo ? 'Últimas altas' : esVideo ? 'Últimos canales creados' : 'Últimas radios creadas';
+
+  return (
+    <div className="card p-5">
+      <h2 className="font-semibold mb-4">{titulo}</h2>
+      {visibles.length === 0 ? (
+        <p className="text-sm text-gray-400 py-6 text-center">Todavía no hay altas registradas.</p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+          {visibles.map((c) => {
+            const esV = c.tipo === 'video';
+            return (
+              <div key={c.id} className="flex items-center gap-3 py-2 border-b border-gray-50 dark:border-gray-800/60 last:border-0">
+                <span className={`w-1 h-8 rounded-full shrink-0 ${esV ? 'bg-fuchsia-500' : 'bg-brand-500'}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{c.nombre_empresa}</div>
+                  <div className="text-[11px] text-gray-400 truncate">
+                    {esV ? '🎬 Canal' : '🎙️ Radio'} · {c.plan}
+                  </div>
+                </div>
+                <span className="text-[11px] text-gray-400 shrink-0">{haceCuanto(c.created_at)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [clientes, setClientes] = useState([]);
   const [banda, setBanda] = useState([]);
   const [videoViewers, setVideoViewers] = useState(null);
-  const [monitorId, setMonitorId] = useState('');
 
   useEffect(() => {
     const load = () => {
@@ -62,16 +108,13 @@ export default function AdminDashboard() {
   const transferAudio = nodosAudio.reduce((a, s) => a + (s.consumido_gb || 0), 0);
   const transferVideo = nodosVideo.reduce((a, s) => a + (s.consumido_gb || 0), 0);
 
-  const conStream = audio.filter((c) => c.url_streaming);
-  const monitor = conStream.find((c) => String(c.id) === String(monitorId)) || conStream[0];
-
   return (
     <div className="space-y-6">
       {/* ═══ 1) GUARDIÁN DE BANDA — lo primero: salud de todos los nodos ═══ */}
       <GuardianBanda />
 
-      {/* ═══ 2) RESUMEN POR SERVICIO — audio y video, separaditos ═══ */}
-      <div className={`grid grid-cols-1 gap-6 ${esTodo ? 'lg:grid-cols-2' : ''}`}>
+      {/* ═══ 2) RESUMEN: audio · video · VPS, uno al lado del otro ═══ */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {/* ─── AUDIO ─── */}
         {!esVideo && (
         <div className="card p-5">
@@ -101,12 +144,15 @@ export default function AdminDashboard() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Metric label="Viewers en vivo" value={videoViewers?.total ?? 0} hint="todos los canales" destacado />
-            <Metric label="Canales" value={video.length} hint={`${activos(video)} activos`} />
+            <Metric label="Canales al aire" value={videoViewers?.al_aire ?? '—'} hint={`de ${video.length} canales`} />
             <Metric label="Clientes de video" value={video.length} hint={`${activos(video)} activos`} />
             <Metric label="Transferencia" value={tam(transferVideo)} hint="este mes" />
           </div>
         </div>
         )}
+
+        {/* ─── VPS ─── */}
+        <ServerStats />
       </div>
 
       {/* ═══ 3) DETALLE AUDIO: dona de estado + ranking ═══ */}
@@ -147,22 +193,9 @@ export default function AdminDashboard() {
       </div>
       )}
 
-      {/* ═══ 4) INFRAESTRUCTURA: VPS + monitor de radio ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ServerStats />
-        <div className="card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold flex items-center gap-2"><IconRadio width={18} height={18} /> Monitor de radio</h2>
-            {conStream.length > 0 && (
-              <select className="input !w-auto !py-1.5 text-sm" value={monitor?.id || ''} onChange={(e) => setMonitorId(e.target.value)}>
-                {conStream.map((c) => <option key={c.id} value={c.id}>{c.nombre_empresa}</option>)}
-              </select>
-            )}
-          </div>
-          {monitor ? <Player src={monitor.url_streaming} title={monitor.nombre_empresa} subtitle="Monitoreando" />
-            : <p className="text-sm text-gray-400">Ninguna estación con stream disponible aún.</p>}
-        </div>
-      </div>
+      {/* ═══ 4) ALTAS RECIENTES ═══ */}
+      <Recientes clientes={clientes} esTodo={esTodo} esVideo={esVideo} esAudio={esAudio} />
+
     </div>
   );
 }
