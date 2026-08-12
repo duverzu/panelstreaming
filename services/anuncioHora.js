@@ -68,12 +68,32 @@ const VOZ_CARPETA = {
 };
 const FFMPEG = process.env.FFMPEG || 'ffmpeg';
 
-/** Concatena varios mp3 en un Buffer (re-encodea para evitar cortes/clicks). */
-function concatMp3(files) {
+/**
+ * Silencio (en segundos) que se antepone y añade al anuncio.
+ *
+ * POR QUÉ: la estación aplica un crossfade (2s por defecto) al entrar cada
+ * pista, así que los primeros segundos del anuncio se mezclan por debajo de la
+ * canción que sale. Y la HORA es justo lo primero que se dice, y es cortísima:
+ * el fragmento "las siete" dura 0,68s y el de "en punto" 1,3s — o sea que un
+ * anuncio "en punto" entero (1,3s) cabe dentro del crossfade y NO SE OYE NADA.
+ * Con este colchón, el crossfade se come silencio y la hora entra limpia.
+ *
+ * Debe ser mayor que el `crossfade` de la estación (2s). El de cola evita que
+ * el fade de salida se coma la última sílaba.
+ */
+const LEAD_IN_S = Number(process.env.ANUNCIO_LEAD_IN || 3);
+const TAIL_S = Number(process.env.ANUNCIO_TAIL || 1);
+const SILENCIO = ['-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo'];
+
+/** Concatena mp3 en un Buffer, con colchón de silencio al inicio y al final. */
+function concatMp3(files, { leadIn = 0, tail = 0 } = {}) {
   return new Promise((resolve, reject) => {
     const args = ['-hide_banner', '-loglevel', 'error'];
-    files.forEach((f) => args.push('-i', f));
-    const filtro = files.map((_, i) => `[${i}:a]`).join('') + `concat=n=${files.length}:v=0:a=1[out]`;
+    let n = 0;
+    if (leadIn > 0) { args.push('-t', String(leadIn), ...SILENCIO); n++; }
+    files.forEach((f) => { args.push('-i', f); n++; });
+    if (tail > 0) { args.push('-t', String(tail), ...SILENCIO); n++; }
+    const filtro = Array.from({ length: n }, (_, i) => `[${i}:a]`).join('') + `concat=n=${n}:v=0:a=1[out]`;
     args.push('-filter_complex', filtro, '-map', '[out]', '-ac', '2', '-ar', '44100', '-b:a', '128k', '-f', 'mp3', 'pipe:1');
     const ff = spawn(FFMPEG, args);
     const out = [], err = [];
@@ -94,11 +114,9 @@ async function generarHoraFragmentos(hora, minuto, voz) {
     ? [path.join(dir, `HRS${hh}_O.mp3`)]                          // "…en punto"
     : [path.join(dir, `HRS${hh}.mp3`), path.join(dir, `MIN${mm}.mp3`)];
   for (const f of files) if (!fs.existsSync(f)) throw new Error(`falta fragmento ${path.basename(f)} (${carpeta})`);
-  // "En punto" es UN solo fragmento: no hay nada que concatenar, así que no se
-  // invoca ffmpeg. Con `cada_min: 60` (el caso normal) esto quita por completo
-  // la dependencia de ffmpeg del camino crítico.
-  if (files.length === 1) return fs.promises.readFile(files[0]);
-  return concatMp3(files);
+  // Siempre por ffmpeg, aunque sea un solo fragmento: hace falta para el
+  // colchón de silencio que protege la hora del crossfade (ver LEAD_IN_S).
+  return concatMp3(files, { leadIn: LEAD_IN_S, tail: TAIL_S });
 }
 
 // ---- Texto de la hora en español ---------------------------------
@@ -181,9 +199,22 @@ async function generarVoz(texto, { voz } = {}) {
 }
 
 // ---- Archivos de hora en AzuraCast --------------------------------
-/** `panel-hora-hombre-1430.mp3` — determinista, se sube una vez y se reutiliza. */
+/** `panel-hora-hombre-1430-li3.mp3` — determinista, se sube una vez y se reutiliza.
+ *  El sufijo `li<N>` es el colchón de silencio con que se generó: si se cambia
+ *  ANUNCIO_LEAD_IN, el nombre cambia y los audios se regeneran solos (y los
+ *  viejos los barre `limpiarHorasObsoletas`). */
+const SUFIJO = `-li${LEAD_IN_S}`;
 const nombreArchivo = (voz, hora, minuto) =>
-  `panel-hora-${VOZ_CARPETA[voz] ? voz : 'hombre'}-${String(hora).padStart(2, '0')}${String(minuto).padStart(2, '0')}.mp3`;
+  `panel-hora-${VOZ_CARPETA[voz] ? voz : 'hombre'}-${String(hora).padStart(2, '0')}${String(minuto).padStart(2, '0')}${SUFIJO}.mp3`;
+
+/** Borra los audios de hora generados con otro colchón (o sin él). */
+async function limpiarHorasObsoletas(az, stationId, files) {
+  for (const f of files) {
+    const n = (f.path || '').split('/').pop();
+    if (!/^panel-hora-/.test(n) || n.endsWith(`${SUFIJO}.mp3`)) continue;
+    await az.deleteMedia(stationId, f.id).catch(() => {});
+  }
+}
 
 /**
  * Devuelve el media id del audio de esa hora en esa estación, subiéndolo si
@@ -238,7 +269,10 @@ async function prepararFranja(az, stationId, cfg, hora, min) {
   // ser una biblioteca de miles de archivos).
   let files = (await az.listMedia(stationId)) || [];
   const { id, subido } = await asegurarArchivoHora(az, stationId, cfg.voz, hora, min, files);
-  if (subido) files = (await az.listMedia(stationId)) || [];   // el nuevo aún no estaba en la lista
+  if (subido) {
+    await limpiarHorasObsoletas(az, stationId, files);          // fuera los del colchón viejo
+    files = (await az.listMedia(stationId)) || [];              // el nuevo aún no estaba en la lista
+  }
   await prog.ponerUnicoArchivo(az, stationId, plId, id, files);
   return id;
 }
