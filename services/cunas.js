@@ -101,11 +101,24 @@ async function sincronizar(cliente, cuna) {
         loop_once: false,          // innecesario: once_per_hour ya limita a uno por hora
       })),
     });
-    await prog.ponerUnicoArchivo(az, stationId, plId, f.id, files);
     creadas.push(plId);
   }
 
   await limpiarPlaylistsSobrantes(az, stationId, cuna, porMinuto);
+
+  // El archivo entra en TODAS sus playlists de una sola vez.
+  //
+  // Antes esto se hacía con un `ponerUnicoArchivo` por playlist dentro del
+  // bucle, pero todas leían la MISMA foto de `files`: cada iteración recalculaba
+  // las playlists del archivo desde ese estado viejo y pisaba a la anterior, así
+  // que solo sobrevivía la última y las demás quedaban vacías (arch=0).
+  const idsDeEstaCuna = new Set(
+    ((await az.getPlaylists(stationId)) || [])
+      .filter((p) => RX_PLAYLIST_CUNA.exec(p.name || '')?.[1] === String(cuna.id))
+      .map((p) => p.id)
+  );
+  const otras = (f.playlists || []).map((p) => p.id).filter((id) => !idsDeEstaCuna.has(id));
+  await az.setFilePlaylists(stationId, f.id, [...new Set([...otras, ...creadas])]);
   await query('UPDATE cunas SET playlist_id = $1 WHERE id = $2', [creadas[0] ?? null, cuna.id]);
   return creadas[0] ?? null;
 }
