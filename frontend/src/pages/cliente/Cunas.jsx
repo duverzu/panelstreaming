@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { apiFetch, apiUpload } from '../../api';
 import { IconPlus, IconTrash } from '../../icons';
 
-const VACIA = { nombre: '', tipo: 'texto', texto: '', horas: ['08:00'], activo: true };
+const VACIA = { nombre: '', tipo: 'audio', horas: ['08:00'], activo: true };
 
 export default function ClienteCunas() {
   const [lista, setLista] = useState(undefined);
@@ -20,12 +20,14 @@ export default function ClienteCunas() {
   async function guardar() {
     setOcupado(true); setMsg(null);
     try {
-      const r = await apiFetch('/cliente/cunas', { method: 'POST', body: JSON.stringify(form) });
-      // si es de audio y hay archivo pendiente, súbelo
+      const r = await apiFetch('/cliente/cunas', { method: 'POST', body: JSON.stringify({ ...form, tipo: 'audio' }) });
+      // sube el audio si hay archivo pendiente
       const file = fileRef.current?.files?.[0];
-      if (form.tipo === 'audio' && file) {
+      if (file) {
         const fd = new FormData(); fd.append('archivo', file);
         await apiUpload(`/cliente/cunas/${r.id}/audio`, fd);
+      } else if (!form.lista) {
+        setMsg({ ok: false, text: 'Sube un MP3 para la cuña.' }); setOcupado(false); return;
       }
       setMsg({ ok: true, text: 'Cuña guardada ✅' });
       setForm(null); cargar();
@@ -56,7 +58,7 @@ export default function ClienteCunas() {
           <h2 className="font-semibold">📣 Cuñas y anuncios programados</h2>
           {!form && <button onClick={nueva} className="btn-primary !py-2 !px-3 text-xs"><IconPlus width={15} height={15} /> Nueva cuña</button>}
         </div>
-        <p className="text-xs text-gray-400">Mensajes propios que suenan a horas fijas: promos, ID de la emisora, avisos. Con voz automática o subiendo tu propio audio (tu locutor).</p>
+        <p className="text-xs text-gray-400">Mensajes propios que suenan a horas fijas: promos, ID de la emisora, avisos. Sube tu propio audio (tu locutor) en MP3.</p>
       </div>
 
       {/* Formulario */}
@@ -67,23 +69,9 @@ export default function ClienteCunas() {
           <div><label className="label">Nombre</label>
             <input className="input" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Ej: Promo del mediodía" /></div>
 
-          <div>
-            <label className="label">Tipo</label>
-            <select className="input !w-auto" value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
-              <option value="texto">🗣️ Texto (voz automática)</option>
-              <option value="audio">🎙️ Mi audio (subir MP3 con mi locutor)</option>
-            </select>
-          </div>
-
-          {form.tipo === 'texto' ? (
-            <div><label className="label">Texto que dirá</label>
-              <textarea className="input" rows="2" value={form.texto} onChange={(e) => setForm({ ...form, texto: e.target.value })}
-                placeholder="Ej: Estás escuchando Radio Ejemplo, la number one." /></div>
-          ) : (
-            <div><label className="label">Audio (MP3)</label>
-              <input ref={fileRef} type="file" accept=".mp3,audio/mpeg" className="text-sm" />
-              <p className="text-[11px] text-gray-400 mt-1">{form.lista ? 'Ya tiene un audio. Sube uno para reemplazarlo.' : 'Sube el MP3 con tu locutor.'}</p></div>
-          )}
+          <div><label className="label">Audio (MP3)</label>
+            <input ref={fileRef} type="file" accept=".mp3,audio/mpeg" className="text-sm" />
+            <p className="text-[11px] text-gray-400 mt-1">{form.lista ? 'Ya tiene un audio. Sube uno para reemplazarlo.' : 'Sube el MP3 con tu locutor.'}</p></div>
 
           <div>
             <label className="label">¿A qué horas suena?</label>

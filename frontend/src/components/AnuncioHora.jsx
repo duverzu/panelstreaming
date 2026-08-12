@@ -61,17 +61,17 @@ export default function AnuncioHora() {
 
       <div>
         <label className="label">Voz del locutor</label>
-        <div className="flex gap-2">
-          {[['masculina', '👨 Masculina'], ['femenina', '👩 Femenina']].map(([v, t]) => (
+        <div className="flex gap-2 flex-wrap">
+          {[['hombre', '👨 Hombre'], ['hombre_cantada', '🎵 Cantada'], ['mujer', '👩 Mujer']].map(([v, t]) => (
             <button key={v} type="button" disabled={ocupado} onClick={() => guardar({ voz: v })}
-              className={`px-3 py-1.5 rounded-xl text-sm border transition ${(cfg.voz || 'masculina') === v
+              className={`px-3 py-1.5 rounded-xl text-sm border transition ${(cfg.voz || 'hombre') === v
                 ? 'bg-brand-500 text-white border-brand-500'
                 : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
               {t}
             </button>
           ))}
         </div>
-        <p className="text-[11px] text-gray-400 mt-1">Voz que dice la <b>hora y las cuñas de texto</b>. La masculina es de locutor (más natural); la femenina es la voz estándar. Las cuñas ya creadas conservan su voz.</p>
+        <p className="text-[11px] text-gray-400 mt-1">Voces de <b>locutor real</b> (grabadas) que dicen la hora. Elige la que va con tu emisora.</p>
       </div>
 
       <label className="flex items-center gap-2 cursor-pointer">
@@ -87,25 +87,6 @@ export default function AnuncioHora() {
               {CADA.map((o) => <option key={o.v} value={o.v}>{o.t}</option>)}
             </select>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer text-sm">
-            <input type="checkbox" checked={cfg.con_saludo} disabled={ocupado} onChange={(e) => guardar({ con_saludo: e.target.checked })} />
-            Anteponer un saludo («Atención…»)
-          </label>
-
-          {/* Clima */}
-          <label className="flex items-center gap-2 cursor-pointer text-sm">
-            <input type="checkbox" checked={cfg.con_clima} disabled={ocupado} onChange={(e) => guardar({ con_clima: e.target.checked })} />
-            Decir también el clima 🌤️
-          </label>
-          {cfg.con_clima && (
-            <div>
-              <label className="label">Ciudad (para el clima)</label>
-              <input className="input !w-auto text-sm" defaultValue={cfg.ciudad || ''} placeholder="Ej: Cali"
-                onBlur={(e) => e.target.value.trim() !== (cfg.ciudad || '') && guardar({ ciudad: e.target.value.trim() })} />
-              <p className="text-[11px] text-gray-400 mt-1">Ej: «…y ahora mismo 26 grados en Cali, despejado». Escribe la ciudad y sal del campo para guardar.</p>
-            </div>
-          )}
-
           <button type="button" onClick={probar} disabled={ocupado} className="btn-ghost !py-1.5 !px-3 text-xs">🔊 Probar ahora</button>
           <p className="text-[11px] text-gray-400">Al probar, el anuncio suena <b>al terminar la canción que esté sonando</b> (no la corta). No es instantáneo: espera a que acabe el tema actual.</p>
         </div>

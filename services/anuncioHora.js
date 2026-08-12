@@ -14,7 +14,9 @@
  * CONFIG por cliente en la tabla `anuncio_hora` (activo, cada_min, con_saludo).
  * ------------------------------------------------------------------
  */
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const { query } = require('../config/database');
 const clienteModel = require('./../models/clienteModel');
 const azuracast = require('./azuracast');
@@ -22,6 +24,46 @@ const { partesEnZona, DEFAULT_TZ } = require('./zonaHoraria');
 
 const PLAYLIST = '⏰ Anuncio de hora';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---- Voz de LOCUTOR por fragmentos (carpeta times/) --------------
+// Set profesional: HRSxx = "son las xx", HRSxx_O = "son las xx en punto",
+// MINmm = "y mm". La hora se arma concatenando con ffmpeg. 3 voces.
+const TIMES_DIR = path.join(__dirname, '..', 'times');
+const VOZ_CARPETA = {
+  hombre: '1hombre', hombre_cantada: '2hombrecantada', mujer: '3mujer',
+  // compatibilidad con valores viejos:
+  masculina: '1hombre', femenina: '3mujer',
+};
+const FFMPEG = process.env.FFMPEG || 'ffmpeg';
+
+/** Concatena varios mp3 en un Buffer (re-encodea para evitar cortes/clicks). */
+function concatMp3(files) {
+  return new Promise((resolve, reject) => {
+    const args = ['-hide_banner', '-loglevel', 'error'];
+    files.forEach((f) => args.push('-i', f));
+    const filtro = files.map((_, i) => `[${i}:a]`).join('') + `concat=n=${files.length}:v=0:a=1[out]`;
+    args.push('-filter_complex', filtro, '-map', '[out]', '-ac', '2', '-ar', '44100', '-b:a', '128k', '-f', 'mp3', 'pipe:1');
+    const ff = spawn(FFMPEG, args);
+    const out = [], err = [];
+    ff.stdout.on('data', (d) => out.push(d));
+    ff.stderr.on('data', (d) => err.push(d));
+    ff.on('error', reject);
+    ff.on('close', (c) => c === 0 ? resolve(Buffer.concat(out)) : reject(new Error('ffmpeg: ' + Buffer.concat(err).toString().slice(0, 200))));
+  });
+}
+
+/** Arma "son las HH y MM" con la voz de locutor elegida. Devuelve un mp3 Buffer. */
+async function generarHoraFragmentos(hora, minuto, voz) {
+  const carpeta = VOZ_CARPETA[voz] || VOZ_CARPETA.hombre;
+  const dir = path.join(TIMES_DIR, carpeta);
+  const hh = String(hora).padStart(2, '0');
+  const mm = String(minuto).padStart(2, '0');
+  const files = minuto === 0
+    ? [path.join(dir, `HRS${hh}_O.mp3`)]                          // "…en punto"
+    : [path.join(dir, `HRS${hh}.mp3`), path.join(dir, `MIN${mm}.mp3`)];
+  for (const f of files) if (!fs.existsSync(f)) throw new Error(`falta fragmento ${path.basename(f)} (${carpeta})`);
+  return concatMp3(files);
+}
 
 // ---- Texto de la hora en español ---------------------------------
 const HORAS = ['', 'una', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez', 'once', 'doce'];
@@ -166,21 +208,23 @@ async function limpiarViejos(az, stationId, clienteId, keepId) {
   } catch (_) {}
 }
 
-/** Genera la hora y la pone a sonar en una estación. */
+/** Genera la hora (voz de locutor por fragmentos) y la pone a sonar. */
 async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, con_clima = false, zona = null, voz = null } = {}) {
   const az = await azuracast.paraServidorId(cliente.servidor_id);
   const stationId = cliente.azuracast_station_id;
   if (!stationId) return { ok: false, error: 'sin estación' };
 
-  let texto = textoHora(new Date(), { saludo, zona });
-  if (con_clima && ciudad) {
-    const clima = await climaTexto(ciudad);
-    if (clima) texto += `. Ahora mismo ${clima}`;
+  // Hora actual EN LA ZONA del cliente (0-23, 0-59).
+  const { hora, minuto } = zona ? partesEnZona(zona) : { hora: new Date().getHours(), minuto: new Date().getMinutes() };
+  const texto = textoHora(new Date(), { zona });                 // solo para el mensaje/log
+  let mp3;
+  try {
+    mp3 = await generarHoraFragmentos(hora, minuto, voz);        // voz de locutor real
+  } catch (e) {
+    return { ok: false, error: `no se pudo armar la hora: ${e.message}` };
   }
-  const mp3 = await generarVoz(texto, { voz });
   // Nombre ÚNICO cada vez: si se reusa el mismo, AzuraCast puede reproducir la
-  // versión vieja (aún sin re-analizar) y decir una hora pasada. Con nombre
-  // nuevo, siempre suena el audio fresco.
+  // versión vieja (aún sin re-analizar) y decir una hora pasada.
   const nombre = `anuncio-hora-${cliente.id}-${Date.now()}.mp3`;
 
   const media = await az.uploadMedia(stationId, nombre, mp3.toString('base64'));
@@ -196,16 +240,16 @@ async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, 
 // ---- Config (tabla anuncio_hora) ---------------------------------
 async function verConfig(clienteId) {
   const { rows } = await query('SELECT cliente_id, activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria, voz FROM anuncio_hora WHERE cliente_id = $1', [clienteId]);
-  return rows[0] || { cliente_id: clienteId, activo: false, cada_min: 60, con_saludo: false, ciudad: null, con_clima: false, zona_horaria: DEFAULT_TZ, voz: 'masculina' };
+  return rows[0] || { cliente_id: clienteId, activo: false, cada_min: 60, con_saludo: false, ciudad: null, con_clima: false, zona_horaria: DEFAULT_TZ, voz: 'hombre' };
 }
 async function guardarConfig(clienteId, { activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria, voz }) {
   const cada = [15, 30, 60].includes(Number(cada_min)) ? Number(cada_min) : 60;
   const ciu = ciudad !== undefined ? (String(ciudad || '').trim().slice(0, 120) || null) : undefined;
   const zona = (typeof zona_horaria === 'string' && zona_horaria.trim()) ? zona_horaria.trim().slice(0, 64) : null;
-  const vz = voz === 'femenina' || voz === 'masculina' ? voz : null;   // null → no cambia
+  const vz = ['hombre', 'hombre_cantada', 'mujer'].includes(voz) ? voz : null;   // null → no cambia
   await query(
     `INSERT INTO anuncio_hora (cliente_id, activo, cada_min, con_saludo, ciudad, con_clima, zona_horaria, voz, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6, COALESCE($7,'America/Bogota'), COALESCE($8,'masculina'), now())
+     VALUES ($1,$2,$3,$4,$5,$6, COALESCE($7,'America/Bogota'), COALESCE($8,'hombre'), now())
      ON CONFLICT (cliente_id) DO UPDATE SET
        activo = $2, cada_min = $3, con_saludo = $4,
        ciudad = COALESCE($5, anuncio_hora.ciudad), con_clima = $6,
