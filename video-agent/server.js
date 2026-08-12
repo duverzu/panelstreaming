@@ -432,7 +432,16 @@ app.get('/compat/clientes', wrap(async (req, res) => {
   const users = compat.lista();
   const viewers = await compatViewers(users);
   const clientes = [];
-  for (const u of users) clientes.push({ user: u, al_aire: await compatAlAire(u), viewers: viewers[u] || 0 });
+  for (const u of users) {
+    // Espacio ocupado. Hoy da 0 en todos: estos canales son de PASO (vivo puro)
+    // y no guardan nada. Se mide igual porque en cuanto uno active el 24/7 sus
+    // videos caen en /home/<user>/uploads, y así el panel lo ve solo, sin tener
+    // que volver a tocar el agente. El detalle (/compat/clientes/:user) ya lo
+    // medía; faltaba en el listado, y por eso el panel no tenía el dato.
+    let espacio_bytes = 0;
+    try { espacio_bytes = (await medirCarpeta(path.join(BASE, u, 'uploads'))).bytes; } catch (_) {}
+    clientes.push({ user: u, al_aire: await compatAlAire(u), viewers: viewers[u] || 0, espacio_bytes });
+  }
   res.json({ total: users.length, clientes });
 }));
 
