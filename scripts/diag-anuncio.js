@@ -1,10 +1,10 @@
 /**
- * scripts/diag-anuncio.js — ¿RECARGAR el backend activa el jingle?
+ * scripts/diag-anuncio.js — ¿restart (rebuild de config) activa el jingle?
  * Uso (en el VPS del panel):  node scripts/diag-anuncio.js <short_name-o-id>
  *
- * Deja la playlist como jingle con el anuncio, RECARGA Liquidsoap (o restart si
- * no hay reload), y observa hasta ~2 min si el anuncio suena al terminar una
- * canción. AVISO: puede cortar el stream ~2s una vez. Limpia el archivo al final.
+ * Deja la playlist como jingle (confirma que quedó), sube el anuncio, hace un
+ * RESTART completo (regenera la config) y observa ~110s si el anuncio entra.
+ * AVISO: corta el stream ~5-10s UNA vez. Limpia el archivo al final.
  */
 require('dotenv').config();
 const clienteModel = require('../models/clienteModel');
@@ -39,7 +39,7 @@ async function buscarCliente(short) {
   const plId = pl?.id || (await az.createPlaylist(stationId, { name: '📣 Anuncios', type: 'default', source: 'songs', is_enabled: true, weight: 1 })).id;
 
   try {
-    paso(1, 'Playlist = jingle cada 1; subir anuncio como único archivo');
+    paso(1, 'Playlist = jingle cada 1; subir anuncio; CONFIRMAR config');
     await az.updatePlaylist(stationId, plId, { is_jingle: true, is_enabled: true, play_per_songs: 1 });
     const files = (await az.listMedia(stationId)) || [];
     for (const f of files) if (/anuncio-diag/.test(f.path || '')) await az.deleteMedia(stationId, f.id).catch(() => {});
@@ -48,17 +48,17 @@ async function buscarCliente(short) {
     const nombre = `anuncio-diag-${cliente.id}-${Date.now()}.mp3`;
     const media = await az.uploadMedia(stationId, nombre, mp3.toString('base64'));
     await az.setFilePlaylists(stationId, media.id, [plId]);
-    L('  ok:', nombre);
+    const pls2 = (await az.getPlaylists(stationId)) || [];
+    const plc = pls2.find((p) => p.id === plId);
+    L('  playlist:', JSON.stringify({ is_jingle: plc?.is_jingle, is_enabled: plc?.is_enabled, play_per_songs: plc?.play_per_songs }));
+    L('  archivo:', nombre, '· duración media:', media.length);
 
-    paso(2, 'RECARGAR el backend (reload; si no, restart)');
-    let modo = 'reload';
-    try { await az.reloadBackend(stationId); L('  reload OK (sin corte)'); }
-    catch (e) { L('  reload no disponible:', e.message, '→ probando restart'); modo = 'restart';
-      try { await az.restartStation(stationId); L('  restart OK'); } catch (e2) { L('  restart ERROR:', e2.message); } }
-    L('  esperando 25s a que el backend vuelva…');
-    await sleep(25000);
+    paso(2, 'RESTART completo (regenera config). Corta ~5-10s.');
+    try { await az.restartStation(stationId); L('  restart OK'); } catch (e) { L('  restart ERROR:', e.message); }
+    L('  esperando 35s a que vuelva…');
+    await sleep(35000);
 
-    paso(3, `Observar ~110s si el anuncio entra al terminar una canción (modo ${modo})`);
+    paso(3, 'Observar ~110s si el anuncio entra al terminar una canción');
     let cuando = -1;
     for (let i = 1; i <= 37; i++) {
       await sleep(3000);
@@ -72,7 +72,7 @@ async function buscarCliente(short) {
     paso(4, 'Limpieza');
     await az.setFilePlaylists(stationId, media.id, []).catch(() => {});
     await az.deleteMedia(stationId, media.id).catch(() => {});
-    L(cuando >= 0 ? `\n  ✅ Tras ${modo}, el jingle SONÓ a los ${cuando}s. Ese es el mecanismo.` : `\n  ❌ Ni con ${modo} sonó en ~110s.`);
+    L(cuando >= 0 ? `\n  ✅ Tras RESTART, el jingle SONÓ a los ${cuando}s. ESE es el mecanismo.` : `\n  ❌ Ni con restart sonó. El jingle no se activa por API → toca vía programada nativa.`);
   } catch (e) {
     L('\n!! ERROR GENERAL:', e.message);
   }
