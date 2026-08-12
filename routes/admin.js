@@ -548,8 +548,17 @@ router.get('/video/viewers', requireAdmin, wrap(async (req, res) => {
     try {
       const s = await servidorModel.findById(sid);
       if (!s || s.tipo !== 'video') return;
-      const r = await videoNode.crearCliente(s.url, s.api_key).viewers();
-      porNodo.set(sid, r?.cuentas || {});
+      const cli = videoNode.crearCliente(s.url, s.api_key);
+      // `/viewers` del agente solo recorre cuentas(), o sea las cuentas creadas
+      // por el panel. Los canales heredados de asilivehd no salen ahí y el panel
+      // los daba por 0 aunque tuvieran gente viendo: 38 espectadores reales
+      // apareciendo como 0. Sus viewers vienen en compatClientes().
+      const [r, compat] = await Promise.all([cli.viewers(), cli.compatClientes()]);
+      const mapa = { ...(r?.cuentas || {}) };
+      (compat || []).forEach((c) => {
+        if (mapa[c.user] == null) mapa[c.user] = Number(c.viewers || 0);
+      });
+      porNodo.set(sid, mapa);
     } catch (_) { /* nodo caído */ }
   }));
 
