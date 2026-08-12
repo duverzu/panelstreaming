@@ -20,21 +20,23 @@ const PLAYLIST = '📣 Cuñas';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---- Inyección en AzuraCast --------------------------------------
+const PESO_CUNA = 25;   // peso alto: la rotación la elige pronto (AzuraCast 1..25)
+
 async function playlistCunas(az, stationId) {
   const pls = (await az.getPlaylists(stationId)) || [];
   const existe = pls.find((p) => p.name === PLAYLIST);
-  // Tipo JINGLE habilitado: es lo único que suena puntual entre canciones. Para
-  // que no se repita, la cuña se mete a la playlist solo al sonar y se saca tras
-  // sonar una vez (ver reproducir). Playlists viejas mal → se corrigen.
+  // Rotación normal con peso alto: es lo único que suena de forma fiable y
+  // visible en estas estaciones. La cuña se mete a la playlist solo al sonar y
+  // se saca tras sonar una vez (ver reproducir), así no rota como canción fija.
   if (existe) {
-    if (!existe.is_jingle || !existe.is_enabled) {
-      await az.updatePlaylist(stationId, existe.id, { is_jingle: true, is_enabled: true }).catch(() => {});
+    if (existe.is_jingle || !existe.is_enabled || (existe.weight || 0) < PESO_CUNA) {
+      await az.updatePlaylist(stationId, existe.id, { is_jingle: false, is_enabled: true, include_in_requests: false, weight: PESO_CUNA }).catch(() => {});
     }
     return existe.id;
   }
   const pl = await az.createPlaylist(stationId, {
     name: PLAYLIST, type: 'default', source: 'songs',
-    is_jingle: true, include_in_requests: false, include_in_on_demand: false, is_enabled: true, weight: 1,
+    is_jingle: false, include_in_requests: false, include_in_on_demand: false, is_enabled: true, weight: PESO_CUNA,
   });
   return pl.id;
 }
@@ -46,16 +48,14 @@ async function subirMedia(az, stationId, buffer, nombre) {
   return media.unique_id || media.id;
 }
 
-/** Pone a sonar una cuña: la mete a la jingle, salta (si aplica) para que suene,
- *  y en segundo plano la saca tras sonar una vez (así no se repite). */
+/** Pone a sonar una cuña: la mete a la rotación (peso alto) y en segundo plano
+ *  la saca tras sonar una vez (así suena a su hora y no se repite). */
 async function reproducir(az, stationId, mediaId, { skip = true } = {}) {
   const plId = await playlistCunas(az, stationId);
   const files = (await az.listMedia(stationId)) || [];
   const f = files.find((x) => x.unique_id === mediaId || String(x.id) === String(mediaId));
-  if (!f) { try { await az.request(stationId, mediaId); } catch (e) { console.error('[cuna] request:', e.message); } return; }
-  await az.setFilePlaylists(stationId, f.id, [plId]);            // queda como jingle
-  await sleep(4000);                                            // deja que recargue
-  if (skip) await az.skipSong(stationId).catch(() => {});        // prueba → suena de una
+  if (!f) { console.error('[cuna] no encontré el media', mediaId); return; }
+  await az.setFilePlaylists(stationId, f.id, [plId]);            // entra a la rotación
   retirarTrasSonar(az, stationId, String(f.path || '').split('/').pop().replace(/\.[^.]+$/, ''), f.id)
     .catch((e) => console.error('[cuna] retiro:', e.message));
 }

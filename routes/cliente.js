@@ -354,7 +354,7 @@ router.post('/anuncio-hora/probar', requireCliente, wrap(async (req, res) => {
   const cfg = await anuncioHora.verConfig(cliente.id);
   const r = await anuncioHora.anunciarEn(cliente, { saludo: cfg.con_saludo ? 'Atención' : null, ciudad: cfg.ciudad, con_clima: cfg.con_clima, zona: cfg.zona_horaria, voz: cfg.voz });
   if (!r.ok) return res.status(502).json({ error: r.error || 'No se pudo generar el anuncio' });
-  res.json({ message: `Sonando: «${r.texto}» 🔊` });
+  res.json({ message: `Anuncio listo: «${r.texto}». Sonará en ~1-2 min (no corta la música). 🔊` });
 }));
 
 // ── Cuñas / anuncios programados ──
