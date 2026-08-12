@@ -104,51 +104,48 @@ async function generarVoz(texto, { voz } = {}) {
 // "ahora suena" de AzuraCast (title = nombre del archivo cuando no hay ID3).
 const marca = (n) => String(n).split('/').pop().replace(/\.[^.]+$/, '');
 
-// Peso alto = la rotación lo elige pronto (AzuraCast: 1..25).
-const PESO_ANUNCIO = 25;
-
 /**
- * Busca/crea la playlist de anuncios como ROTACIÓN NORMAL con peso alto. En
- * estas estaciones ni el "jingle" ni el "request" por API suenan de forma fiable
- * (los jingles ni salen en "ahora suena"; los requests quedan detrás de la cola
- * ya preparada). Lo único que suena y es VISIBLE es una canción de rotación con
- * peso alto: entra en la cola en ~1-2 min y suena. Para que NO se repita, el
- * anuncio se SACA de la playlist apenas suena una vez (ver retirarTrasSonar).
+ * Busca/crea la playlist de anuncios como JINGLE (suena entre canciones, puntual
+ * y fiable — confirmado en vivo). OJO: los cambios de jingle solo se ACTIVAN tras
+ * un reinicio de la estación (rebuild de config): eso se hace UNA vez por estación
+ * con scripts/activar-jingles.js. Aquí solo se cambia el ARCHIVO de la playlist
+ * (eso sí toma efecto sin reiniciar). Para que no se repita, el anuncio se saca
+ * tras sonar una vez (ver programarRetiro).
  */
 async function playlistAnuncios(az, stationId) {
   const pls = (await az.getPlaylists(stationId)) || [];
   const existe = pls.find((p) => p.name === PLAYLIST);
   if (existe) {
-    if (existe.is_jingle || !existe.is_enabled || (existe.weight || 0) < PESO_ANUNCIO) {
-      await az.updatePlaylist(stationId, existe.id, { is_jingle: false, is_enabled: true, include_in_requests: false, weight: PESO_ANUNCIO }).catch(() => {});
+    if (!existe.is_jingle || !existe.is_enabled || existe.play_per_songs !== 1) {
+      await az.updatePlaylist(stationId, existe.id, { is_jingle: true, is_enabled: true, play_per_songs: 1, include_in_requests: false }).catch(() => {});
     }
     return existe.id;
   }
   const pl = await az.createPlaylist(stationId, {
     name: PLAYLIST, type: 'default', source: 'songs',
-    is_jingle: false, include_in_requests: false, include_in_on_demand: false, is_enabled: true, weight: PESO_ANUNCIO,
+    is_jingle: true, is_enabled: true, play_per_songs: 1, include_in_requests: false, include_in_on_demand: false, weight: 1,
   });
   return pl.id;
 }
 
 /**
- * Espera (en segundo plano) a que el archivo suene UNA vez (aparezca en el
- * "ahora suena"/historial — las canciones de rotación SÍ salen ahí) y lo saca
- * de su playlist para que la rotación no lo vuelva a elegir (no se repite). Si
- * no lo detecta, a los ~6 min lo saca igual. `borrarClienteId` además borra los
- * anuncios viejos del cliente.
+ * Quita (en segundo plano) el archivo de su playlist tras sonar UNA vez, para que
+ * el jingle no se repita entre canciones. Como los jingles NO salen en el "ahora
+ * suena", no se puede detectar: se calcula por TIEMPO = lo que le falta a la
+ * canción actual (el jingle suena al terminarla) + un margen. Si no hay dato de
+ * la canción, usa un tiempo prudente. `borrarClienteId` borra los anuncios viejos.
  */
-async function retirarTrasSonar(az, stationId, marcaNombre, mediaNumId, { borrarClienteId = null } = {}) {
-  const suena = (s) => String(s?.song?.title || s?.song?.text || '').includes(marcaNombre);
-  for (let i = 0; i < 72; i++) {                 // ~72 * 5s = 6 min máx
-    await sleep(5000);
-    try {
-      const np = await az.getNowPlaying(stationId);
-      if (suena(np?.now_playing) || (np?.song_history || []).some(suena)) break;
-    } catch (_) {}
-  }
+async function programarRetiro(az, stationId, mediaNumId, { borrarClienteId = null } = {}) {
+  let espera = 150000;                                   // fallback ~2.5 min
+  try {
+    const np = await az.getNowPlaying(stationId);
+    const dur = np?.now_playing?.duration || 0;
+    const el = np?.now_playing?.elapsed || 0;
+    if (dur) espera = (Math.max(0, dur - el) + 25) * 1000;   // fin de canción + margen
+  } catch (_) {}
+  await sleep(espera);
   if (mediaNumId != null) await az.setFilePlaylists(stationId, mediaNumId, []).catch(() => {});
-  if (borrarClienteId) await limpiarViejos(az, stationId, borrarClienteId, mediaNumId);
+  if (borrarClienteId) await limpiarViejos(az, stationId, borrarClienteId, null);
 }
 
 /**
@@ -188,12 +185,10 @@ async function anunciarEn(cliente, { skip = true, saludo = null, ciudad = null, 
 
   const media = await az.uploadMedia(stationId, nombre, mp3.toString('base64'));
   await limpiarViejos(az, stationId, cliente.id, media.id);      // fuera anuncios viejos ANTES
-  const plId = await playlistAnuncios(az, stationId);            // rotación normal, peso alto
-  await az.setFilePlaylists(stationId, media.id, [plId]);        // entra a la rotación → sonará en ~1-2 min
-  // En segundo plano: cuando suene UNA vez, lo saca de la rotación para que no
-  // se repita (la causa del "pegado en la misma hora"). No se hace skip: no
-  // corta la música y de todos modos el skip no adelanta al anuncio.
-  retirarTrasSonar(az, stationId, marca(nombre), media.id, { borrarClienteId: cliente.id })
+  const plId = await playlistAnuncios(az, stationId);            // playlist jingle
+  await az.setFilePlaylists(stationId, media.id, [plId]);        // queda como jingle → suena tras la canción
+  // En segundo plano: lo saca tras sonar una vez (por tiempo) para no repetir.
+  programarRetiro(az, stationId, media.id, { borrarClienteId: cliente.id })
     .catch((e) => console.error('[anuncio] retiro:', e.message));
   return { ok: true, texto };
 }
@@ -252,4 +247,4 @@ function iniciar() {
   console.log('⏰ Anuncio de hora activo (revisa cada 15s las franjas configuradas)');
 }
 
-module.exports = { iniciar, verConfig, guardarConfig, anunciarEn, textoHora, generarVoz, climaTexto, retirarTrasSonar };
+module.exports = { iniciar, verConfig, guardarConfig, anunciarEn, textoHora, generarVoz, climaTexto, programarRetiro, playlistAnuncios };

@@ -107,7 +107,7 @@ export default function AnuncioHora() {
           )}
 
           <button type="button" onClick={probar} disabled={ocupado} className="btn-ghost !py-1.5 !px-3 text-xs">🔊 Probar ahora</button>
-          <p className="text-[11px] text-gray-400">Al probar, el anuncio entra en la rotación y suena en <b>~1-2 minutos</b> (no corta la música). Ten paciencia: no es instantáneo.</p>
+          <p className="text-[11px] text-gray-400">Al probar, el anuncio suena <b>al terminar la canción que esté sonando</b> (no la corta). No es instantáneo: espera a que acabe el tema actual.</p>
         </div>
       )}
 
