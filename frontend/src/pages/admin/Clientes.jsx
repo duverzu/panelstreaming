@@ -48,7 +48,17 @@ function peso(bytes) {
 /** Disco usado con su barra. El color avisa antes de que se llene: una radio
  *  sin espacio deja de aceptar música y el cliente no entiende por qué. */
 function Disco({ usado, total }) {
-  if (usado == null) return <span className="text-gray-300 dark:text-gray-600">—</span>;
+  // Sin dato ≠ cero. Los canales de la capa de compatibilidad (asilivehd) no
+  // reportan espacio: su API solo devuelve `user`, `al_aire` y `viewers`.
+  // Poner "0 MB" ahí sería inventarse un dato que nadie ha medido.
+  if (usado == null) {
+    return (
+      <span className="text-gray-300 dark:text-gray-600 cursor-help"
+        title="Este nodo no reporta el espacio usado (canales de la capa de compatibilidad).">
+        — <span className="text-[10px]">sin dato</span>
+      </span>
+    );
+  }
   const pct = total ? Math.min(100, Math.round((usado / total) * 100)) : null;
   const color = pct == null ? 'bg-gray-300 dark:bg-gray-700'
     : pct >= 90 ? 'bg-red-500' : pct >= 75 ? 'bg-amber-500' : 'bg-brand-500';
