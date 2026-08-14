@@ -21,8 +21,11 @@ USUARIO="$1"
 # renombrara dejaria al cliente sin poder emitir, y sin pista de por que.
 case "$MTX_SOURCE_TYPE" in
   *rtsp*|*RTSP*)
+    # Dormir en vez de salir: MediaMTX relanza este gancho cada vez que
+    # termina mientras el canal siga disponible, asi que salir aqui deja un
+    # arranque cada 5 s llenando el log. Al irse el canal, MediaMTX lo mata.
     echo "[srt] $USUARIO: la fuente es nuestro propio extractor, no se puentea"
-    exit 0 ;;
+    exec sleep infinity ;;
 esac
 
 # El token lo guarda el agente (compat-tokens.json); se pide por localhost.
