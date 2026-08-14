@@ -56,6 +56,33 @@ async function nodoVideoDe(cliente) {
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// ---- Entrada SRT (para clientes con conexión mala) ----------------
+// SRT retransmite lo que se pierde dentro de una ventana de tiempo en vez de
+// atascarse como RTMP sobre TCP. Es solo para la SUBIDA: el público sigue
+// viendo el mismo HLS y la URL del cliente no cambia.
+const SRT_PUERTO = Number(process.env.SRT_PUERTO || 8890);
+const SRT_LATENCIA_US = Number(process.env.SRT_LATENCIA_US || 2000000);   // 2 s
+
+/**
+ * Datos de conexión SRT a partir de los de RTMP, que ya trae el nodo.
+ * La credencial es el MISMO token que usa por RTMP: el cliente no tiene que
+ * aprenderse nada nuevo, solo cambiar la dirección en su OBS.
+ */
+function datosSrt(user, video) {
+  const token = String(video?.clave || '').split('token=')[1] || null;
+  let host = null;
+  try { host = new URL(String(video?.servidor_rtmp || '').replace(/^rtmp:/, 'http:')).hostname; } catch (_) {}
+  if (!token || !host) return null;
+  const streamid = `publish:${user}:${user}:${token}`;
+  return {
+    host,
+    puerto: SRT_PUERTO,
+    streamid,
+    url: `srt://${host}:${SRT_PUERTO}?streamid=${streamid}&latency=${SRT_LATENCIA_US}`,
+    latencia_ms: Math.round(SRT_LATENCIA_US / 1000),
+  };
+}
+
 /** Formatea bytes a algo legible (B/KB/MB/GB/TB). */
 function humanBytes(n) {
   const u = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -428,7 +455,23 @@ router.get('/clientes/:id/accesos', requireAdmin, wrap(async (req, res) => {
 
   if (tipo === 'video') {
     const v = await nodoVideoDe(cliente);
-    salida.video = v ? await v.nodo.conexion(v.user) : null;
+    salida.video = null;
+    if (v) {
+      // Los canales heredados de asilivehd NO son "cuentas" del nodo: su
+      // conexión sale por otra ruta. Sin este respaldo el modal de accesos
+      // salía vacío para 17 de los 20 canales.
+      let datos = await v.nodo.conexion(v.user);
+      if (!datos || datos.error) datos = await v.nodo.compatCliente(v.user);
+      salida.video = datos && !datos.error ? datos : null;
+
+      // Entrada SRT: va aquí, junto al RTMP, porque es un dato de CONEXIÓN y
+      // es donde el admin lo busca cuando el cliente se queja de cortes.
+      if (salida.video) {
+        const activos = await v.nodo.srtActivos();
+        salida.video.srt_activo = Array.isArray(activos) ? activos.includes(v.user) : null;
+        salida.video.srt = salida.video.srt_activo ? datosSrt(v.user, salida.video) : null;
+      }
+    }
   } else {
     salida.audio = {
       url_streaming: cliente.url_streaming || null,
@@ -444,6 +487,35 @@ router.get('/clientes/:id/accesos', requireAdmin, wrap(async (req, res) => {
  * POST /admin/clientes/:id/password — genera una contraseña nueva para el
  * panel del cliente y la devuelve UNA vez (para copiársela y enviársela).
  */
+/**
+ * PUT /admin/clientes/:id/srt — activa o quita la entrada SRT de un canal.
+ * body: { activo }
+ *
+ * Surte efecto en la SIGUIENTE conexión del cliente: el agente relee la lista
+ * en cada consulta, así que no hay que reiniciar nada ni cortar a nadie. Su
+ * RTMP sigue funcionando siempre — SRT se suma, no sustituye.
+ */
+router.put('/clientes/:id/srt', requireAdmin, wrap(async (req, res) => {
+  const cliente = await clienteModel.findById(Number(req.params.id));
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  if ((cliente.tipo || 'audio') !== 'video') {
+    return res.status(400).json({ error: 'La entrada SRT es solo para canales de video.' });
+  }
+  const v = await nodoVideoDe(cliente);
+  if (!v) return res.status(400).json({ error: 'El canal no está asignado a un nodo de video.' });
+
+  const activo = req.body?.activo !== false;
+  const r = await v.nodo.srtActivar(v.user, activo);
+  if (!r) return res.status(502).json({ error: 'El nodo de video no respondió.' });
+
+  res.json({
+    message: activo
+      ? 'Entrada SRT activada ✅ El cliente ya puede emitir por SRT.'
+      : 'Entrada SRT desactivada. El cliente sigue pudiendo emitir por RTMP.',
+    srt_activo: activo,
+  });
+}));
+
 router.post('/clientes/:id/password', requireAdmin, wrap(async (req, res) => {
   const cliente = await clienteModel.findById(Number(req.params.id));
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });

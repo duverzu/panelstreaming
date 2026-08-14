@@ -125,6 +125,18 @@ function crearCliente(baseURL, token) {
       catch (e) { return fallo(`conexion(${user})`, e); }
     },
 
+    /** Canales del nodo con entrada SRT habilitada. */
+    srtActivos: async () => {
+      try { return (await api.get('/srt/activos')).data?.canales || []; }
+      catch (e) { return fallo('srtActivos', e) || []; }
+    },
+    /** Activa o quita la entrada SRT de un canal. Surte efecto en la siguiente
+     *  conexión: el agente relee la lista cada vez, no hace falta reiniciar. */
+    srtActivar: async (user, activo) => {
+      try { return (await api.put(`/srt/activos/${encodeURIComponent(user)}`, { activo })).data; }
+      catch (e) { return fallo(`srtActivar(${user})`, e); }
+    },
+
     /** Enciende/apaga la emisión 24/7. */
     emision: async (user, encender) => {
       try { return (await api.post(`/cuentas/${encodeURIComponent(user)}/24-7`, { encender })).data; }

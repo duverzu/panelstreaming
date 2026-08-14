@@ -106,6 +106,7 @@ export default function AdminClientes() {
   const [datos, setDatos] = useState(null);           // datos traídos del backend
   const [nuevaPass, setNuevaPass] = useState(null);   // clave recién generada (se ve una vez)
   const [generando, setGenerando] = useState(false);
+  const [srtBusy, setSrtBusy] = useState(false);
   const [consumo, setConsumo] = useState({});   // cliente_id -> disco y transferencia
   const [oyentes, setOyentes] = useState({});   // cliente_id -> oyentes (audio)
   const [viewers, setViewers] = useState({});   // cliente_id -> viewers (video)
@@ -235,6 +236,22 @@ export default function AdminClientes() {
     } finally {
       setBusy(null);
     }
+  }
+
+  /** Activa o quita la entrada SRT del canal abierto en el modal de accesos. */
+  async function cambiarSrt(activo) {
+    if (!accesos) return;
+    setSrtBusy(true);
+    try {
+      const r = await apiFetch(`/admin/clientes/${accesos.id}/srt`, {
+        method: 'PUT', body: JSON.stringify({ activo }),
+      });
+      // Se relee del nodo en vez de asumir: así la URL SRT aparece o
+      // desaparece con el dato real, no con lo que creemos que pasó.
+      setDatos(await apiFetch(`/admin/clientes/${accesos.id}/accesos`));
+      alert(r.message);
+    } catch (e) { alert(e.message); }
+    finally { setSrtBusy(false); }
   }
 
   async function verAccesos(c) {
@@ -549,6 +566,42 @@ export default function AdminClientes() {
                   <div className="label">Transmitir en vivo (OBS / vMix)</div>
                   <Copiable texto={datos.video.servidor_rtmp} />
                   <Copiable texto={datos.video.clave} />
+
+                  {/* Entrada SRT. Va junto al RTMP porque es lo mismo — otra
+                      forma de subir — y es donde se mira cuando el cliente
+                      se queja de que se le corta la señal. */}
+                  {datos.video.srt_activo !== null && datos.video.srt_activo !== undefined && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div>
+                          <div className="label !mb-0">Entrada SRT</div>
+                          <p className="text-[11px] text-gray-400">
+                            Para conexiones inestables. No sustituye al RTMP: se suma.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => cambiarSrt(!datos.video.srt_activo)}
+                          disabled={srtBusy}
+                          className={`text-xs px-3 py-1.5 rounded-lg border transition shrink-0 ${
+                            datos.video.srt_activo
+                              ? 'border-brand-500 text-brand-600 dark:text-brand-400'
+                              : 'border-gray-200 dark:border-gray-800 text-gray-400 hover:border-brand-500'
+                          }`}
+                        >
+                          {srtBusy ? '…' : datos.video.srt_activo ? '● Activa' : 'Desactivada'}
+                        </button>
+                      </div>
+                      {datos.video.srt_activo && datos.video.srt && (
+                        <>
+                          <Copiable texto={datos.video.srt.url} />
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            En OBS: Servicio «Personalizado», esta dirección en Servidor y la clave vacía.
+                            Latencia {datos.video.srt.latencia_ms} ms.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="text-xs text-gray-400">No se pudieron leer los datos de conexión del nodo de video.</p>
