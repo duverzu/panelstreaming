@@ -89,6 +89,14 @@ async function crearCuenta(user, { puertos } = {}) {
     await fsp.mkdir(path.join(dir, sub), { recursive: true });
   }
 
+  // Los segmentos HLS los escribe el WORKER de nginx, que no corre como root
+  // (`nobody`), mientras que estas carpetas las acaba de crear el agente, que
+  // sí. Sin este permiso nginx acepta la señal y no da ningún error, pero no
+  // escribe ni un segmento: el canal queda mudo sin que nada lo delate.
+  for (const sub of ['live-streaming/hls', 'stream/hls', 'stream-hybrid/hls']) {
+    await fsp.chmod(path.join(dir, sub), 0o777);
+  }
+
   const reemplazos = {
     USER: u, HOME, DOMINIO,
     PUERTO_HTTP: http, PUERTO_RTMP: rtmp, PUERTO_AGENTE,
