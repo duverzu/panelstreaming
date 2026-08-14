@@ -61,6 +61,16 @@ export default function VideoInicio() {
             <div className="space-y-2.5">
               <div><div className="label mb-1 !text-[11px]">Servidor RTMP</div><Copiable texto={data.conexion.servidor} /></div>
               <div><div className="label mb-1 !text-[11px]">Clave</div><Copiable texto={data.conexion.clave} /></div>
+              {/* SRT solo si se le activó. Se etiqueta como alternativa y no
+                  como un tercer dato que rellenar: quien lo lea de corrido no
+                  debe acabar pegando las dos cosas a la vez en su OBS. */}
+              {data.srt && (
+                <div className="pt-2.5 border-t border-indigo-100 dark:border-indigo-500/20">
+                  <div className="label mb-1 !text-[11px]">📡 SRT — en vez del RTMP, si se te corta</div>
+                  <Copiable texto={data.srt.url} />
+                  <p className="text-[10px] text-gray-400 mt-1">Va en «Servidor» y la clave se deja vacía.</p>
+                </div>
+              )}
             </div>
           ) : <p className="text-xs text-gray-400">Tu plan no incluye transmisión en vivo.</p>}
           <div className="mt-3"><div className="label mb-1 !text-[11px]">🔗 Enlace del canal (.m3u8)</div><Copiable texto={data.urls?.canal} /></div>
