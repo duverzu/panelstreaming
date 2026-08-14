@@ -457,6 +457,20 @@ function srtHabilitados() {
   }
 }
 
+const SRT_SALIDA = process.env.SRT_SALIDA || path.join(__dirname, 'srt-salida.json');
+
+/** Canales que se pueden SACAR por SRT (lo que enganchan los cable
+ *  operadores). Va en lista aparte de la entrada a propósito: son permisos
+ *  distintos — uno deja subir, el otro deja llevarse la señal. */
+function srtSalidaHabilitados() {
+  try {
+    const v = JSON.parse(fs.readFileSync(SRT_SALIDA, 'utf8'));
+    return Array.isArray(v) ? v : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 /**
  * POST /srt/auth — lo llama MediaMTX en cada conexión.
  * Responder 20x la acepta; cualquier otra cosa la rechaza.
@@ -466,9 +480,18 @@ app.post('/srt/auth', (req, res) => {
   const { path: canal, password, action } = req.body || {};
   const ip = (req.ip || '').replace('::ffff:', '');
 
-  // El puente (ffmpeg) lee desde el propio servidor para reenviar a nginx.
   if (action === 'read') {
-    return (ip === '127.0.0.1' || ip === '::1') ? res.status(200).end() : res.status(401).end();
+    // El puente (ffmpeg) lee desde el propio servidor para reenviar a nginx.
+    if (ip === '127.0.0.1' || ip === '::1') return res.status(200).end();
+    // De fuera solo se llevan la señal los canales con la salida activada.
+    // Sin credencial, igual que en el servidor viejo: el operador ya tiene la
+    // URL configurada en su cabecera y cambiarla es una visita técnica.
+    if (canal && srtSalidaHabilitados().includes(canal)) {
+      console.log(`[srt-salida] ${canal}: entregando a ${ip}`);
+      return res.status(200).end();
+    }
+    console.error(`[srt-salida] ${canal}: rechazado, no tiene salida activada`);
+    return res.status(401).end();
   }
 
   if (action !== 'publish') return res.status(401).end();
@@ -499,6 +522,19 @@ app.get('/srt/token', (req, res) => {
 
 /** GET /srt/activos — qué canales tienen SRT (lo consulta el panel). */
 app.get('/srt/activos', (req, res) => res.json({ canales: srtHabilitados() }));
+
+/** GET /srt/salida — qué canales se pueden sacar por SRT. */
+app.get('/srt/salida', (req, res) => res.json({ canales: srtSalidaHabilitados() }));
+
+/** PUT /srt/salida/:user — activa o quita la salida SRT. body: { activo } */
+app.put('/srt/salida/:user', (req, res) => {
+  const user = String(req.params.user || '');
+  if (!user) return res.status(400).json({ error: 'Falta el canal' });
+  const lista = new Set(srtSalidaHabilitados());
+  if (req.body?.activo) lista.add(user); else lista.delete(user);
+  fs.writeFileSync(SRT_SALIDA, JSON.stringify([...lista], null, 2), { mode: 0o600 });
+  res.json({ ok: true, canales: [...lista] });
+});
 
 /** PUT /srt/activos/:user — activa o quita SRT a un canal. body: { activo } */
 app.put('/srt/activos/:user', (req, res) => {

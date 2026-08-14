@@ -11,6 +11,15 @@
 USUARIO="$1"
 [ -z "$USUARIO" ] && exit 1
 
+# Solo se puentea lo que entra POR SRT. Desde que existe la salida SRT, este
+# mismo gancho salta tambien cuando es nuestro propio extractor el que publica
+# aqui -- y puentear eso devolveria a nginx la señal que acaba de salir de
+# nginx: un bucle que ademas pelearia con el publicador de verdad.
+if [ "$MTX_SOURCE_TYPE" != "srtConn" ]; then
+  echo "[srt] $USUARIO: la fuente es $MTX_SOURCE_TYPE, no se puentea"
+  exit 0
+fi
+
 # El token lo guarda el agente (compat-tokens.json); se pide por localhost.
 TOKEN=$(curl -s --max-time 5 "http://127.0.0.1:3000/srt/token?user=$USUARIO")
 if [ -z "$TOKEN" ]; then
