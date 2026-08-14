@@ -125,10 +125,16 @@ function crearCliente(baseURL, token) {
       catch (e) { return fallo(`conexion(${user})`, e); }
     },
 
-    /** Canales del nodo con entrada SRT habilitada. */
+    /** Canales del nodo con entrada SRT habilitada. Lista vacía si este nodo
+     *  no ofrece SRT: un 404 aquí no es una avería, es un agente sin la
+     *  función (no todos los nodos tienen MediaMTX). Se calla para no llenar
+     *  el log con un "error" que aparece en cada carga y no significa nada. */
     srtActivos: async () => {
       try { return (await api.get('/srt/activos')).data?.canales || []; }
-      catch (e) { return fallo('srtActivos', e) || []; }
+      catch (e) {
+        if (e.response?.status === 404) return [];
+        return fallo('srtActivos', e) || [];
+      }
     },
     /** Activa o quita la entrada SRT de un canal. Surte efecto en la siguiente
      *  conexión: el agente relee la lista cada vez, no hace falta reiniciar. */
