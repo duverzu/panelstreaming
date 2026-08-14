@@ -14,6 +14,12 @@ server {
 
     application live {
         live on;
+        # Si el encoder del cliente se va sin avisar (se le cae el internet, o
+        # matan el programa), el socket queda medio abierto y nginx sigue
+        # creyendo que emite: cuando el cliente vuelve, le responde "Already
+        # publishing" y no le deja entrar. Con esto, un publicador que lleva
+        # 30 s sin mandar nada se cae solo y la plaza queda libre.
+        drop_idle_publisher 30s;
         on_publish http://127.0.0.1:{{PUERTO_AGENTE}}/compat/publicar;
         on_publish_done http://127.0.0.1:{{PUERTO_AGENTE}}/compat/fin;
         push rtmp://127.0.0.1:1935/asilivehls;
