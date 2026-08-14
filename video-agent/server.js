@@ -477,24 +477,33 @@ function srtSalidaHabilitados() {
  * body: { user, password, path, action, protocol, ip, query }
  */
 app.post('/srt/auth', (req, res) => {
-  const { path: canal, password, action } = req.body || {};
-  const ip = (req.ip || '').replace('::ffff:', '');
+  const { path: canal, password, action, protocol } = req.body || {};
+  // La IP de quien se conecta viene en el CUERPO. `req.ip` es siempre
+  // 127.0.0.1 porque quien llama aquí es MediaMTX, desde este mismo servidor:
+  // tomarla de ahí daba por local a cualquiera que llegara de internet.
+  const ip = String(req.body?.ip || '').replace('::ffff:', '');
+  const esLocal = ip === '127.0.0.1' || ip === '::1';
 
   if (action === 'read') {
-    // El puente (ffmpeg) lee desde el propio servidor para reenviar a nginx.
-    if (ip === '127.0.0.1' || ip === '::1') return res.status(200).end();
+    // El puente de entrada lee desde el propio servidor para reenviar a nginx.
+    if (esLocal) return res.status(200).end();
     // De fuera solo se llevan la señal los canales con la salida activada.
     // Sin credencial, igual que en el servidor viejo: el operador ya tiene la
-    // URL configurada en su cabecera y cambiarla es una visita técnica.
+    // URL puesta en su cabecera y cambiarla es una visita técnica.
     if (canal && srtSalidaHabilitados().includes(canal)) {
       console.log(`[srt-salida] ${canal}: entregando a ${ip}`);
       return res.status(200).end();
     }
-    console.error(`[srt-salida] ${canal}: rechazado, no tiene salida activada`);
+    console.error(`[srt-salida] ${canal}: rechazado desde ${ip}, no tiene salida activada`);
     return res.status(401).end();
   }
 
   if (action !== 'publish') return res.status(401).end();
+
+  // Nuestro propio extractor de salida, que mete en MediaMTX por RTSP lo que
+  // saca de nginx. Solo desde este servidor y solo por RTSP: de fuera el 8554
+  // ni siquiera escucha.
+  if (esLocal && protocol === 'rtsp') return res.status(200).end();
   if (!canal) return res.status(401).end();
 
   if (!srtHabilitados().includes(canal)) {
