@@ -50,7 +50,11 @@ app.use((req, res, next) => {
   if (req.path === '/health') return next();
   // nginx pregunta desde el propio servidor en cada conexión de vídeo:
   // no lleva token, se acepta solo si viene de localhost.
-  if (req.path.startsWith('/rtmp/') || req.path === '/compat/publicar' || req.path === '/compat/fin') {
+  // MediaMTX y el puente SRT preguntan igual, desde el mismo servidor. Solo
+  // esos dos: gestionar QUIÉN tiene SRT (/srt/activos) sí exige token, o
+  // cualquier proceso de la máquina podría dárselo a quien quisiera.
+  if (req.path.startsWith('/rtmp/') || req.path === '/srt/auth' || req.path === '/srt/token'
+      || req.path === '/compat/publicar' || req.path === '/compat/fin') {
     const ip = (req.ip || '').replace('::ffff:', '');
     if (ip === '127.0.0.1' || ip === '::1') return next();
     return res.status(403).end();
@@ -427,6 +431,85 @@ async function compatViewers(users, ventanaSeg = 60) {
   } catch { /* aún sin log */ }
   const out = {}; users.forEach((u) => (out[u] = sets[u].size)); return out;
 }
+
+// ==================================================================
+//  ENTRADA SRT (MediaMTX)
+// ------------------------------------------------------------------
+//  SRT sirve para publicar desde conexiones malas: retransmite lo que se
+//  pierde dentro de una ventana de tiempo, en vez de atascarse como hace RTMP
+//  sobre TCP. Se usa SOLO para la subida; el publico sigue viendo el HLS.
+//
+//  MediaMTX recibe el SRT y pregunta AQUI si lo acepta. Que la decision viva
+//  en el agente y no en su archivo de configuracion es lo que permite activar
+//  o quitar SRT a un cliente al vuelo, sin editar nada ni reiniciar servicios.
+// ==================================================================
+
+const SRT_ACTIVOS = process.env.SRT_ACTIVOS || path.join(__dirname, 'srt-activos.json');
+
+/** Canales con SRT habilitado. Se relee en cada consulta: así el panel puede
+ *  activarlo o quitarlo y surte efecto en la siguiente conexión. */
+function srtHabilitados() {
+  try {
+    const v = JSON.parse(fs.readFileSync(SRT_ACTIVOS, 'utf8'));
+    return Array.isArray(v) ? v : [];
+  } catch (_) {
+    return [];   // sin archivo todavía: nadie tiene SRT
+  }
+}
+
+/**
+ * POST /srt/auth — lo llama MediaMTX en cada conexión.
+ * Responder 20x la acepta; cualquier otra cosa la rechaza.
+ * body: { user, password, path, action, protocol, ip, query }
+ */
+app.post('/srt/auth', (req, res) => {
+  const { path: canal, password, action } = req.body || {};
+  const ip = (req.ip || '').replace('::ffff:', '');
+
+  // El puente (ffmpeg) lee desde el propio servidor para reenviar a nginx.
+  if (action === 'read') {
+    return (ip === '127.0.0.1' || ip === '::1') ? res.status(200).end() : res.status(401).end();
+  }
+
+  if (action !== 'publish') return res.status(401).end();
+  if (!canal) return res.status(401).end();
+
+  if (!srtHabilitados().includes(canal)) {
+    console.error(`[srt] ${canal}: rechazado, no tiene SRT habilitado`);
+    return res.status(401).end();
+  }
+  // La contraseña del streamid es el MISMO token que ya usa por RTMP: el
+  // cliente no tiene que aprenderse una credencial nueva.
+  if (!compat.valida(canal, password)) {
+    console.error(`[srt] ${canal}: rechazado, token inválido`);
+    return res.status(401).end();
+  }
+  console.log(`[srt] ${canal}: autorizado desde ${ip}`);
+  res.status(200).end();
+});
+
+/** GET /srt/token?user=X — el puente pide el token para publicar en nginx.
+ *  Solo localhost (lo garantiza el middleware de arriba). */
+app.get('/srt/token', (req, res) => {
+  const user = String(req.query.user || '');
+  const t = compat.tokenDe(user);
+  if (t === undefined || !srtHabilitados().includes(user)) return res.status(404).end();
+  res.type('text/plain').send(String(t));
+});
+
+/** GET /srt/activos — qué canales tienen SRT (lo consulta el panel). */
+app.get('/srt/activos', (req, res) => res.json({ canales: srtHabilitados() }));
+
+/** PUT /srt/activos/:user — activa o quita SRT a un canal. body: { activo } */
+app.put('/srt/activos/:user', (req, res) => {
+  const user = String(req.params.user);
+  const activo = req.body?.activo !== false;
+  const lista = new Set(srtHabilitados());
+  activo ? lista.add(user) : lista.delete(user);
+  fs.writeFileSync(SRT_ACTIVOS, JSON.stringify([...lista], null, 2), { mode: 0o600 });
+  console.log(`[srt] ${user}: ${activo ? 'activado' : 'desactivado'}`);
+  res.json({ ok: true, canales: [...lista] });
+});
 
 app.get('/compat/clientes', wrap(async (req, res) => {
   const users = compat.lista();
