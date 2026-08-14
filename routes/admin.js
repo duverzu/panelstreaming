@@ -30,6 +30,7 @@ const azuracast = require('../services/azuracast');
 const videoNode = require('../services/videoNode');
 const migracion = require('../services/migracion');
 const { capacidadesCliente } = require('../services/capacidadesCliente');
+const srt = require('../services/srt');
 const authFactory = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
 
@@ -57,32 +58,6 @@ async function nodoVideoDe(cliente) {
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---- Entrada SRT (para clientes con conexión mala) ----------------
-// SRT retransmite lo que se pierde dentro de una ventana de tiempo en vez de
-// atascarse como RTMP sobre TCP. Es solo para la SUBIDA: el público sigue
-// viendo el mismo HLS y la URL del cliente no cambia.
-const SRT_PUERTO = Number(process.env.SRT_PUERTO || 8890);
-const SRT_LATENCIA_US = Number(process.env.SRT_LATENCIA_US || 2000000);   // 2 s
-
-/**
- * Datos de conexión SRT a partir de los de RTMP, que ya trae el nodo.
- * La credencial es el MISMO token que usa por RTMP: el cliente no tiene que
- * aprenderse nada nuevo, solo cambiar la dirección en su OBS.
- */
-function datosSrt(user, video) {
-  const token = String(video?.clave || '').split('token=')[1] || null;
-  let host = null;
-  try { host = new URL(String(video?.servidor_rtmp || '').replace(/^rtmp:/, 'http:')).hostname; } catch (_) {}
-  if (!token || !host) return null;
-  const streamid = `publish:${user}:${user}:${token}`;
-  return {
-    host,
-    puerto: SRT_PUERTO,
-    streamid,
-    url: `srt://${host}:${SRT_PUERTO}?streamid=${streamid}&latency=${SRT_LATENCIA_US}`,
-    latencia_ms: Math.round(SRT_LATENCIA_US / 1000),
-  };
-}
-
 /** Formatea bytes a algo legible (B/KB/MB/GB/TB). */
 function humanBytes(n) {
   const u = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -469,7 +444,7 @@ router.get('/clientes/:id/accesos', requireAdmin, wrap(async (req, res) => {
       if (salida.video) {
         const activos = await v.nodo.srtActivos();
         salida.video.srt_activo = Array.isArray(activos) ? activos.includes(v.user) : null;
-        salida.video.srt = salida.video.srt_activo ? datosSrt(v.user, salida.video) : null;
+        salida.video.srt = salida.video.srt_activo ? srt.datos(v.user, salida.video) : null;
       }
     }
   } else {

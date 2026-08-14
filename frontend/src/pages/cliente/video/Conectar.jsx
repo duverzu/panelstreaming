@@ -41,7 +41,48 @@ export default function VideoConectar() {
         </div>
       </div>
 
+      {data.srt && <ConexionSrt srt={data.srt} />}
+
       <RestreamFacebook />
+    </div>
+  );
+}
+
+/** Conexión SRT: la alternativa para quien tiene internet inestable.
+ *  Solo aparece si se le activó desde el panel — mostrarla a quien no la tiene
+ *  sería darle una dirección que le va a rechazar la conexión. */
+function ConexionSrt({ srt }) {
+  return (
+    <div className="card p-5 max-w-2xl border-brand-200 dark:border-brand-500/30">
+      <h2 className="font-semibold flex items-center gap-2 mb-1">
+        📡 Transmitir por SRT
+        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400">recomendado si se te corta</span>
+      </h2>
+      <p className="text-xs text-gray-400 mb-4">
+        Es otra forma de subir la misma señal. Si tu internet pierde datos, SRT los reenvía y
+        la transmisión aguanta, mientras que por RTMP se congela. <b>Usa una u otra, no las dos a la vez.</b>
+      </p>
+
+      <div className="space-y-3">
+        <div>
+          <div className="label mb-1">Servidor (URL completa)</div>
+          <Copiable texto={srt.url} />
+        </div>
+        <div>
+          <div className="label mb-1">Clave de transmisión</div>
+          <div className="text-sm text-gray-400 rounded-xl bg-gray-50 dark:bg-gray-950 px-3 py-2">
+            Déjala <b>vacía</b>: tus datos ya van dentro de la dirección de arriba.
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 text-xs text-gray-400 rounded-xl bg-gray-50 dark:bg-gray-950 p-3 space-y-1.5">
+        <div><b>En OBS:</b> Ajustes → Emisión → Servicio «Personalizado», pega la URL en «Servidor» y deja «Clave» en blanco.</div>
+        <div>
+          El <b>búfer de {srt.latencia_ms / 1000} s</b> es el margen que tiene para recuperar lo que se pierda:
+          tu señal sale al aire con ese retraso. Es lo que compra la estabilidad.
+        </div>
+      </div>
     </div>
   );
 }
