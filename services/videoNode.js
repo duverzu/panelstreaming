@@ -143,6 +143,20 @@ function crearCliente(baseURL, token) {
       catch (e) { return fallo(`srtActivar(${user})`, e); }
     },
 
+    /** Canales que se pueden SACAR por SRT (los cable operadores). */
+    srtSalida: async () => {
+      try { return (await api.get('/srt/salida')).data?.canales || []; }
+      catch (e) {
+        if (e.response?.status === 404) return [];
+        return fallo('srtSalida', e) || [];
+      }
+    },
+    /** Activa o quita la salida SRT de un canal. */
+    srtSalidaActivar: async (user, activo) => {
+      try { return (await api.put(`/srt/salida/${encodeURIComponent(user)}`, { activo })).data; }
+      catch (e) { return fallo(`srtSalidaActivar(${user})`, e); }
+    },
+
     /** Enciende/apaga la emisión 24/7. */
     emision: async (user, encender) => {
       try { return (await api.post(`/cuentas/${encodeURIComponent(user)}/24-7`, { encender })).data; }

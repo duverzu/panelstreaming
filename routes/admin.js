@@ -442,9 +442,13 @@ router.get('/clientes/:id/accesos', requireAdmin, wrap(async (req, res) => {
       // Entrada SRT: va aquí, junto al RTMP, porque es un dato de CONEXIÓN y
       // es donde el admin lo busca cuando el cliente se queja de cortes.
       if (salida.video) {
-        const activos = await v.nodo.srtActivos();
+        const [activos, salidas] = await Promise.all([v.nodo.srtActivos(), v.nodo.srtSalida()]);
         salida.video.srt_activo = Array.isArray(activos) ? activos.includes(v.user) : null;
         salida.video.srt = salida.video.srt_activo ? srt.datos(v.user, salida.video) : null;
+        // Salida SRT: lo contrario de la entrada. No la usa el cliente sino un
+        // tercero — su cable operador — para BAJARSE la señal.
+        salida.video.srt_salida_activa = Array.isArray(salidas) ? salidas.includes(v.user) : null;
+        salida.video.srt_salida = salida.video.srt_salida_activa ? srt.salida(v.user, salida.video) : null;
       }
     }
   } else {
@@ -488,6 +492,36 @@ router.put('/clientes/:id/srt', requireAdmin, wrap(async (req, res) => {
       ? 'Entrada SRT activada ✅ El cliente ya puede emitir por SRT.'
       : 'Entrada SRT desactivada. El cliente sigue pudiendo emitir por RTMP.',
     srt_activo: activo,
+  });
+}));
+
+/**
+ * PUT /admin/clientes/:id/srt-salida — permite (o no) que un tercero se baje
+ * la señal del canal por SRT. body: { activo }
+ *
+ * Es lo que enganchan los cable operadores. Va aparte de la entrada porque son
+ * permisos distintos: uno deja al cliente SUBIR, este deja a otro LLEVARSE la
+ * señal. Ojo: cada quien conectado se lleva el flujo entero, sin cachear, así
+ * que esto es para uno o dos destinos concretos, no para el público.
+ */
+router.put('/clientes/:id/srt-salida', requireAdmin, wrap(async (req, res) => {
+  const cliente = await clienteModel.findById(Number(req.params.id));
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+  if ((cliente.tipo || 'audio') !== 'video') {
+    return res.status(400).json({ error: 'La salida SRT es solo para canales de video.' });
+  }
+  const v = await nodoVideoDe(cliente);
+  if (!v) return res.status(400).json({ error: 'El canal no está asignado a un nodo de video.' });
+
+  const activo = req.body?.activo !== false;
+  const r = await v.nodo.srtSalidaActivar(v.user, activo);
+  if (!r) return res.status(502).json({ error: 'El nodo de video no respondió.' });
+
+  res.json({
+    message: activo
+      ? 'Salida SRT activada ✅ Ya se pueden bajar la señal con esa dirección.'
+      : 'Salida SRT desactivada. Quien la tuviera puesta dejará de recibirla.',
+    srt_salida_activa: activo,
   });
 }));
 

@@ -107,6 +107,7 @@ export default function AdminClientes() {
   const [nuevaPass, setNuevaPass] = useState(null);   // clave recién generada (se ve una vez)
   const [generando, setGenerando] = useState(false);
   const [srtBusy, setSrtBusy] = useState(false);
+  const [srtSalidaBusy, setSrtSalidaBusy] = useState(false);
   const [consumo, setConsumo] = useState({});   // cliente_id -> disco y transferencia
   const [oyentes, setOyentes] = useState({});   // cliente_id -> oyentes (audio)
   const [viewers, setViewers] = useState({});   // cliente_id -> viewers (video)
@@ -252,6 +253,20 @@ export default function AdminClientes() {
       alert(r.message);
     } catch (e) { alert(e.message); }
     finally { setSrtBusy(false); }
+  }
+
+  /** Permite (o no) que un tercero se baje la señal del canal por SRT. */
+  async function cambiarSrtSalida(activo) {
+    if (!accesos) return;
+    setSrtSalidaBusy(true);
+    try {
+      const r = await apiFetch(`/admin/clientes/${accesos.id}/srt-salida`, {
+        method: 'PUT', body: JSON.stringify({ activo }),
+      });
+      setDatos(await apiFetch(`/admin/clientes/${accesos.id}/accesos`));
+      alert(r.message);
+    } catch (e) { alert(e.message); }
+    finally { setSrtSalidaBusy(false); }
   }
 
   async function verAccesos(c) {
@@ -597,6 +612,41 @@ export default function AdminClientes() {
                           <p className="text-[11px] text-gray-400 mt-1">
                             En OBS: Servicio «Personalizado», esta dirección en Servidor y la clave vacía.
                             Latencia {datos.video.srt.latencia_ms} ms.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Salida SRT. Es la contraria: no deja subir, deja que un
+                      tercero se LLEVE la señal. Por eso va en su propio bloque
+                      y no como una opción más del de arriba. */}
+                  {datos.video.srt_salida_activa !== null && datos.video.srt_salida_activa !== undefined && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div>
+                          <div className="label !mb-0">Salida SRT (cable operadores)</div>
+                          <p className="text-[11px] text-gray-400">
+                            Deja que un tercero se baje su señal. Para uno o dos destinos, no para el público.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => cambiarSrtSalida(!datos.video.srt_salida_activa)}
+                          disabled={srtSalidaBusy}
+                          className={`text-xs px-3 py-1.5 rounded-lg border transition shrink-0 ${
+                            datos.video.srt_salida_activa
+                              ? 'border-brand-500 text-brand-600 dark:text-brand-400'
+                              : 'border-gray-200 dark:border-gray-800 text-gray-400 hover:border-brand-500'
+                          }`}
+                        >
+                          {srtSalidaBusy ? '…' : datos.video.srt_salida_activa ? '● Activa' : 'Desactivada'}
+                        </button>
+                      </div>
+                      {datos.video.srt_salida_activa && datos.video.srt_salida && (
+                        <>
+                          <Copiable texto={datos.video.srt_salida.url} />
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            Esta es la que se le pasa al operador. Cada conexión se lleva el flujo entero.
                           </p>
                         </>
                       )}

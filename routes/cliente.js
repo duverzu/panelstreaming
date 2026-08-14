@@ -690,7 +690,8 @@ router.get('/video', requireCliente, wrap(async (req, res) => {
     const plan = await planModel.findByNombre(cliente.plan);
     // SRT solo se le muestra a quien lo tiene activado: si no, sería una
     // dirección que le va a rechazar la conexión y una llamada al soporte.
-    const conSrt = (await ctx.nodo.srtActivos()).includes(user);
+    const [entrada, salidas] = await Promise.all([ctx.nodo.srtActivos(), ctx.nodo.srtSalida()]);
+    const conSrt = entrada.includes(user);
     return res.json({
       nombre: cliente.nombre_empresa,
       al_aire: info.al_aire,
@@ -702,19 +703,21 @@ router.get('/video', requireCliente, wrap(async (req, res) => {
       compat: true,
       conexion: { servidor: info.servidor_rtmp, clave: info.clave },
       srt: conSrt ? srtSvc.datos(user, info) : null,
+      srt_salida: salidas.includes(user) ? srtSvc.salida(user, info) : null,
       urls: { canal: info.m3u8, player: info.player },
       consumo: null,
       player_externo: await playerExterno.buscar(cliente.short_name),
     });
   }
 
-  const [detalle, consumo, conexion, plan, vw, srtActivos] = await Promise.all([
+  const [detalle, consumo, conexion, plan, vw, srtActivos, srtSalidas] = await Promise.all([
     ctx.nodo.cuenta(user),
     ctx.nodo.consumo(user, 30),
     ctx.nodo.conexion(user),
     planModel.findByNombre(cliente.plan),
     ctx.nodo.viewers(),
     ctx.nodo.srtActivos(),
+    ctx.nodo.srtSalida(),
   ]);
   if (!detalle) return res.status(502).json({ error: 'No se pudo consultar tu canal ahora mismo. Intenta en un momento.' });
 
@@ -737,6 +740,7 @@ router.get('/video', requireCliente, wrap(async (req, res) => {
       clave: conexion.clave,
     } : null,
     srt: srtActivos.includes(user) ? srtSvc.datos(user, conexion) : null,
+    srt_salida: srtSalidas.includes(user) ? srtSvc.salida(user, conexion) : null,
     urls: {
       canal: `${base}/hybrid/play.m3u8`,     // lo que ponen en su web/app
       emision: `${base}/stream/play.m3u8`,

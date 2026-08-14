@@ -42,6 +42,7 @@ export default function VideoConectar() {
       </div>
 
       {data.srt && <ConexionSrt srt={data.srt} />}
+      {data.srt_salida && <SalidaSrt srt={data.srt_salida} />}
 
       <RestreamFacebook />
     </div>
@@ -82,6 +83,30 @@ function ConexionSrt({ srt }) {
           El <b>búfer de {srt.latencia_ms / 1000} s</b> es el margen que tiene para recuperar lo que se pierda:
           tu señal sale al aire con ese retraso. Es lo que compra la estabilidad.
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Salida SRT: la dirección que le pasa a su cable operador para que se baje
+ *  la señal. Es lo contrario de las otras dos tarjetas — aquí no sube nada. */
+function SalidaSrt({ srt }) {
+  return (
+    <div className="card p-5 max-w-2xl">
+      <h2 className="font-semibold flex items-center gap-2 mb-1">📤 Entregar tu señal a un cable operador</h2>
+      <p className="text-xs text-gray-400 mb-4">
+        Esta dirección <b>no es para transmitir</b>: es para que otro se lleve tu canal. Se la pasas a tu
+        cable operador y él la pone en su equipo. Llega con unos 2 segundos de retraso, en vez de los
+        20–30 del enlace normal.
+      </p>
+
+      <div className="label mb-1">Dirección para el operador</div>
+      <Copiable texto={srt.url} />
+
+      <div className="mt-4 text-xs text-amber-700 dark:text-amber-400 rounded-xl bg-amber-50 dark:bg-amber-500/10 p-3">
+        <b>No la pongas en tu web ni se la des a tu público.</b> Cada persona que se conecte se lleva tu
+        señal completa, sin comprimir. Es para uno o dos destinos concretos; para el público está tu
+        enlace de siempre.
       </div>
     </div>
   );

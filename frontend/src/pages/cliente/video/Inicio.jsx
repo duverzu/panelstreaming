@@ -71,6 +71,16 @@ export default function VideoInicio() {
                   <p className="text-[10px] text-gray-400 mt-1">Va en «Servidor» y la clave se deja vacía.</p>
                 </div>
               )}
+              {/* La salida no es un dato de conexión suyo: es lo que le entrega
+                  a un tercero. Se separa para que no la confunda con las de
+                  arriba y acabe pegándola en su OBS. */}
+              {data.srt_salida && (
+                <div className="pt-2.5 border-t border-indigo-100 dark:border-indigo-500/20">
+                  <div className="label mb-1 !text-[11px]">📤 Para tu cable operador (no para transmitir)</div>
+                  <Copiable texto={data.srt_salida.url} />
+                  <p className="text-[10px] text-gray-400 mt-1">Con esta se llevan tu señal. No la publiques.</p>
+                </div>
+              )}
             </div>
           ) : <p className="text-xs text-gray-400">Tu plan no incluye transmisión en vivo.</p>}
           <div className="mt-3"><div className="label mb-1 !text-[11px]">🔗 Enlace del canal (.m3u8)</div><Copiable texto={data.urls?.canal} /></div>
