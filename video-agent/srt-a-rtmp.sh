@@ -15,10 +15,15 @@ USUARIO="$1"
 # mismo gancho salta tambien cuando es nuestro propio extractor el que publica
 # aqui -- y puentear eso devolveria a nginx la señal que acaba de salir de
 # nginx: un bucle que ademas pelearia con el publicador de verdad.
-if [ "$MTX_SOURCE_TYPE" != "srtConn" ]; then
-  echo "[srt] $USUARIO: la fuente es $MTX_SOURCE_TYPE, no se puentea"
-  exit 0
-fi
+# Se descarta por lo que NO debe puentearse, no por lo que si: el unico caso a
+# excluir es nuestro propio extractor, que publica aqui por RTSP. Al reves --
+# exigir el nombre exacto del tipo SRT -- una version de MediaMTX que lo
+# renombrara dejaria al cliente sin poder emitir, y sin pista de por que.
+case "$MTX_SOURCE_TYPE" in
+  *rtsp*|*RTSP*)
+    echo "[srt] $USUARIO: la fuente es nuestro propio extractor, no se puentea"
+    exit 0 ;;
+esac
 
 # El token lo guarda el agente (compat-tokens.json); se pide por localhost.
 TOKEN=$(curl -s --max-time 5 "http://127.0.0.1:3000/srt/token?user=$USUARIO")
