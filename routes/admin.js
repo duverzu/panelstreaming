@@ -1102,6 +1102,30 @@ router.get('/banda', requireAdmin, wrap(async (req, res) => {
 //  SERVIDORES (MULTI-SERVIDOR)
 // ==================================================================
 
+/**
+ * GET /admin/nodos-video/salud — cómo está por dentro cada nodo de video.
+ *
+ * Se pregunta a los nodos en paralelo y nunca se deja caer la respuesta por
+ * uno que no conteste: un nodo mudo sale marcado como tal y los demás se ven
+ * igual. Si el panel se quedara esperando, un nodo caído dejaría la pantalla
+ * en blanco justo cuando más falta hace mirarla.
+ */
+router.get('/nodos-video/salud', requireAdmin, wrap(async (req, res) => {
+  const servidores = (await servidorModel.findAllConUso()).filter((s) => s.tipo === 'video' && s.activo);
+  const nodos = await Promise.all(servidores.map(async (s) => {
+    const nodo = videoNode.crearCliente(s.url, s.api_key);
+    const salud = await nodo.salud();
+    return {
+      id: s.id, nombre: (s.nombre || '').trim(),
+      responde: Boolean(salud),
+      banda_mensual_gb: s.banda_mensual_gb || null,
+      consumido_gb: s.consumido_gb || null,
+      ...(salud || {}),
+    };
+  }));
+  res.json({ nodos });
+}));
+
 router.get('/servidores', requireAdmin, wrap(async (req, res) => {
   res.json({ servidores: await servidorModel.findAllConUso() });
 }));

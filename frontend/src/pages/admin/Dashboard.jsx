@@ -3,6 +3,7 @@ import { apiFetch } from '../../api';
 import { useAmbito } from '../../ambito';
 import DonutChart from '../../components/charts/DonutChart';
 import ServerStats from '../../components/ServerStats';
+import SaludNodos from '../../components/SaludNodos';
 import GuardianBanda from '../../components/GuardianBanda';
 
 /** GB legible: 850 GB, 2.4 TB… */
@@ -112,6 +113,11 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       {/* ═══ 1) GUARDIÁN DE BANDA — lo primero: salud de todos los nodos ═══ */}
       <GuardianBanda />
+
+      {/* Salud de los nodos de video: lo que antes solo se veía por SSH.
+          Va justo debajo del guardián porque responde a la misma pregunta
+          —¿hay algo que atender?— y se lee de un vistazo. */}
+      {!esAudio && <SaludNodos />}
 
       {/* ═══ 2) RESUMEN: audio · video · VPS, uno al lado del otro ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

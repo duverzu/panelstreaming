@@ -30,6 +30,17 @@ const WA_TOKEN = process.env.WHATSAPP_TOKEN || '';
 const WA_TO = process.env.WHATSAPP_TO || '';
 const WA_URL = process.env.WHATSAPP_API_URL || 'https://api.360messenger.com/v2/sendMessage';
 const INTERVALO = Number(process.env.MONITOR_INTERVALO_MS || 3 * 60 * 1000);
+
+// Límites a partir de los cuales avisar sobre un nodo de video. Se avisa solo
+// en el CAMBIO de nivel, no en cada ronda: una alerta que se repite cada 3
+// minutos se deja de leer a la tercera, y entonces ya no sirve de nada.
+const LIM = {
+  disco_aviso: Number(process.env.LIM_DISCO_AVISO || 80),
+  disco_critico: Number(process.env.LIM_DISCO_CRITICO || 92),
+  cpu: Number(process.env.LIM_CPU || 85),
+  memoria: Number(process.env.LIM_MEMORIA || 90),
+  robado: Number(process.env.LIM_CPU_ROBADO || 25),
+};
 const GB = 1024 ** 3;
 
 const hayTelegram = () => Boolean(TG_TOKEN && TG_CHAT);
@@ -37,7 +48,7 @@ const hayWhatsapp = () => Boolean(WA_TOKEN && WA_TO);
 const configurado = () => hayTelegram() || hayWhatsapp();
 
 // Último estado conocido, para alertar solo en los CAMBIOS (no spamear).
-const st = { servidores: new Map(), clientes: new Map(), banda: new Map() };
+const st = { servidores: new Map(), clientes: new Map(), banda: new Map(), salud: new Map() };
 
 async function enviarTelegram(texto) {
   try {
@@ -92,9 +103,14 @@ async function revisar() {
 
     try {
       if (esVideo) {
-        const cuentas = await videoNode.crearCliente(s.url, s.api_key).cuentas();
-        if (!cuentas) throw new Error('sin respuesta');
-        for (const c of cuentas) online[c.user] = Boolean(c.al_aire);
+        // Los canales viven en DOS sitios: las cuentas propias del nodo y los
+        // heredados de asilivehd. Mirar solo las primeras dejaba sin vigilar a
+        // 17 de los 20 canales — se caían y nadie se enteraba.
+        const nodo = videoNode.crearCliente(s.url, s.api_key);
+        const [cuentas, compat] = await Promise.all([nodo.cuentas(), nodo.compatClientes()]);
+        if (!cuentas && !compat.length) throw new Error('sin respuesta');
+        for (const c of cuentas || []) online[c.user] = Boolean(c.al_aire);
+        for (const c of compat || []) online[c.user] = Boolean(c.al_aire);
       } else {
         const np = await azuracast.crearCliente(s.url, s.api_key).getNowPlayingAll();
         if (!np) throw new Error('sin respuesta');
@@ -123,7 +139,10 @@ async function revisar() {
       }
     }
 
-    // 3) Banda cerca del tope
+    // 3) Salud de la máquina del nodo de video (disco, CPU, memoria, servicios)
+    if (esVideo) await revisarSalud(s);
+
+    // 4) Banda cerca del tope
     if (s.banda_mensual_gb) {
       try {
         const dias = await consumoModel.mesActual(s.id);
@@ -136,6 +155,61 @@ async function revisar() {
       } catch (_) {}
     }
   }
+}
+
+/**
+ * Vigila la máquina de un nodo de video y avisa al cruzar un límite.
+ *
+ * Cada cosa se sigue por separado con su propio nivel: si el disco se pone
+ * crítico y además cae MediaMTX, llegan dos avisos distintos y no uno que
+ * tape al otro. Y solo se avisa cuando el nivel CAMBIA, para que el mensaje
+ * signifique «esto acaba de pasar» y no «esto sigue igual».
+ */
+async function revisarSalud(s) {
+  const salud = await videoNode.crearCliente(s.url, s.api_key).salud();
+  if (!salud) return;    // agente antiguo sin la ruta, o nodo mudo (ya se avisó arriba)
+
+  const avisos = [];
+  const nivelar = (clave, nivel, texto) => {
+    if (transicion(st.salud, `${s.id}:${clave}`, nivel) && nivel !== 'ok') avisos.push(texto);
+  };
+
+  const disco = salud.disco?.usado_pct;
+  if (disco != null) {
+    const nivel = disco >= LIM.disco_critico ? 'critico' : disco >= LIM.disco_aviso ? 'alto' : 'ok';
+    const libre = (salud.disco.libre_bytes / 1024 ** 3).toFixed(1);
+    nivelar('disco', nivel, `${nivel === 'critico' ? '🚨' : '⚠️'} ${s.nombre}: disco al ${disco}% (quedan ${libre} GB). Sin espacio, nginx deja de escribir el video y los canales se quedan mudos.`);
+  }
+
+  const cpu = salud.cpu?.usado_pct;
+  if (cpu != null) {
+    nivelar('cpu', cpu >= LIM.cpu ? 'alto' : 'ok',
+      `⚠️ ${s.nombre}: CPU al ${cpu}% de ${salud.cpu.nucleos} núcleos. Con el CPU saturado el video empieza a entrecortarse.`);
+  }
+
+  // El CPU robado se sigue aparte porque no se arregla optimizando nada: es el
+  // proveedor dando menos máquina de la que vende.
+  const robado = salud.cpu?.robado_pct;
+  if (robado != null) {
+    nivelar('robado', robado >= LIM.robado ? 'alto' : 'ok',
+      `⚠️ ${s.nombre}: el proveedor se está llevando el ${robado}% del CPU (steal). No es consumo nuestro; si sigue así, hay que reclamar o cambiar de máquina.`);
+  }
+
+  const mem = salud.memoria?.usado_pct;
+  if (mem != null) {
+    nivelar('memoria', mem >= LIM.memoria ? 'alto' : 'ok',
+      `⚠️ ${s.nombre}: memoria al ${mem}%. Si se llena, el sistema empieza a matar procesos y se caen canales.`);
+  }
+
+  for (const [nombre, vivo] of Object.entries(salud.servicios || {})) {
+    if (transicion(st.salud, `${s.id}:svc:${nombre}`, Boolean(vivo), true)) {
+      avisos.push(vivo
+        ? `✅ ${s.nombre}: ${nombre} volvió a levantarse.`
+        : `🔴 ${s.nombre}: ${nombre} NO está corriendo. ${nombre === 'nginx' ? 'Sin él no se ve ningún canal.' : 'Sin él no entra ni sale nada por SRT.'}`);
+    }
+  }
+
+  for (const texto of avisos) await notificar(texto);
 }
 
 /** Envía un mensaje de prueba por los canales configurados. */

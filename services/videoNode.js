@@ -45,6 +45,16 @@ function crearCliente(baseURL, token) {
       try { return (await api.get('/health')).data; } catch (e) { return fallo('salud', e); }
     },
 
+    /** Salud de la máquina: CPU, memoria, disco y si sus servicios siguen de
+     *  pie. Devuelve null si el agente es antiguo y no conoce la ruta. */
+    salud: async () => {
+      try { return (await api.get('/nodo/salud')).data; }
+      catch (e) {
+        if (e.response?.status === 404) return null;
+        return fallo('salud del nodo', e);
+      }
+    },
+
     /** Contador de tráfico de red del nodo (bytes acumulados desde el arranque). */
     redNodo: async () => {
       try { return (await api.get('/nodo/red')).data; } catch (e) { return fallo('redNodo', e); }
