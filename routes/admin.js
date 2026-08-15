@@ -1113,8 +1113,11 @@ router.get('/banda', requireAdmin, wrap(async (req, res) => {
 router.get('/nodos-video/salud', requireAdmin, wrap(async (req, res) => {
   const servidores = (await servidorModel.findAllConUso()).filter((s) => s.tipo === 'video' && s.activo);
   const nodos = await Promise.all(servidores.map(async (s) => {
-    const nodo = videoNode.crearCliente(s.url, s.api_key);
-    const salud = await nodo.salud();
+    // `findAllConUso` no devuelve la api_key (lista para pintar, no para
+    // hablar con el nodo). Se pide el servidor completo, o el agente responde
+    // 401 y el nodo se ve como caído estando perfectamente vivo.
+    const nodo = await videoNode.paraServidorId(s.id);
+    const salud = nodo ? await nodo.salud() : null;
     return {
       id: s.id, nombre: (s.nombre || '').trim(),
       responde: Boolean(salud),
