@@ -565,7 +565,14 @@ router.get('/servidor', requireAdmin, wrap(async (req, res) => {
 
   const memTotal = Number(s.memory?.total_bytes || 0);
   const memFree = Number(s.memory?.free_bytes || 0);
-  const memUsed = Math.max(0, memTotal - memFree);
+  // En Linux la memoria "libre" NO es la que queda disponible: el kernel usa
+  // todo el sobrante como caché de disco y lo suelta en cuanto alguien lo
+  // pide. Restar total − libre contaba esa caché como gastada y pintaba en
+  // naranja, al 67%, un servidor que de verdad va al 13%. AzuraCast ya manda
+  // `used_bytes` con la caché descontada; el cálculo a mano queda de respaldo.
+  const memUsed = s.memory?.used_bytes != null
+    ? Number(s.memory.used_bytes)
+    : Math.max(0, memTotal - memFree - Number(s.memory?.cached_bytes || 0) - Number(s.memory?.buffers_bytes || 0));
 
   const diskTotal = Number(s.disk?.total_bytes || 0);
   const diskUsed = Number(s.disk?.used_bytes || 0);
@@ -587,7 +594,11 @@ router.get('/servidor', requireAdmin, wrap(async (req, res) => {
     },
     memoria: {
       total: s.memory?.total_readable || '—',
+      usado: s.memory?.used_readable || humanBytes(memUsed),
       usado_pct: pct(memUsed, memTotal),
+      // Lo que importa es cuánta queda de verdad, contando la caché como
+      // disponible, que es lo que es.
+      libre: humanBytes(Math.max(0, memTotal - memUsed)),
     },
     disco: {
       total: s.disk?.total_readable || '—',

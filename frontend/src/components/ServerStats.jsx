@@ -75,7 +75,11 @@ export default function ServerStats() {
           </div>
 
           <Barra label={`CPU · ${s.cpu.cores || ''} cores`} pct={s.cpu.usado_pct} detail={`${s.cpu.usado_pct}%`} />
-          <Barra label={`Memoria · ${s.memoria.total}`} pct={s.memoria.usado_pct} detail={`${s.memoria.usado_pct}%`} />
+          {/* Se enseña cuánta memoria hay usada de verdad, no solo el
+              porcentaje: "3.78 GB de 31.34 GB" tranquiliza mirándolo, un 13%
+              a secas obliga a hacer la cuenta. */}
+          <Barra label={`Memoria · ${s.memoria.total}`} pct={s.memoria.usado_pct}
+            detail={`${s.memoria.usado || ''} · ${s.memoria.usado_pct}%`} />
           {Array.isArray(s.cpu.load) && s.cpu.load.length === 3 && (
             <div className="text-xs text-gray-400 pt-1">
               Carga: {s.cpu.load.map((n) => Number(n).toFixed(2)).join(' · ')} (1/5/15 min)
