@@ -587,11 +587,21 @@ router.get('/servidor', requireAdmin, wrap(async (req, res) => {
   });
 
   res.json({
-    cpu: {
-      usado_pct: Math.round(Number(s.cpu?.total?.usage || 0)),
-      cores: Array.isArray(s.cpu?.cores) ? s.cpu.cores.length : null,
-      load: s.cpu?.load || [],
-    },
+    cpu: (() => {
+      // `usage` incluye el STEAL: el tiempo que el hipervisor nos quita para
+      // dárselo a otro cliente de la misma máquina física. Eso no es trabajo
+      // nuestro y no se arregla optimizando nada — es el proveedor vendiendo
+      // el hierro de más. Mezclarlo con nuestro consumo hace parecer que el
+      // servidor está cargado cuando en realidad está esperando su turno.
+      const uso = Number(s.cpu?.total?.usage || 0);
+      const robado = Number(s.cpu?.total?.steal || 0);
+      return {
+        usado_pct: Math.max(0, Math.round(uso - robado)),
+        robado_pct: Math.round(robado),
+        cores: Array.isArray(s.cpu?.cores) ? s.cpu.cores.length : null,
+        load: s.cpu?.load || [],
+      };
+    })(),
     memoria: {
       total: s.memory?.total_readable || '—',
       usado: s.memory?.used_readable || humanBytes(memUsed),

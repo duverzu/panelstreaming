@@ -75,6 +75,14 @@ export default function ServerStats() {
           </div>
 
           <Barra label={`CPU · ${s.cpu.cores || ''} cores`} pct={s.cpu.usado_pct} detail={`${s.cpu.usado_pct}%`} />
+          {/* El steal no se arregla desde aquí: es el proveedor dando menos
+              CPU del que vende. Se avisa solo cuando ya es bastante, porque un
+              poco es normal en cualquier VPS compartido. */}
+          {s.cpu.robado_pct >= 5 && (
+            <div className="text-[11px] text-amber-600 dark:text-amber-400 -mt-1">
+              +{s.cpu.robado_pct}% que se lleva el vecino (CPU robado por el proveedor)
+            </div>
+          )}
           {/* Se enseña cuánta memoria hay usada de verdad, no solo el
               porcentaje: "3.78 GB de 31.34 GB" tranquiliza mirándolo, un 13%
               a secas obliga a hacer la cuenta. */}
