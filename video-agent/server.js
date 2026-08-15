@@ -19,6 +19,7 @@ const fsp = require('fs/promises');
 const path = require('path');
 const readline = require('readline');
 const claves = require('./claves');
+const salud = require('./salud');
 const webtv = require('./webtv');
 const restream = require('./restream');
 const compat = require('./compat');
@@ -1017,6 +1018,26 @@ app.put('/cuentas/:user/restream', wrap(async (req, res) => {
     puertoRtmp,
   });
   res.json({ ok: true, ...r });
+}));
+
+/** GET /nodo/salud — como esta la maquina por dentro (lo que el panel no ve). */
+app.get('/nodo/salud', wrap(async (req, res) => {
+  const s = await salud.estado({ rutaVideos: BASE });
+  // Cuántos canales están al aire, de las DOS fuentes. Contar solo las cuentas
+  // propias deja fuera los heredados de asilivehd, que en el dedicado son la
+  // mayoría — ese descuido ya ha mordido antes con el disco y con los viewers.
+  let alAire = 0, total = 0;
+  try {
+    const users = compat.lista();
+    total += users.length;
+    for (const u of users) if (await compatAlAire(u)) alAire++;
+  } catch (_) {}
+  try {
+    const propias = await cuentas();
+    total += propias.length;
+    for (const c of propias) if ((await estaAlAire(c.dir)).al_aire) alAire++;
+  } catch (_) {}
+  res.json({ ...s, canales: { al_aire: alAire, total } });
 }));
 
 app.get('/nodo/red', wrap(async (req, res) => {
