@@ -57,6 +57,14 @@ export default function ClienteReproductor() {
   const embedUrl = `${origin}/embed/${r.shortcode}`;
   const iframe = `<iframe src="${embedUrl}" width="100%" height="110" frameborder="0" scrolling="no" style="max-width:420px;border-radius:16px"></iframe>`;
   const html5 = `<audio controls style="width:100%;max-width:420px"><source src="${r.stream_url}" type="audio/mpeg"></audio>`;
+  // Metadata: lo que piden quienes ya tienen su web hecha y solo quieren
+  // pintar el título ellos mismos, con su propio diseño.
+  const metadataUrl = `${origin}/api/public/nowplaying/${r.shortcode}`;
+  const metadataEjemplo = `setInterval(async () => {
+  const d = await (await fetch("${metadataUrl}")).json();
+  document.getElementById("sonando").textContent =
+    d.is_online ? d.artist + " - " + d.title : "Fuera del aire";
+}, 15000);`;
 
   return (
     <div className="space-y-6">
@@ -139,6 +147,25 @@ export default function ClienteReproductor() {
         <Snippet label="🔗 Stream directo (URL)" code={r.stream_url} />
         {r.pls_url && <Snippet label="📻 Winamp / VLC / foobar (.pls)" code={r.pls_url} />}
         {r.m3u_url && <Snippet label="📻 iTunes / otros (.m3u)" code={r.m3u_url} />}
+      </div>
+
+      {/* Metadata en crudo. Va en su propia tarjeta y no como un enlace más
+          arriba porque el público al que sirve es otro: no es para pegar en
+          una web, es para que alguien programe con ello. */}
+      <div className="card p-5 space-y-4">
+        <h2 className="font-semibold">Datos de lo que suena (para programadores)</h2>
+        <p className="text-xs text-gray-400 -mt-3">
+          Si ya tienes tu web o tu app y solo quieres mostrar el título con tu propio diseño,
+          esta dirección te lo entrega en vivo. Devuelve el artista, la canción, la carátula,
+          y si al aire está el AutoDJ o un locutor.
+        </p>
+        <Snippet label="🔎 Enlace de metadata (JSON)" code={metadataUrl} />
+        <Snippet label="💻 Ejemplo para tu web" code={metadataEjemplo} />
+        <p className="text-[11px] text-gray-400">
+          Consúltalo cada <b>10 o 15 segundos</b>. Pedirlo más seguido no te da datos más
+          nuevos —se actualizan cada pocos segundos— y sí carga de más el servidor que está
+          emitiendo tu radio.
+        </p>
       </div>
     </div>
     </div>
