@@ -41,17 +41,22 @@ app.set('trust proxy', 1);
 // El resto de la API sigue con la lista cerrada, que es donde importa.
 app.use('/api/public', cors({ origin: '*', credentials: false }));
 
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
-        return cb(null, true);
-      }
-      return cb(new Error(`Origen no permitido por CORS: ${origin}`));
-    },
-    credentials: true,
-  })
-);
+const corsEstricto = cors({
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error(`Origen no permitido por CORS: ${origin}`));
+  },
+  credentials: true,
+});
+
+// Montar el permisivo antes NO basta: este seguiría ejecutándose después sobre
+// la misma petición y la rechazaría igual. Hay que saltárselo a mano.
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/public')) return next();
+  return corsEstricto(req, res, next);
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
