@@ -30,6 +30,17 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .map((o) => o.trim())
   .filter(Boolean);
 
+// El panel vive detrás de un proxy (Caddy). Sin esto, TODAS las peticiones se
+// ven como 127.0.0.1 y cualquier límite por IP castigaría a todo el mundo a la
+// vez por culpa de uno solo.
+app.set('trust proxy', 1);
+
+// Los endpoints públicos los llama la WEB DE CADA CLIENTE, desde su propio
+// dominio: la lista de orígenes permitidos los bloqueaba con un error. Se
+// abren solo ellos, y sin credenciales — son de lectura y no llevan sesión.
+// El resto de la API sigue con la lista cerrada, que es donde importa.
+app.use('/api/public', cors({ origin: '*', credentials: false }));
+
 app.use(
   cors({
     origin: (origin, cb) => {

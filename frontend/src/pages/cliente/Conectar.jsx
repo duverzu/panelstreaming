@@ -35,10 +35,13 @@ function Campo({ etiqueta, valor, ayuda }) {
 export default function ClienteConectar() {
   const [dj, setDj] = useState(null);
   const [error, setError] = useState(null);
+  const [radio, setRadio] = useState(null);
 
   useEffect(() => { apiFetch('/cliente/configurar-dj').then(setDj).catch((e) => setError(e.message)); }, []);
+  useEffect(() => { apiFetch('/cliente/reproductor').then((d) => setRadio(d.reproductor)).catch(() => {}); }, []);
 
   return (
+    <div className="space-y-6">
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Datos de conexión */}
       <div className="card p-5">
@@ -85,6 +88,47 @@ export default function ClienteConectar() {
         </div>
         <Link to="/cliente/aprende" className="btn-ghost mt-4 inline-flex text-sm">📚 Ver la guía completa</Link>
       </div>
+    </div>
+
+    {radio?.shortcode && <EnlacesYScripts shortcode={radio.shortcode} />}
+    </div>
+  );
+}
+
+/**
+ * Enlaces y scripts: lo que se lleva quien va a programar algo — su web, su
+ * app, su pantalla en el estudio. Va al final y en ancho completo porque no
+ * es un dato de conexión más: es material para otra persona (su webmaster).
+ */
+function EnlacesYScripts({ shortcode }) {
+  const url = `${window.location.origin}/api/public/nowplaying/${shortcode}`;
+  const ejemplo = `setInterval(async () => {
+  const d = await (await fetch("${url}")).json();
+  document.getElementById("sonando").textContent =
+    d.is_online ? d.artist + " - " + d.title : "Fuera del aire";
+}, 15000);`;
+
+  return (
+    <div className="card p-5">
+      <h2 className="font-semibold mb-1">🔗 Enlaces y scripts</h2>
+      <p className="text-xs text-gray-400 mb-4">
+        Para mostrar en tu web o tu app lo que está sonando, con tu propio diseño. Te entrega el
+        artista, la canción, la carátula, y si al aire está el AutoDJ o un locutor en vivo.
+      </p>
+      <div className="space-y-3">
+        <div>
+          <div className="label mb-1">Datos de lo que suena (JSON)</div>
+          <Campo etiqueta="Consúltalo desde tu web" valor={url} />
+        </div>
+        <div>
+          <div className="label mb-1">Ejemplo para tu web</div>
+          <pre className="text-[11px] font-mono bg-gray-50 dark:bg-gray-950 rounded-xl p-3 overflow-x-auto">{ejemplo}</pre>
+        </div>
+      </div>
+      <p className="text-[11px] text-gray-400 mt-3">
+        Pídelo cada <b>10 o 15 segundos</b>. Más seguido no te da datos más nuevos y sí carga de
+        más el servidor que está emitiendo tu radio.
+      </p>
     </div>
   );
 }
