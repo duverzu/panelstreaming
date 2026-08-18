@@ -123,8 +123,22 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: mensaje });
 });
 
+// ---- Modo espera --------------------------------------------------
+// Una copia del panel levantada para probar o para migrar NO puede ejecutar
+// los trabajos de fondo: el de anuncios de hora ESCRIBE en AzuraCast (sube
+// audio y toca playlists), así que dos panels vivos a la vez se pisarían
+// sobre las radios que están al aire. El monitor, además, mandaría cada
+// alerta por duplicado.
+//
+// En espera, el panel se puede abrir y usar con normalidad — solo se queda
+// quieto en lo que actúa solo.
+const EN_ESPERA = /^(1|true|si|sí)$/i.test(process.env.MODO_ESPERA || '');
+if (EN_ESPERA) {
+  console.log('⏸️  MODO ESPERA: sin guardián, sin anuncios de hora y sin alertas.');
+}
+
 // ---- Guardián de banda (muestreo periódico) ----------------------
-try {
+if (!EN_ESPERA) try {
   require('./services/guardian').iniciar();
 } catch (e) {
   console.error('[guardian] no se pudo iniciar:', e.message);
@@ -133,7 +147,7 @@ try {
 // ---- "Da la hora" (anuncio de hora programado) -------------------
 // Solo deja el audio de cada franja listo con antelación; quien lo pone al
 // aire, puntual, es la programación nativa de AzuraCast (once_per_hour).
-try {
+if (!EN_ESPERA) try {
   require('./services/anuncioHora').iniciar();
 } catch (e) {
   console.error('[anuncio-hora] no se pudo iniciar:', e.message);
@@ -143,14 +157,17 @@ try {
 // sus schedule_items, que se sincroniza al guardarla. Ver services/cunas.js.
 
 // ---- Monitor de alertas (Telegram) -------------------------------
-try {
+if (!EN_ESPERA) try {
   require('./services/monitor').iniciar();
 } catch (e) {
   console.error('[monitor] no se pudo iniciar:', e.message);
 }
 
 // ---- Arranque -----------------------------------------------------
-app.listen(PORT, () => {
+// Escuchar solo donde haga falta. En una máquina compartida con otras
+// aplicaciones, el panel se deja detrás del túnel y no en la red.
+const HOST = process.env.HOST || '0.0.0.0';
+app.listen(PORT, HOST, () => {
   console.log(`\n🎙️  Panel Radio Backend en http://localhost:${PORT}`);
   console.log(`   • Frontend      -> /`);
   console.log(`   • API Admin     -> /api/admin`);
