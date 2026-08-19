@@ -115,10 +115,42 @@ router.post('/servicios', wrap(async (req, res) => {
   const pass = password || crypto.randomBytes(6).toString('hex');
   const r = await provisioning.crearClienteConEstacion({ email, username, password: pass, nombre_empresa, plan_id: pid });
 
+  const login = { url: panelUrl(), usuario: r.credenciales.usuario, email: r.credenciales.email, password: r.credenciales.password };
+
+  // Un canal de video no tiene "estación" ni datos de DJ: tiene servidor RTMP y
+  // clave. Devolver la forma de audio con todo en null hacía que quien factura
+  // creara la cuenta bien y no tuviera NADA que entregarle al cliente.
+  if (r.video) {
+    return res.status(201).json({
+      ok: true,
+      tipo: 'video',
+      servicio_id: r.cliente.id,
+      login,
+      canal: {
+        short_name: r.cliente.short_name,
+        url_streaming: r.video.canal,
+        servidor_rtmp: r.video.servidor_rtmp,
+        clave: r.video.clave,
+        puerto_http: r.video.puerto_http,
+        puerto_rtmp: r.video.puerto_rtmp,
+      },
+      // Se repite bajo `estacion` a propósito: quien ya lee esa clave para las
+      // radios sigue funcionando sin cambiar una línea, y ve el canal en vez
+      // de una ficha vacía.
+      estacion: {
+        id: null,
+        short_name: r.cliente.short_name,
+        url_streaming: r.video.canal,
+        url_publica: r.video.canal,
+      },
+    });
+  }
+
   res.status(201).json({
     ok: true,
+    tipo: 'audio',
     servicio_id: r.cliente.id,
-    login: { url: panelUrl(), usuario: r.credenciales.usuario, email: r.credenciales.email, password: r.credenciales.password },
+    login,
     estacion: {
       id: r.cliente.azuracast_station_id,
       short_name: r.cliente.short_name,
