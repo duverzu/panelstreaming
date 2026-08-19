@@ -171,11 +171,13 @@ async function actualizar(id, c) {
        puerto  = COALESCE($5, puerto),
        nota    = COALESCE($6, nota),
        activa  = COALESCE($7, activa),
-       tope_gb = COALESCE($8, tope_gb)
+       -- El tope SÍ se puede vaciar: si viene la clave, manda aunque sea null.
+       -- Con COALESCE a secas no habría forma de quitarle el tope a una máquina.
+       tope_gb = CASE WHEN $9 THEN $8 ELSE tope_gb END
      WHERE id = $1 RETURNING *`,
     [Number(id), c.nombre ?? null, c.host ?? null, c.usuario ?? null,
       c.puerto != null ? Number(c.puerto) : null, c.nota ?? null, c.activa ?? null,
-      c.tope_gb !== undefined ? (Number(c.tope_gb) || null) : null]
+      Number(c.tope_gb) || null, c.tope_gb !== undefined]
   );
   return r.rows[0] || null;
 }

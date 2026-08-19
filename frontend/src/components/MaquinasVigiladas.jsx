@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../api';
 import Gauge from './charts/Gauge';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faServer, faPlus, faTrash, faCircleNodes } from '@fortawesome/free-solid-svg-icons';
+import { faServer, faPlus, faTrash, faCircleNodes, faPen } from '@fortawesome/free-solid-svg-icons';
 
 /** Bytes a la unidad que se lee mejor. */
 function peso(b) {
@@ -51,6 +51,7 @@ function Barra({ etiqueta, detalle, pct, aviso = 75, critico = 90 }) {
 export default function MaquinasVigiladas() {
   const [maquinas, setMaquinas] = useState(undefined);
   const [form, setForm] = useState(null);
+  const [editar, setEditar] = useState(null);   // máquina que se está editando
   const [msg, setMsg] = useState(null);
 
   const cargar = () => apiFetch('/admin/maquinas').then((d) => setMaquinas(d.maquinas || [])).catch(() => setMaquinas([]));
@@ -66,6 +67,16 @@ export default function MaquinasVigiladas() {
     try {
       const r = await apiFetch('/admin/maquinas', { method: 'POST', body: JSON.stringify(form) });
       setForm(null); setMsg({ ok: true, text: r.message }); cargar();
+    } catch (e) { setMsg({ ok: false, text: e.message }); }
+  }
+
+  async function guardarEdicion() {
+    try {
+      const r = await apiFetch(`/admin/maquinas/${editar.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ nombre: editar.nombre, nota: editar.nota, tope_gb: editar.tope_gb || null }),
+      });
+      setEditar(null); setMsg({ ok: true, text: r.message }); cargar();
     } catch (e) { setMsg({ ok: false, text: e.message }); }
   }
 
@@ -164,16 +175,45 @@ export default function MaquinasVigiladas() {
                 <FontAwesomeIcon icon={faServer} className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 <span className="truncate">{m.nombre}</span>
               </span>
-              <button onClick={() => quitar(m)} title="Dejar de vigilar"
-                className="shrink-0 text-gray-300 hover:text-red-500 transition">
-                <FontAwesomeIcon icon={faTrash} className="w-3 h-3" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => setEditar({ ...m })} title="Editar"
+                  className="text-gray-300 hover:text-brand-600 transition">
+                  <FontAwesomeIcon icon={faPen} className="w-3 h-3" />
+                </button>
+                <button onClick={() => quitar(m)} title="Dejar de vigilar"
+                  className="text-gray-300 hover:text-red-500 transition">
+                  <FontAwesomeIcon icon={faTrash} className="w-3 h-3" />
+                </button>
+              </div>
             </div>
             <div className="text-[11px] text-gray-400 mb-4 truncate">
               {m.host || 'esta misma máquina'}{m.nota ? ` · ${m.nota}` : ''}
             </div>
 
-            {m.pausada ? (
+            {editar?.id === m.id ? (
+              <div className="space-y-2.5">
+                <div>
+                  <div className="label mb-1">Nombre</div>
+                  <input className="input" value={editar.nombre}
+                    onChange={(e) => setEditar({ ...editar, nombre: e.target.value })} />
+                </div>
+                <div>
+                  <div className="label mb-1">Tope de tráfico al mes (GB)</div>
+                  <input className="input font-mono text-sm" placeholder="vacío = sin tope"
+                    value={editar.tope_gb || ''}
+                    onChange={(e) => setEditar({ ...editar, tope_gb: e.target.value })} />
+                </div>
+                <div>
+                  <div className="label mb-1">Nota</div>
+                  <input className="input" value={editar.nota || ''}
+                    onChange={(e) => setEditar({ ...editar, nota: e.target.value })} />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={guardarEdicion} className="btn-primary text-sm">Guardar</button>
+                  <button onClick={() => setEditar(null)} className="btn-ghost text-sm">Cancelar</button>
+                </div>
+              </div>
+            ) : m.pausada ? (
               <p className="text-xs text-gray-400">Vigilancia en pausa.</p>
             ) : !m.responde ? (
               <p className="text-xs text-red-600 dark:text-red-400">
@@ -208,12 +248,23 @@ export default function MaquinasVigiladas() {
                       </div>
                     )}
                   </div>
-                ) : m.banda?.consumido_gb > 0 ? (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400">Tráfico este mes</span>
-                    <span className="font-semibold">{tam(m.banda.consumido_gb)}</span>
+                ) : (
+                  /* Sin tope no se dibuja un medidor contra un límite que no
+                     existe, pero SÍ se dice el tráfico y cómo tener el reloj:
+                     dejar el hueco en blanco parece que algo se rompió. */
+                  <div className="rounded-xl bg-gray-50 dark:bg-gray-950 px-3 py-2">
+                    <div className="flex justify-between items-baseline text-xs">
+                      <span className="text-gray-400">Tráfico este mes</span>
+                      <span className="font-semibold">
+                        {m.banda?.consumido_gb > 0 ? tam(m.banda.consumido_gb) : 'midiendo…'}
+                      </span>
+                    </div>
+                    <button onClick={() => setEditar({ ...m })}
+                      className="text-[11px] text-brand-600 dark:text-brand-400 hover:underline mt-1">
+                      Ponle un tope mensual para ver el reloj y la proyección →
+                    </button>
                   </div>
-                ) : null}
+                )}
 
                 <Barra
                   etiqueta={`Disco · ${peso(m.disco?.total_bytes)}`}
