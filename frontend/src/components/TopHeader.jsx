@@ -4,6 +4,9 @@ import { useAuth } from '../auth';
 import { useTheme } from '../theme';
 import { useAmbito, AMBITOS, ETIQUETA } from '../ambito';
 import { IconSun, IconMoon, IconLogout, IconChevronDown } from '../icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faBarsStaggered } from '@fortawesome/free-solid-svg-icons';
+import { useSidebar } from '../sidebarCtx';
 
 /**
  * Selector Todo / Audio / Video. Solo para el admin: es el único que gestiona
@@ -38,6 +41,7 @@ function SelectorAmbito() {
 export default function TopHeader({ title, subtitle }) {
   const { user, role, logout } = useAuth();
   const { dark, toggle } = useTheme();
+  const { plegado, alternar } = useSidebar();
   const [open, setOpen] = useState(false);
   const aprendeUrl = role === 'reseller' ? '/reseller/aprende' : role === 'cliente' ? '/cliente/aprende' : null;
 
@@ -47,9 +51,21 @@ export default function TopHeader({ title, subtitle }) {
 
   return (
     <header className="h-16 shrink-0 flex items-center justify-between px-5 md:px-8 border-b border-gray-200 dark:border-gray-800 bg-white/70 dark:bg-gray-950/60 backdrop-blur sticky top-0 z-20">
-      <div>
-        <h1 className="text-lg font-semibold leading-tight">{title}</h1>
-        {subtitle && <p className="text-xs text-gray-400 leading-tight">{subtitle}</p>}
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Plegar el menú. Va junto al título, que es donde lo busca la mano. */}
+        <button
+          onClick={alternar}
+          title={plegado ? 'Mostrar el menú' : 'Ocultar el menú'}
+          aria-label={plegado ? 'Mostrar el menú' : 'Ocultar el menú'}
+          aria-expanded={!plegado}
+          className="hidden md:grid place-items-center w-9 h-9 shrink-0 rounded-xl border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-brand-600 hover:border-brand-500 transition"
+        >
+          <FontAwesomeIcon icon={faBarsStaggered} className="w-4 h-4" />
+        </button>
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold leading-tight truncate">{title}</h1>
+          {subtitle && <p className="text-xs text-gray-400 leading-tight truncate">{subtitle}</p>}
+        </div>
       </div>
 
       <div className="flex items-center gap-2">

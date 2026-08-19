@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../api';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faShieldHalved, faMicrophoneLines, faVideo } from '@fortawesome/free-solid-svg-icons';
 import BarChart from './BarChart';
 import Gauge from './charts/Gauge';
 
@@ -186,7 +188,7 @@ export default function GuardianBanda() {
     <div>
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-semibold flex items-center gap-2">
-          🛡️ Guardián de banda
+          <FontAwesomeIcon icon={faShieldHalved} className="w-4 h-4 text-brand-500" /> Guardián de banda
           <span className="text-xs font-normal text-gray-400">(consumo estimado del mes)</span>
         </h2>
       </div>
@@ -206,7 +208,9 @@ export default function GuardianBanda() {
             <div key={s.id} className="card p-5">
               <div className="flex items-center justify-between mb-1">
                 <span className="font-medium flex items-center gap-1.5">
-                  <span className="text-xs">{esVideo ? '🎬' : '🎙️'}</span>{s.nombre}
+                  <FontAwesomeIcon icon={esVideo ? faVideo : faMicrophoneLines}
+                    className={`w-3.5 h-3.5 ${esVideo ? 'text-fuchsia-500' : 'text-brand-500'}`} />
+                  {s.nombre}
                 </span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${e.clase}`}>
                   {e.icono} {e.texto}
@@ -234,6 +238,14 @@ export default function GuardianBanda() {
                         <Linea etiqueta="Ritmo actual" valor={`${tam(s.promedio_diario_gb)}/día`} />
                         <Linea etiqueta="Fin de mes" valor={`${tam(s.proyeccion_gb)} · ${s.proyeccion_pct}%`} />
                       </div>
+                      {/* De dónde sale la cifra. Video se mide en el contador
+                          de red del nodo; audio se estima con oyentes ×
+                          bitrate. Presentarlas igual haría creer que las dos
+                          tienen la misma precisión. */}
+                      <p className="text-[10px] text-gray-400 mt-2 text-center">
+                        {s.medicion === 'medido' ? 'Tráfico medido en el nodo' : 'Estimado: oyentes × bitrate'}
+                        {s.desde_dia > 1 && <> · <b>desde el día {s.desde_dia}</b></>}
+                      </p>
                     </div>
 
                     {/* La máquina por dentro, al lado del reloj */}
@@ -288,8 +300,9 @@ export default function GuardianBanda() {
       </div>
 
       <p className="text-xs text-gray-400 mt-3">
-        Estimado con oyentes × bitrate: cuenta el audio enviado, no el tráfico del panel ni
-        las actualizaciones del servidor. Deja margen al definir el tope.
+        En audio se estima el tráfico con los oyentes conectados y el bitrate de cada radio:
+        cuenta el audio enviado, no el del panel ni las actualizaciones del servidor. En video
+        se lee el contador de red del propio nodo. Deja margen al definir el tope.
       </p>
     </div>
   );

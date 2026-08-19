@@ -5,6 +5,7 @@ import App from './App';
 import { AuthProvider } from './auth';
 import { ThemeProvider } from './theme';
 import { AmbitoProvider } from './ambito';
+import { SidebarProvider } from './sidebarCtx';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -12,9 +13,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <ThemeProvider>
       <AuthProvider>
         <AmbitoProvider>
+          <SidebarProvider>
           <BrowserRouter>
             <App />
           </BrowserRouter>
+          </SidebarProvider>
         </AmbitoProvider>
       </AuthProvider>
     </ThemeProvider>

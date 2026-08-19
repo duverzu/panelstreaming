@@ -3,6 +3,8 @@ import { apiFetch } from '../../api';
 import { useAmbito } from '../../ambito';
 import DonutChart from '../../components/charts/DonutChart';
 import GuardianBanda from '../../components/GuardianBanda';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faMicrophoneLines, faVideo } from '@fortawesome/free-solid-svg-icons';
 
 /** GB legible: 850 GB, 2.4 TB… */
 function tam(gb) {
@@ -58,7 +60,8 @@ function Recientes({ clientes, esTodo, esVideo, esAudio }) {
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">{c.nombre_empresa}</div>
                   <div className="text-[11px] text-gray-400 truncate">
-                    {esV ? '🎬 Canal' : '🎙️ Radio'} · {c.plan}
+                    <FontAwesomeIcon icon={esV ? faVideo : faMicrophoneLines} className="w-3 h-3 mr-1" />
+                    {esV ? 'Canal' : 'Radio'} · {c.plan}
                   </div>
                 </div>
                 <span className="text-[11px] text-gray-400 shrink-0">{haceCuanto(c.created_at)}</span>
@@ -119,7 +122,7 @@ export default function AdminDashboard() {
         {!esVideo && (
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold flex items-center gap-2">🎙️ Streaming Audio</h2>
+            <h2 className="font-semibold flex items-center gap-2"><FontAwesomeIcon icon={faMicrophoneLines} className="w-4 h-4 text-brand-500" /> Streaming Audio</h2>
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400">
               {nodosAudio.length} nodo{nodosAudio.length === 1 ? '' : 's'}
             </span>
@@ -137,7 +140,7 @@ export default function AdminDashboard() {
         {!esAudio && (
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold flex items-center gap-2">🎬 Streaming Video</h2>
+            <h2 className="font-semibold flex items-center gap-2"><FontAwesomeIcon icon={faVideo} className="w-4 h-4 text-fuchsia-500" /> Streaming Video</h2>
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-fuchsia-50 dark:bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400">
               {nodosVideo.length} nodo{nodosVideo.length === 1 ? '' : 's'}
             </span>

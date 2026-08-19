@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth';
+import { useSidebar } from '../sidebarCtx';
 import { apiFetch } from '../api';
 import Player from './Player';
 import {
@@ -116,11 +117,15 @@ export default function Sidebar() {
         : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
     }`;
 
+  // Plegado deja solo los iconos, no esconde el menú entero: quien pliega
+  // quiere más sitio para trabajar, no perder de vista dónde está.
+  const { plegado } = useSidebar();
+
   return (
-    <aside className="hidden md:flex md:w-64 shrink-0 flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-      <div className="h-16 flex items-center gap-2 px-6 border-b border-gray-200 dark:border-gray-800">
-        <div className="w-8 h-8 rounded-lg bg-brand-600 grid place-items-center text-white text-lg">{esVideo ? '🎬' : '🎙️'}</div>
-        <div>
+    <aside className={`hidden md:flex shrink-0 flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 transition-[width] duration-200 ${plegado ? 'md:w-[68px]' : 'md:w-64'}`}>
+      <div className={`h-16 flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 ${plegado ? 'px-4 justify-center' : 'px-6'}`}>
+        <div className="w-8 h-8 shrink-0 rounded-lg bg-brand-600 grid place-items-center text-white text-lg">{esVideo ? '🎬' : '🎙️'}</div>
+        <div className={plegado ? 'hidden' : ''}>
           <div className="font-bold leading-tight">Asi Streaming</div>
           <div className="text-[11px] text-gray-400 leading-tight">
             {role === 'admin' ? 'Super Admin' : role === 'reseller' ? 'Revendedor' : 'Portal Cliente'}
@@ -131,26 +136,38 @@ export default function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-6">
         {menu.map((grupo) => (
           <div key={grupo.seccion}>
-            <div className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-              {grupo.seccion}
-            </div>
+            {/* Plegado, el título de sección se cambia por una raya: sin él
+                los iconos de dos grupos distintos quedarían pegados. */}
+            {plegado ? (
+              <div className="mx-3 mb-2 border-t border-gray-100 dark:border-gray-800" />
+            ) : (
+              <div className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                {grupo.seccion}
+              </div>
+            )}
             <div className="space-y-1">
               {grupo.items.map((item) => {
                 const Icon = item.icon;
                 if (item.soon) {
                   return (
-                    <div key={item.label} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 opacity-45 cursor-not-allowed">
+                    <div key={item.label} title={plegado ? `${item.label} (pronto)` : undefined}
+                      className={`w-full flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 opacity-45 cursor-not-allowed ${plegado ? 'px-0 justify-center' : 'px-3'}`}>
                       <Icon />
-                      <span className="flex-1 text-left">{item.label}</span>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400">pronto</span>
+                      {!plegado && <>
+                        <span className="flex-1 text-left">{item.label}</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400">pronto</span>
+                      </>}
                     </div>
                   );
                 }
                 const activo = esActivo(item.to);
                 return (
-                  <NavLink key={item.label} to={item.to} end className={itemClass(activo)}>
+                  // El nombre se pierde al plegar, así que pasa al `title`: el
+                  // icono solo no siempre basta para saber a dónde lleva.
+                  <NavLink key={item.label} to={item.to} end title={plegado ? item.label : undefined}
+                    className={`${itemClass(activo)} ${plegado ? '!px-0 justify-center' : ''}`}>
                     <Icon className={activo ? 'text-brand-600 dark:text-brand-400' : ''} />
-                    <span className="flex-1 text-left">{item.label}</span>
+                    {!plegado && <span className="flex-1 text-left">{item.label}</span>}
                   </NavLink>
                 );
               })}
@@ -159,7 +176,8 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {role === 'admin' && <MonitorRadio />}
+      {/* El monitor necesita ancho para leerse; plegado no cabe. */}
+      {role === 'admin' && !plegado && <MonitorRadio />}
     </aside>
   );
 }

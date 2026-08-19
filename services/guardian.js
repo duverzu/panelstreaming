@@ -19,14 +19,20 @@ const videoNode = require('./videoNode');
 // Última lectura del contador de red por nodo de video (para calcular el delta).
 const ultimaRed = new Map();
 
-const BITRATE_KBPS = Number(process.env.BANDA_BITRATE_KBPS || 128); // promedio estimado
+// Solo se usa cuando la estación no dice a qué bitrate emite. Antes se
+// aplicaba a TODAS por igual, y 5 de las 14 radios emiten a 320: cada uno de
+// sus oyentes se contaba por menos de la mitad de lo que de verdad gasta.
+const BITRATE_KBPS = Number(process.env.BANDA_BITRATE_KBPS || 128);
 const INTERVALO_MS = Number(process.env.BANDA_INTERVALO_MS || 5 * 60 * 1000); // 5 min
 
 /** Toma una muestra de consumo de todos los servidores. */
 async function muestrear() {
   const servidores = await servidorModel.findAllConUso();
   const segundos = INTERVALO_MS / 1000;
-  const bytesPorOyente = (BITRATE_KBPS * 1000 / 8) * segundos; // bytes que consume 1 oyente en el intervalo
+  /** Bytes que gasta UN oyente de esta emisión durante el intervalo. */
+  const bytesPorOyente = (kbps) => ((Number(kbps) || BITRATE_KBPS) * 1000 / 8) * segundos;
+  /** A qué bitrate emite de verdad esta estación, si lo dice. */
+  const bitrateDe = (e) => e?.station?.mounts?.[0]?.bitrate || e?.station?.bitrate || null;
 
   // Para atribuir el consumo a cada radio: (servidor, station_id) -> cliente_id.
   // Las radios con servidor_id NULL viven en el servidor por defecto del .env.
@@ -45,9 +51,12 @@ async function muestrear() {
       const az = await azuracast.paraServidorId(s.id);
       const np = await az.getNowPlayingAll();
 
-      const oyentes = (np || []).reduce((sum, e) => sum + (e.listeners?.current || 0), 0);
-      if (oyentes > 0) {
-        await consumoModel.registrar(s.id, Math.round(oyentes * bytesPorOyente));
+      // Se suma emisión por emisión, cada una a SU bitrate: 3 oyentes de una
+      // radio a 320 gastan lo mismo que 7 y medio de una a 128.
+      const bytes = (np || []).reduce(
+        (sum, e) => sum + (e.listeners?.current || 0) * bytesPorOyente(bitrateDe(e)), 0);
+      if (bytes > 0) {
+        await consumoModel.registrar(s.id, Math.round(bytes));
       }
 
       // Consumo por radio (el mismo cálculo, pero estación por estación)
@@ -64,7 +73,7 @@ async function muestrear() {
         const clienteId = porStation[e.station?.id];
         const oy = e.listeners?.current || 0;
         if (clienteId && oy > 0) {
-          await consumoClienteModel.registrar(clienteId, Math.round(oy * bytesPorOyente));
+          await consumoClienteModel.registrar(clienteId, Math.round(oy * bytesPorOyente(bitrateDe(e))));
         }
       }
     } catch (e) {

@@ -1089,6 +1089,14 @@ router.get('/banda', requireAdmin, wrap(async (req, res) => {
       dias_restantes: diasRestantes,
       dias_del_mes: diasDelMes,
       estado,
+      // Cómo se obtuvo la cifra, para no presentar dos cosas distintas como si
+      // fueran la misma: en video es el contador de red del nodo (tráfico real
+      // servido); en audio es una estimación de oyentes × bitrate.
+      medicion: (s.tipo === 'video') ? 'medido' : 'estimado',
+      // Desde qué día del mes hay datos. Si un nodo se dio de alta a mitad de
+      // mes, su "consumo del mes" no cubre el mes entero, y compararlo contra
+      // un tope mensual lo hace parecer más holgado de lo que está.
+      desde_dia: dias.length ? new Date(dias[0].fecha).getUTCDate() : null,
       por_dia: dias.map((d) => ({
         dia: new Date(d.fecha).getUTCDate(),
         gb: r2(Number(d.bytes) / GB),
