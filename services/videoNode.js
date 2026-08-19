@@ -100,6 +100,18 @@ function crearCliente(baseURL, token) {
       catch (e) { return fallo(`borrarCuenta(${user})`, e); }
     },
 
+    /** Le cambia el nombre a una cuenta, conservando puertos, clave y videos. */
+    renombrarCuenta: async (user, nuevo) => {
+      try { return (await api.post(`/cuentas/${encodeURIComponent(user)}/renombrar`, { nuevo })).data; }
+      catch (e) {
+        // El motivo importa: casi siempre es "ese nombre ya existe", y hay que
+        // podérselo decir a quien lo intentó en vez de un fallo genérico.
+        const msg = e.response?.data?.error || e.message;
+        fallo(`renombrarCuenta(${user})`, e);
+        throw new Error(msg);
+      }
+    },
+
     /** Detalle de una cuenta, con su lista de videos. */
     cuenta: async (user) => {
       try { return (await api.get(`/cuentas/${encodeURIComponent(user)}`)).data; } catch (e) { return fallo(`cuenta(${user})`, e); }

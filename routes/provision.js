@@ -19,6 +19,7 @@ const apiKeyAuth = require('../middleware/apiKey');
 const provisioning = require('../services/provisioning');
 const videoNode = require('../services/videoNode');
 const playerExterno = require('../services/playerExterno');
+const renombrar = require('../services/renombrar');
 const clienteModel = require('../models/clienteModel');
 const planModel = require('../models/planModel');
 const planResellerModel = require('../models/planResellerModel');
@@ -418,6 +419,23 @@ router.get('/servicios/:id', wrap(async (req, res) => {
       urls: info ? { canal: info.m3u8 || c.url_streaming, player: info.player || null } : null,
     },
   });
+}));
+
+/**
+ * POST /provision/servicios/:id/usuario — cambia el nombre de usuario.
+ * body: { usuario }
+ *
+ * Cambia a la vez: su carpeta y aplicaciones en el nodo, su player, y con lo
+ * que entra al panel. Conserva sus videos, sus puertos y su clave de
+ * transmisión: al cliente no le cambia nada de lo que ya tiene configurado.
+ */
+router.post('/servicios/:id/usuario', wrap(async (req, res) => {
+  try {
+    const r = await renombrar.cambiarUsuario(req.params.id, req.body?.usuario);
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 }));
 
 router.post('/servicios/:id/login', wrap(async (req, res) => {

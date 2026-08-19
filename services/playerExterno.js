@@ -156,4 +156,19 @@ async function borrar(user) {
   }
 }
 
-module.exports = { buscar, crear, borrar, magicLink, limpiarCache, activo };
+/** Le cambia el nombre (y lo que se le pase) a un player ya creado. */
+async function actualizar(user, cambios) {
+  if (!activo() || !user) return null;
+  try {
+    const { data } = await axios.patch(`${API_URL}/${encodeURIComponent(user)}`, cambios, {
+      headers: { Authorization: `Bearer ${API_TOKEN}` }, timeout: 15000,
+    });
+    limpiarCache();
+    return { user: data?.user || cambios.user || user, ok: true };
+  } catch (e) {
+    console.error('[player] no se pudo actualizar', user + ':', e.response?.status || '', e.message);
+    return null;
+  }
+}
+
+module.exports = { buscar, crear, actualizar, borrar, magicLink, limpiarCache, activo };

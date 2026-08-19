@@ -108,6 +108,7 @@ export default function AdminClientes() {
   const [generando, setGenerando] = useState(false);
   const [srtBusy, setSrtBusy] = useState(false);
   const [srtSalidaBusy, setSrtSalidaBusy] = useState(false);
+  const [renombrando, setRenombrando] = useState(null);   // nombre nuevo mientras se edita
   const [consumo, setConsumo] = useState({});   // cliente_id -> disco y transferencia
   const [oyentes, setOyentes] = useState({});   // cliente_id -> oyentes (audio)
   const [viewers, setViewers] = useState({});   // cliente_id -> viewers (video)
@@ -267,6 +268,23 @@ export default function AdminClientes() {
       alert(r.message);
     } catch (e) { alert(e.message); }
     finally { setSrtSalidaBusy(false); }
+  }
+
+  /** Cambia el nombre de usuario en todos los sitios donde vive. */
+  async function guardarUsuario() {
+    if (!accesos) return;
+    const nuevo = String(renombrando || '').trim();
+    if (!nuevo || nuevo === datos?.usuario) { setRenombrando(null); return; }
+    if (!confirm(`¿Cambiar el usuario de «${datos.usuario}» a «${nuevo}»?\n\nCambia su carpeta en el servidor, su player y con lo que entra al panel. Conserva sus videos, sus puertos y su clave.`)) return;
+    try {
+      const r = await apiFetch(`/admin/clientes/${accesos.id}/usuario`, {
+        method: 'PUT', body: JSON.stringify({ usuario: nuevo }),
+      });
+      setRenombrando(null);
+      setDatos(await apiFetch(`/admin/clientes/${accesos.id}/accesos`));
+      cargar();
+      alert(r.message);
+    } catch (e) { alert(e.message); }
   }
 
   async function verAccesos(c) {
@@ -550,7 +568,32 @@ export default function AdminClientes() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><div className="label">Usuario</div><Copiable texto={datos.usuario || '—'} /></div>
+              <div>
+                <div className="label">Usuario</div>
+                {renombrando === null ? (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0"><Copiable texto={datos.usuario || '—'} /></div>
+                    <button onClick={() => setRenombrando(datos.usuario || '')}
+                      title="Cambiar el nombre de usuario"
+                      className="shrink-0 text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 text-gray-500 hover:border-brand-500 hover:text-brand-600 transition">
+                      Cambiar
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <input autoFocus className="input font-mono text-sm" value={renombrando}
+                        onChange={(e) => setRenombrando(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))} />
+                      <button onClick={guardarUsuario} className="btn-primary text-xs shrink-0">Guardar</button>
+                      <button onClick={() => setRenombrando(null)} className="btn-ghost text-xs shrink-0">Cancelar</button>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1.5">
+                      Solo letras y números. Cambia su carpeta en el servidor, su player y con lo que
+                      entra al panel — <b>conserva sus videos, sus puertos y su clave</b>.
+                    </p>
+                  </div>
+                )}
+              </div>
               <div><div className="label">Email</div><Copiable texto={datos.email || '—'} mono={false} /></div>
             </div>
 

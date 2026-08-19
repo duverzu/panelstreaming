@@ -121,4 +121,15 @@ async function stats() {
   return rows[0];
 }
 
-module.exports = { reescribirUrls, findAllWithEmail, findById, findByUserId, findByShortName, create, update, stats, findByReseller, countByReseller };
+/**
+ * Cambia el identificador técnico del cliente. Va aparte de `update` a
+ * propósito: `short_name` es la carpeta, los puertos y el nombre de sus
+ * aplicaciones RTMP en el nodo, así que no debe poder cambiarse por descuido
+ * junto con el nombre comercial o el plan.
+ */
+async function cambiarShortName(id, nuevo) {
+  const { rows } = await query('UPDATE clientes SET short_name = $2 WHERE id = $1 RETURNING *', [id, nuevo]);
+  return rows[0] || null;
+}
+
+module.exports = { cambiarShortName, reescribirUrls, findAllWithEmail, findById, findByUserId, findByShortName, create, update, stats, findByReseller, countByReseller };

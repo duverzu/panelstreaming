@@ -78,7 +78,13 @@ async function updatePassword(id, password_hash) {
   await query('UPDATE users SET password_hash = $1 WHERE id = $2', [password_hash, id]);
 }
 
+/** Cambia el nombre con el que entra al panel. */
+async function cambiarUsername(id, nuevo) {
+  const { rows } = await query('UPDATE users SET username = $2 WHERE id = $1 RETURNING id, username, email, role', [id, nuevo]);
+  return rows[0] || null;
+}
+
 module.exports = {
-  findByEmailAndRole, findByEmail, findByUsername, findByLogin, findById,
+  cambiarUsername, findByEmailAndRole, findByEmail, findByUsername, findByLogin, findById,
   create, deleteById, updatePassword, generarUsername, slugUsuario,
 };

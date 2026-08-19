@@ -32,6 +32,7 @@ const migracion = require('../services/migracion');
 const { capacidadesCliente } = require('../services/capacidadesCliente');
 const srt = require('../services/srt');
 const maquinas = require('../services/maquinas');
+const renombrar = require('../services/renombrar');
 const bandaSvc = require('../services/banda');
 const authFactory = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
@@ -525,6 +526,28 @@ router.put('/clientes/:id/srt-salida', requireAdmin, wrap(async (req, res) => {
       : 'Salida SRT desactivada. Quien la tuviera puesta dejará de recibirla.',
     srt_salida_activa: activo,
   });
+}));
+
+/**
+ * PUT /admin/clientes/:id/usuario — le cambia el nombre de usuario.
+ * body: { usuario }
+ *
+ * Ese nombre es su carpeta y sus aplicaciones RTMP en el nodo, su player, y
+ * con lo que entra al panel. Se cambia en todos a la vez o no se cambia.
+ */
+router.put('/clientes/:id/usuario', requireAdmin, wrap(async (req, res) => {
+  try {
+    const r = await renombrar.cambiarUsuario(req.params.id, req.body?.usuario);
+    if (r.sin_cambios) return res.json({ ...r, message: 'Ya se llamaba así' });
+    res.json({
+      ...r,
+      message: r.avisos?.length
+        ? `Nombre cambiado a «${r.user}», pero hay algo que revisar: ${r.avisos.join(' ')}`
+        : `Nombre cambiado a «${r.user}» ✅`,
+    });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 }));
 
 router.post('/clientes/:id/password', requireAdmin, wrap(async (req, res) => {
