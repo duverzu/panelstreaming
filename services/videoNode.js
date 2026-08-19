@@ -92,6 +92,14 @@ function crearCliente(baseURL, token) {
       try { return (await api.get('/cuentas')).data?.cuentas || []; } catch (e) { return fallo('cuentas', e) || []; }
     },
 
+    /** Da de baja una cuenta del nodo: apaga su canal y quita su configuración.
+     *  Sus videos siguen en disco — el agente no los borra a propósito, por si
+     *  la baja fue un error. */
+    borrarCuenta: async (user) => {
+      try { return (await api.delete(`/cuentas/${encodeURIComponent(user)}`)).data; }
+      catch (e) { return fallo(`borrarCuenta(${user})`, e); }
+    },
+
     /** Detalle de una cuenta, con su lista de videos. */
     cuenta: async (user) => {
       try { return (await api.get(`/cuentas/${encodeURIComponent(user)}`)).data; } catch (e) { return fallo(`cuenta(${user})`, e); }

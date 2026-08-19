@@ -14,6 +14,7 @@ const planModel = require('../models/planModel');
 const servidorModel = require('../models/servidorModel');
 const azuracast = require('./azuracast');
 const videoNode = require('./videoNode');
+const playerExterno = require('./playerExterno');
 const biblioteca = require('./biblioteca');
 const publico = require('./publico');
 
@@ -122,9 +123,30 @@ async function crearClienteConEstacion({ email, username, password, nombre_empre
       servidor_id, short_name: usuario, tipo: 'video',
     });
 
+    // El player del cliente, en la plataforma de players. Si falla, el canal YA
+    // está creado y funcionando: no se deshace nada por esto. Se avisa y se
+    // puede crear después — tumbar un canal que funciona por un fallo de otro
+    // sistema sería peor que quedarse sin player un rato.
+    let player = null;
+    try {
+      player = await playerExterno.crear({
+        user: usuario,
+        nombre: nombre_empresa || usuario,
+        tipo: 'tvstreaming',
+        url_video: url_streaming,
+      });
+      // Se guarda el nombre que asignó ELLA, no el que mandamos: si ya estaba
+      // tomado devuelve `usuario_2`, y es con ese con el que se borra después.
+      if (player?.user) await clienteModel.update(cliente.id, { player_user: player.user });
+    } catch (e) {
+      console.error('[provisioning] player de', usuario + ':', e.message);
+    }
+
     return {
-      cliente: { ...cliente, email, username: usuario, servidor_url: baseUrlPublica },
+      cliente: { ...cliente, email, username: usuario, servidor_url: baseUrlPublica, player_user: player?.user || null },
       credenciales: { usuario, email, password },
+      player: player ? { user: player.user, url: player.url } : null,
+      aviso_player: player ? null : 'El canal quedó creado, pero no se pudo crear su player. Créalo a mano o reintenta.',
       video: {
         canal: url_streaming,
         servidor_rtmp: conexion?.servidor_rtmp || null,

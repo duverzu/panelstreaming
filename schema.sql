@@ -278,3 +278,8 @@ CREATE TABLE IF NOT EXISTS consumo_maquina (
   bytes      BIGINT  NOT NULL DEFAULT 0,
   UNIQUE (maquina_id, fecha)
 );
+
+-- Nombre del cliente EN LA PLATAFORMA DE PLAYERS. No siempre coincide con
+-- `short_name`: si el nombre ya estaba tomado allá, asigna `nombre_2`. Guardar
+-- el que devolvió es lo único que permite borrar el player correcto después.
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS player_user VARCHAR(120);

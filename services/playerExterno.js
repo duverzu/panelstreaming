@@ -114,4 +114,46 @@ async function magicLink(user) {
 /** Fuerza recarga (tras crear una radio nueva, para que aparezca al toque). */
 function limpiarCache() { cache = { at: 0, porUser: null }; }
 
-module.exports = { buscar, magicLink, limpiarCache, activo };
+/**
+ * Crea el player del cliente en la plataforma.
+ *
+ * OJO con el `user` que devuelve: si el nombre ya estaba tomado, la plataforma
+ * asigna `nombre_2`, `nombre_3`… El que vale es el de la RESPUESTA, no el que
+ * mandamos — y es el que hay que guardar, porque es con el que se borra
+ * después. Dar por hecho que coinciden significa borrar el player de otro.
+ */
+async function crear({ user, nombre, tipo = 'tvstreaming', url_video = null, stream = null }) {
+  if (!activo() || !user) return null;
+  try {
+    const { data } = await axios.post(API_URL, { user, nombre, tipo, url_video, stream }, {
+      headers: { Authorization: `Bearer ${API_TOKEN}` }, timeout: 15000,
+    });
+    limpiarCache();
+    return { user: data?.user || user, id: data?.id ?? null, url: data?.player_url || null };
+  } catch (e) {
+    console.error('[player] no se pudo crear el de', user + ':', e.response?.status || '', e.message);
+    return null;
+  }
+}
+
+/**
+ * Borra el player. Un 404 se cuenta como ÉXITO: ya no está, que es lo que se
+ * quería. Tratarlo como fallo dejaría un servicio sin dar de baja por algo que
+ * en realidad ya estaba resuelto.
+ */
+async function borrar(user) {
+  if (!activo() || !user) return { ok: false, motivo: 'sin datos' };
+  try {
+    await axios.delete(`${API_URL}/${encodeURIComponent(user)}`, {
+      headers: { Authorization: `Bearer ${API_TOKEN}` }, timeout: 15000,
+    });
+    limpiarCache();
+    return { ok: true };
+  } catch (e) {
+    if (e.response?.status === 404) { limpiarCache(); return { ok: true, ya_no_estaba: true }; }
+    console.error('[player] no se pudo borrar el de', user + ':', e.response?.status || '', e.message);
+    return { ok: false, motivo: e.response?.status || e.message };
+  }
+}
+
+module.exports = { buscar, crear, borrar, magicLink, limpiarCache, activo };

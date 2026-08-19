@@ -18,6 +18,7 @@ const bcrypt = require('bcryptjs');
 const apiKeyAuth = require('../middleware/apiKey');
 const provisioning = require('../services/provisioning');
 const videoNode = require('../services/videoNode');
+const playerExterno = require('../services/playerExterno');
 const clienteModel = require('../models/clienteModel');
 const planModel = require('../models/planModel');
 const planResellerModel = require('../models/planResellerModel');
@@ -441,15 +442,63 @@ router.post('/servicios/:id/plan', wrap(async (req, res) => {
 }));
 
 /** DELETE /api/provision/servicios/:id — elimina (TerminateAccount). */
+/**
+ * DELETE /provision/servicios/:id — termina el servicio.
+ *
+ * Un servicio vive en varios sitios y hay que recogerlos todos: su estación de
+ * AzuraCast o su cuenta en el nodo de video, su player, y su usuario del panel.
+ *
+ * Si algo de fuera falla, el servicio SE TERMINA IGUAL y se informa de lo que
+ * quedó suelto. Dejar activo a un cliente que pidió la baja porque otro sistema
+ * no contestó es peor que un player huérfano, que se limpia después sin
+ * consecuencias — pero solo si alguien se entera, así que se devuelve.
+ */
 router.delete('/servicios/:id', wrap(async (req, res) => {
   const c = await clienteModel.findById(Number(req.params.id));
   if (!c) return res.status(404).json({ error: 'Servicio no encontrado' });
+
+  const sueltos = [];
+
+  // 1) Donde emite: AzuraCast (audio) o el nodo (video)
   if (c.azuracast_station_id) {
-    const az = await azuracast.paraServidorId(c.servidor_id);
-    try { await az.deleteStation(c.azuracast_station_id); } catch (e) { console.error(e.message); }
+    try {
+      const az = await azuracast.paraServidorId(c.servidor_id);
+      await az.deleteStation(c.azuracast_station_id);
+    } catch (e) {
+      console.error('[baja] estación', c.short_name, e.message);
+      sueltos.push(`la estación de AzuraCast (${e.message})`);
+    }
+  } else if ((c.tipo || 'audio') === 'video' && c.servidor_id && !c.compat) {
+    // Esto NO se hacía: al terminar un canal de video, su cuenta seguía viva en
+    // el nodo, emitiendo y ocupando disco y puertos.
+    try {
+      const nodo = await videoNode.paraServidorId(c.servidor_id);
+      if (nodo) {
+        await nodo.emision(c.short_name, false).catch(() => {});
+        const r = await nodo.borrarCuenta(c.short_name);
+        if (!r || r.ok === false) throw new Error('el nodo no confirmó la baja');
+      }
+    } catch (e) {
+      console.error('[baja] canal', c.short_name, e.message);
+      sueltos.push(`la cuenta en el nodo de video (${e.message})`);
+    }
   }
+
+  // 2) Su player en la plataforma
+  const playerUser = c.player_user || c.short_name;
+  const rp = await playerExterno.borrar(playerUser);
+  if (!rp.ok) sueltos.push(`el player «${playerUser}» (${rp.motivo})`);
+
+  // 3) Su acceso al panel
   await userModel.deleteById(c.user_id);
-  res.json({ ok: true, message: 'Servicio terminado' });
+
+  res.json({
+    ok: true,
+    message: sueltos.length
+      ? 'Servicio terminado, pero quedó algo sin limpiar: ' + sueltos.join(' y ') + '.'
+      : 'Servicio terminado',
+    sin_limpiar: sueltos,
+  });
 }));
 
 // ---- Control del stream (botones del panel de facturación) --------

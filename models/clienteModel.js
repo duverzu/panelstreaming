@@ -69,7 +69,11 @@ async function countByReseller(resellerId) {
 /** Actualiza solo los campos permitidos que vengan definidos. */
 async function update(id, fields) {
   const allowed = ['nombre_empresa', 'plan', 'activo', 'azuracast_station_id', 'url_streaming',
-    'dj_puerto', 'dj_usuario', 'dj_password'];
+    'dj_puerto', 'dj_usuario', 'dj_password',
+    // Nombre en la plataforma de players. Sin esto en la lista, guardarlo no
+    // hacía nada y no daba ningún error: el borrado del player fallaría meses
+    // después sin que nadie supiera por qué.
+    'player_user'];
   const sets = [];
   const values = [];
   let i = 1;
