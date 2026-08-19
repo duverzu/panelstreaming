@@ -111,9 +111,9 @@ function Maquina({ salud, ocupacion }) {
         />
       )}
 
+      {/* Apilados, no en una fila: en la columna estrecha de la tarjeta los dos
+          juntos se partían por la mitad y quedaba un "29 d / 4 h". */}
       {salud?.responde && (
-        {/* Apilados, no en una fila: en la columna estrecha de la tarjeta los
-            dos juntos se partían por la mitad y quedaba un "29 d / 4 h". */}
         <div className="text-[11px] text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-800 space-y-0.5">
           <div>Encendido hace {tiempo(salud.uptime_s || 0)}</div>
           {Array.isArray(salud.cpu?.carga) && salud.cpu.carga.length === 3 && (
