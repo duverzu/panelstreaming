@@ -31,6 +31,7 @@ const videoNode = require('../services/videoNode');
 const migracion = require('../services/migracion');
 const { capacidadesCliente } = require('../services/capacidadesCliente');
 const srt = require('../services/srt');
+const maquinas = require('../services/maquinas');
 const authFactory = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
 
@@ -1135,6 +1136,34 @@ router.get('/nodos-video/salud', requireAdmin, wrap(async (req, res) => {
     };
   }));
   res.json({ nodos });
+}));
+
+// ==================================================================
+//  MÁQUINAS VIGILADAS — servidores que no son nodos del panel
+// ==================================================================
+
+/** GET /admin/maquinas — cada una con su lectura de disco, CPU y memoria. */
+router.get('/maquinas', requireAdmin, wrap(async (req, res) => {
+  res.json({ maquinas: await maquinas.listar() });
+}));
+
+/** POST /admin/maquinas — añade una máquina a vigilar. */
+router.post('/maquinas', requireAdmin, wrap(async (req, res) => {
+  if (!String(req.body?.nombre || '').trim()) return res.status(400).json({ error: 'Ponle un nombre' });
+  res.status(201).json({ maquina: await maquinas.crear(req.body), message: 'Máquina añadida ✅' });
+}));
+
+/** PUT /admin/maquinas/:id — cambia sus datos o la pausa. */
+router.put('/maquinas/:id', requireAdmin, wrap(async (req, res) => {
+  const m = await maquinas.actualizar(req.params.id, req.body || {});
+  if (!m) return res.status(404).json({ error: 'Máquina no encontrada' });
+  res.json({ maquina: m, message: 'Guardado ✅' });
+}));
+
+/** DELETE /admin/maquinas/:id — deja de vigilarla. */
+router.delete('/maquinas/:id', requireAdmin, wrap(async (req, res) => {
+  await maquinas.borrar(req.params.id);
+  res.json({ message: 'Ya no se vigila' });
 }));
 
 router.get('/servidores', requireAdmin, wrap(async (req, res) => {

@@ -248,3 +248,20 @@ ALTER TABLE cunas ADD COLUMN IF NOT EXISTS playlist_id INTEGER;
 CREATE INDEX IF NOT EXISTS idx_clientes_user_id     ON clientes(user_id);
 CREATE INDEX IF NOT EXISTS idx_suscripciones_cliente ON suscripciones(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_media_cliente         ON media(cliente_id);
+
+-- Máquinas vigiladas que NO son nodos del panel: el servidor donde vive el
+-- propio panel, el de otro producto, el de un cliente… Se miden igual que los
+-- nodos (disco, CPU, memoria) pero no alojan radios ni canales.
+--
+-- No guardan credenciales: el acceso es por llave SSH del sistema, que es como
+-- ya se conectan estas máquinas entre sí. `host` vacío = esta misma máquina.
+CREATE TABLE IF NOT EXISTS maquinas (
+  id          SERIAL PRIMARY KEY,
+  nombre      VARCHAR(120) NOT NULL,
+  host        VARCHAR(200),
+  usuario     VARCHAR(60)  NOT NULL DEFAULT 'root',
+  puerto      INTEGER      NOT NULL DEFAULT 22,
+  nota        TEXT,
+  activa      BOOLEAN      NOT NULL DEFAULT true,
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);

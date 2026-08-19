@@ -23,6 +23,7 @@ const consumoModel = require('../models/consumoModel');
 const clienteModel = require('../models/clienteModel');
 const azuracast = require('./azuracast');
 const videoNode = require('./videoNode');
+const maquinasSvc = require('./maquinas');
 
 const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TG_CHAT = process.env.TELEGRAM_CHAT_ID || '';
@@ -48,7 +49,7 @@ const hayWhatsapp = () => Boolean(WA_TOKEN && WA_TO);
 const configurado = () => hayTelegram() || hayWhatsapp();
 
 // Último estado conocido, para alertar solo en los CAMBIOS (no spamear).
-const st = { servidores: new Map(), clientes: new Map(), banda: new Map(), salud: new Map() };
+const st = { servidores: new Map(), clientes: new Map(), banda: new Map(), salud: new Map(), maquinas: new Map() };
 
 async function enviarTelegram(texto) {
   try {
@@ -93,6 +94,7 @@ function transicion(mapa, clave, nuevo, alertarPrimeraSiMal = false) {
 }
 
 async function revisar() {
+  await revisarMaquinas().catch((e) => console.error('[monitor] maquinas', e.message));
   const servidores = (await servidorModel.findAllConUso()).filter((s) => s.activo);
   const clientes = await clienteModel.findAllWithEmail();
 
@@ -210,6 +212,51 @@ async function revisarSalud(s) {
   }
 
   for (const texto of avisos) await notificar(texto);
+}
+
+/**
+ * Vigila las máquinas que no son nodos del panel. Mismos límites y mismo
+ * criterio: solo se avisa cuando el nivel CAMBIA.
+ */
+async function revisarMaquinas() {
+  let lista = [];
+  try { lista = await maquinasSvc.listar(); } catch (_) { return; }
+
+  for (const m of lista) {
+    if (m.pausada) continue;
+    const clave = `maq:${m.id}`;
+
+    if (transicion(st.maquinas, `${clave}:viva`, Boolean(m.responde), true)) {
+      await notificar(m.responde
+        ? `✅ ${m.nombre} volvió a responder.`
+        : `🔴 ${m.nombre} NO responde. Puede estar apagada, sin red, o faltarle la llave SSH.`);
+    }
+    if (!m.responde) continue;
+
+    const avisos = [];
+    const nivelar = (k, nivel, texto) => {
+      if (transicion(st.maquinas, `${clave}:${k}`, nivel) && nivel !== 'ok') avisos.push(texto);
+    };
+
+    const disco = m.disco?.usado_pct;
+    if (disco != null) {
+      const nivel = disco >= LIM.disco_critico ? 'critico' : disco >= LIM.disco_aviso ? 'alto' : 'ok';
+      nivelar('disco', nivel, `${nivel === 'critico' ? '🚨' : '⚠️'} ${m.nombre}: disco al ${disco}% (quedan ${(m.disco.libre_bytes / 1024 ** 3).toFixed(1)} GB).`);
+    }
+    if (m.cpu?.usado_pct != null) {
+      nivelar('cpu', m.cpu.usado_pct >= LIM.cpu ? 'alto' : 'ok',
+        `⚠️ ${m.nombre}: CPU al ${m.cpu.usado_pct}% de ${m.cpu.nucleos} núcleos.`);
+    }
+    if (m.cpu?.robado_pct != null) {
+      nivelar('robado', m.cpu.robado_pct >= LIM.robado ? 'alto' : 'ok',
+        `⚠️ ${m.nombre}: el proveedor se lleva el ${m.cpu.robado_pct}% del CPU (steal). No es consumo nuestro.`);
+    }
+    if (m.memoria?.usado_pct != null) {
+      nivelar('memoria', m.memoria.usado_pct >= LIM.memoria ? 'alto' : 'ok',
+        `⚠️ ${m.nombre}: memoria al ${m.memoria.usado_pct}%. Si se llena, el sistema empieza a matar procesos.`);
+    }
+    for (const texto of avisos) await notificar(texto);
+  }
 }
 
 /** Envía un mensaje de prueba por los canales configurados. */

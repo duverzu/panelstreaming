@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api';
 import { useAmbito } from '../../ambito';
 import DonutChart from '../../components/charts/DonutChart';
+import MaquinasVigiladas from '../../components/MaquinasVigiladas';
 import GuardianBanda from '../../components/GuardianBanda';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMicrophoneLines, faVideo } from '@fortawesome/free-solid-svg-icons';
@@ -115,6 +116,11 @@ export default function AdminDashboard() {
       {/* ═══ 1) GUARDIÁN DE BANDA — lo primero: salud de todos los nodos ═══ */}
       <GuardianBanda />
 
+
+      {/* Otras máquinas vigiladas. Debajo del guardián porque responde a la
+          misma pregunta —¿hay algo que atender?— pero de servidores que no
+          alojan nada del panel. */}
+      <MaquinasVigiladas />
 
       {/* ═══ 2) RESUMEN: audio · video · VPS, uno al lado del otro ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
