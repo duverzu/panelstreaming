@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../api';
+import Gauge from './charts/Gauge';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faServer, faPlus, faTrash, faCircleNodes } from '@fortawesome/free-solid-svg-icons';
 
@@ -9,6 +10,14 @@ function peso(b) {
   if (n >= 1099511627776) return (n / 1099511627776).toFixed(1) + ' TB';
   if (n >= 1073741824) return (n / 1073741824).toFixed(n >= 10737418240 ? 0 : 1) + ' GB';
   return Math.round(n / 1048576) + ' MB';
+}
+
+/** GB a la unidad que se lee mejor. */
+function tam(gb) {
+  const n = Number(gb) || 0;
+  if (n >= 1024) return (n / 1024).toFixed(n >= 10240 ? 0 : 1) + ' TB';
+  if (n >= 10) return Math.round(n) + ' GB';
+  return n.toFixed(1) + ' GB';
 }
 
 function tiempo(s) {
@@ -115,6 +124,15 @@ export default function MaquinasVigiladas() {
             </div>
           </div>
           <div className="mt-3">
+            <div className="label mb-1">Tope de tráfico al mes, en GB (opcional)</div>
+            <input className="input font-mono text-sm" placeholder="Ej: 20000 · déjalo vacío si no tiene tope"
+              value={form.tope_gb || ''} onChange={(e) => setForm({ ...form, tope_gb: e.target.value })} />
+            <p className="text-[11px] text-gray-400 mt-1">
+              Con tope aparece el reloj de banda, la proyección a fin de mes y los avisos antes
+              de agotarlo. Sin él solo se ve el tráfico que lleva.
+            </p>
+          </div>
+          <div className="mt-3">
             <div className="label mb-1">Nota (para acordarte de qué es)</div>
             <input className="input" placeholder="Aquí viven panelclientes y mazamorra" value={form.nota}
               onChange={(e) => setForm({ ...form, nota: e.target.value })} />
@@ -163,6 +181,40 @@ export default function MaquinasVigiladas() {
               </p>
             ) : (
               <div className="space-y-3">
+                {/* Con tope, el reloj manda: es la lectura que dice si hay que
+                    hacer algo este mes. Sin tope no se dibuja un medidor
+                    contra un límite que no existe — solo el tráfico que lleva. */}
+                {m.banda?.tope_gb ? (
+                  <div className="pb-1">
+                    <Gauge
+                      valor={m.banda.consumido_gb}
+                      maximo={m.banda.tope_gb}
+                      proyeccion={m.banda.proyeccion_gb}
+                      formato={tam}
+                    />
+                    <div className="mt-2 space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">Ritmo actual</span>
+                        <span className="font-semibold">{tam(m.banda.promedio_diario_gb)}/día</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">Fin de mes</span>
+                        <span className="font-semibold">{tam(m.banda.proyeccion_gb)} · {m.banda.proyeccion_pct}%</span>
+                      </div>
+                    </div>
+                    {m.banda.dia_agotamiento && (
+                      <div className="mt-2 text-xs rounded-xl px-3 py-2 text-red-700 bg-red-50 dark:bg-red-500/10 dark:text-red-400">
+                        <b>▲ Se agota el día {m.banda.dia_agotamiento}</b> a este ritmo, y quedan {m.banda.dias_restantes} días de mes.
+                      </div>
+                    )}
+                  </div>
+                ) : m.banda?.consumido_gb > 0 ? (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">Tráfico este mes</span>
+                    <span className="font-semibold">{tam(m.banda.consumido_gb)}</span>
+                  </div>
+                ) : null}
+
                 <Barra
                   etiqueta={`Disco · ${peso(m.disco?.total_bytes)}`}
                   detalle={`quedan ${peso(m.disco?.libre_bytes)}`}

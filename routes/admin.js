@@ -32,6 +32,7 @@ const migracion = require('../services/migracion');
 const { capacidadesCliente } = require('../services/capacidadesCliente');
 const srt = require('../services/srt');
 const maquinas = require('../services/maquinas');
+const bandaSvc = require('../services/banda');
 const authFactory = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
 

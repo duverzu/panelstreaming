@@ -15,6 +15,7 @@ const consumoClienteModel = require('../models/consumoClienteModel');
 const clienteModel = require('../models/clienteModel');
 const azuracast = require('./azuracast');
 const videoNode = require('./videoNode');
+const maquinasSvc = require('./maquinas');
 
 // Última lectura del contador de red por nodo de video (para calcular el delta).
 const ultimaRed = new Map();
@@ -25,8 +26,36 @@ const ultimaRed = new Map();
 const BITRATE_KBPS = Number(process.env.BANDA_BITRATE_KBPS || 128);
 const INTERVALO_MS = Number(process.env.BANDA_INTERVALO_MS || 5 * 60 * 1000); // 5 min
 
+// Último contador de red visto en cada máquina vigilada, para restar.
+const ultimaRedMaquina = new Map();
+
+/**
+ * Tráfico servido por las máquinas vigiladas desde la muestra anterior.
+ * Se mide en su propio contador de red, no se estima.
+ */
+async function muestrearMaquinas() {
+  let lista = [];
+  try { lista = await maquinasSvc.listar(); } catch (_) { return; }
+
+  for (const m of lista) {
+    const tx = m.red?.tx;
+    if (!m.responde || typeof tx !== 'number') continue;
+
+    const prev = ultimaRedMaquina.get(m.id);
+    ultimaRedMaquina.set(m.id, tx);
+    if (prev == null) continue;                 // primera muestra: fija la base
+
+    // Si el contador bajó, la máquina se reinició: se cuenta desde cero en vez
+    // de registrar un número negativo o un salto enorme.
+    let delta = tx - prev;
+    if (delta < 0) delta = tx;
+    if (delta > 0) await maquinasSvc.registrarConsumo(m.id, delta).catch(() => {});
+  }
+}
+
 /** Toma una muestra de consumo de todos los servidores. */
 async function muestrear() {
+  await muestrearMaquinas().catch((e) => console.error('[guardian] maquinas', e.message));
   const servidores = await servidorModel.findAllConUso();
   const segundos = INTERVALO_MS / 1000;
   /** Bytes que gasta UN oyente de esta emisión durante el intervalo. */

@@ -265,3 +265,16 @@ CREATE TABLE IF NOT EXISTS maquinas (
   activa      BOOLEAN      NOT NULL DEFAULT true,
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
+
+-- Tope mensual de tráfico y consumo de las máquinas vigiladas. Va en tabla
+-- aparte de `consumo_banda` porque aquella apunta a `servidores` (los nodos
+-- del panel) y estas máquinas no lo son.
+ALTER TABLE maquinas ADD COLUMN IF NOT EXISTS tope_gb INTEGER;
+
+CREATE TABLE IF NOT EXISTS consumo_maquina (
+  id         SERIAL PRIMARY KEY,
+  maquina_id INTEGER NOT NULL REFERENCES maquinas(id) ON DELETE CASCADE,
+  fecha      DATE    NOT NULL DEFAULT CURRENT_DATE,
+  bytes      BIGINT  NOT NULL DEFAULT 0,
+  UNIQUE (maquina_id, fecha)
+);

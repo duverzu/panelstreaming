@@ -15,6 +15,7 @@
  */
 const { execFile } = require('child_process');
 const db = require('../config/database');
+const banda = require('./banda');
 
 const TIEMPO_MS = Number(process.env.MAQUINAS_TIMEOUT_MS || 12000);
 
@@ -31,6 +32,10 @@ const SONDA = [
   'echo "CORES $(nproc)"',
   'awk \'{print "LOAD", $1, $2, $3}\' /proc/loadavg',
   'df -PB1 / | tail -1 | awk \'{print "DISK", $2, $3}\'',
+  // Tráfico de SALIDA acumulado desde el arranque, sumando las interfaces
+  // reales. Se ignora `lo` (tráfico de la máquina consigo misma) y las
+  // virtuales de docker, que contarían dos veces lo que ya sale por la real.
+  'awk \'/^ *(eth|ens|enp|eno|em)[0-9]/{gsub(":","",$1); rx+=$2; tx+=$10} END{print "NET", rx+0, tx+0}\' /proc/net/dev',
 ].join('; ');
 
 /** Ejecuta la sonda: en esta misma máquina si no hay host, o por SSH. */
@@ -64,6 +69,7 @@ function interpretar(texto, id) {
     else if (p[0] === 'CORES') d.nucleos = Number(p[1]) || null;
     else if (p[0] === 'LOAD') d.carga = [+p[1], +p[2], +p[3]];
     else if (p[0] === 'DISK') d.disco = { total: +p[1], usado: +p[2] };
+    else if (p[0] === 'NET') d.red = { rx: +p[1], tx: +p[2] };
   }
   if (!d.cpu || !d.disco) return null;
 
@@ -90,6 +96,7 @@ function interpretar(texto, id) {
   return {
     responde: true,
     hostname: d.hostname || null,
+    red: d.red || null,
     uptime_s: d.uptime_s,
     cpu: { nucleos: d.nucleos, usado_pct, robado_pct, carga: d.carga || [] },
     // La caché cuenta como disponible, que es lo que es: el kernel la suelta
@@ -108,25 +115,49 @@ function interpretar(texto, id) {
   };
 }
 
-/** Todas las máquinas vigiladas, con su lectura. En paralelo y sin dejar caer
- *  la respuesta por una que no conteste: la que calla sale marcada y el resto
- *  se ve igual. */
+/** Consumo diario de una máquina en el mes en curso. */
+async function consumoDelMes(maquinaId) {
+  const { rows } = await db.query(
+    `SELECT fecha, bytes FROM consumo_maquina
+      WHERE maquina_id = $1 AND date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE)
+      ORDER BY fecha`, [maquinaId]);
+  return rows;
+}
+
+/** Todas las máquinas vigiladas, con su lectura y su banda. En paralelo y sin
+ *  dejar caer la respuesta por una que no conteste: la que calla sale marcada
+ *  y el resto se ve igual. */
 async function listar() {
   const { rows } = await db.query('SELECT * FROM maquinas ORDER BY id');
   return Promise.all(rows.map(async (m) => {
     if (!m.activa) return { ...m, responde: false, pausada: true };
-    const salida = await sondear(m);
+    const [salida, dias] = await Promise.all([sondear(m), consumoDelMes(m.id)]);
     const salud = salida ? interpretar(salida, m.id) : null;
-    return { ...m, ...(salud || { responde: false }) };
+    return {
+      ...m,
+      ...(salud || { responde: false }),
+      // Igual que en los nodos: aquí el tráfico se MIDE en el contador de red
+      // de la propia máquina, no se estima.
+      banda: { ...banda.calcular(dias, m.tope_gb), medicion: 'medido' },
+    };
   }));
 }
 
-async function crear({ nombre, host, usuario, puerto, nota }) {
+/** Guarda el tráfico servido desde la última muestra. */
+async function registrarConsumo(maquinaId, bytes) {
+  await db.query(
+    `INSERT INTO consumo_maquina (maquina_id, fecha, bytes) VALUES ($1, CURRENT_DATE, $2)
+     ON CONFLICT (maquina_id, fecha) DO UPDATE SET bytes = consumo_maquina.bytes + EXCLUDED.bytes`,
+    [maquinaId, Math.round(bytes)]);
+}
+
+async function crear({ nombre, host, usuario, puerto, nota, tope_gb }) {
   const r = await db.query(
-    `INSERT INTO maquinas (nombre, host, usuario, puerto, nota)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    `INSERT INTO maquinas (nombre, host, usuario, puerto, nota, tope_gb)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
     [String(nombre).trim(), String(host || '').trim() || null,
-      String(usuario || 'root').trim(), Number(puerto) || 22, String(nota || '').trim() || null]
+      String(usuario || 'root').trim(), Number(puerto) || 22,
+      String(nota || '').trim() || null, Number(tope_gb) || null]
   );
   return r.rows[0];
 }
@@ -139,10 +170,12 @@ async function actualizar(id, c) {
        usuario = COALESCE($4, usuario),
        puerto  = COALESCE($5, puerto),
        nota    = COALESCE($6, nota),
-       activa  = COALESCE($7, activa)
+       activa  = COALESCE($7, activa),
+       tope_gb = COALESCE($8, tope_gb)
      WHERE id = $1 RETURNING *`,
     [Number(id), c.nombre ?? null, c.host ?? null, c.usuario ?? null,
-      c.puerto != null ? Number(c.puerto) : null, c.nota ?? null, c.activa ?? null]
+      c.puerto != null ? Number(c.puerto) : null, c.nota ?? null, c.activa ?? null,
+      c.tope_gb !== undefined ? (Number(c.tope_gb) || null) : null]
   );
   return r.rows[0] || null;
 }
@@ -151,4 +184,4 @@ async function borrar(id) {
   await db.query('DELETE FROM maquinas WHERE id = $1', [Number(id)]);
 }
 
-module.exports = { listar, crear, actualizar, borrar, sondear, interpretar };
+module.exports = { listar, crear, actualizar, borrar, sondear, interpretar, registrarConsumo };
