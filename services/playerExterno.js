@@ -164,7 +164,12 @@ async function actualizar(user, cambios) {
       headers: { Authorization: `Bearer ${API_TOKEN}` }, timeout: 15000,
     });
     limpiarCache();
-    return { user: data?.user || cambios.user || user, ok: true };
+    // La plataforma responde `ok:true` aunque NO haya aplicado el cambio de
+    // nombre: devuelve el que ya tenía. Hay que comparar, no fiarse del ok —
+    // si no, el panel canta un cambio que no ocurrió.
+    const quedo = data?.user || user;
+    const pedido = cambios.user;
+    return { user: quedo, ok: true, renombrado: !pedido || quedo === pedido };
   } catch (e) {
     console.error('[player] no se pudo actualizar', user + ':', e.response?.status || '', e.message);
     return null;

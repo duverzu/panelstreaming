@@ -58,7 +58,13 @@ async function cambiarUsuario(clienteId, nombreNuevo) {
   //    a mano, en vez de dejar el cambio a medias deshaciendo el nodo.
   const playerViejo = c.player_user || anterior;
   const rp = await playerExterno.actualizar(playerViejo, { user: nuevo, url_video: urlNueva });
-  if (!rp) avisos.push(`El player «${playerViejo}» sigue con el nombre anterior: cámbialo a mano.`);
+  if (!rp) {
+    avisos.push(`No se pudo tocar el player «${playerViejo}»: revísalo a mano.`);
+  } else if (!rp.renombrado) {
+    // Su enlace de video SÍ se actualizó, así que el player sigue funcionando;
+    // lo único que conserva es el nombre viejo en su dirección pública.
+    avisos.push(`El player sigue llamándose «${rp.user}»: la plataforma de players todavía no permite renombrarlos. Su enlace de video sí quedó apuntando al canal nuevo.`);
+  }
 
   // 3) Y lo nuestro, que no puede fallar por causas externas.
   await clienteModel.update(c.id, {
