@@ -516,7 +516,37 @@ async function conEstacion(req, res) {
 }
 
 /** POST /api/provision/servicios/:id/iniciar — pone la radio al aire. */
+/**
+ * Poner al aire / quitar del aire, para los DOS servicios.
+ *
+ * Antes solo servían para radio: pedían una estación de AzuraCast, que un canal
+ * de video no tiene, así que devolvían «El servicio no tiene estación» y desde
+ * fuera parecía que el canal estuviera roto.
+ *
+ * En video, «al aire» es la emisión 24/7 de sus videos. Los canales heredados
+ * de asilivehd usan otro motor (compat247) y por eso van por su propia ruta.
+ */
+async function emisionVideo(c, encender) {
+  const nodo = await videoNode.paraServidorId(c.servidor_id);
+  if (!nodo) throw new Error('El canal no está asignado a un nodo de video');
+  const r = await nodo.emision(c.short_name, encender);
+  if (!r || r.ok === false) throw new Error(r?.error || 'el nodo no confirmó el cambio');
+  return r;
+}
+
 router.post('/servicios/:id/iniciar', wrap(async (req, res) => {
+  const c = await clienteModel.findById(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Servicio no encontrado' });
+
+  if ((c.tipo || 'audio') === 'video') {
+    const r = await emisionVideo(c, true);
+    return res.json({
+      ok: true,
+      message: r.videos ? `Canal al aire con ${r.videos} video${r.videos === 1 ? '' : 's'}` : 'Canal al aire',
+      videos: r.videos ?? null,
+    });
+  }
+
   const ctx = await conEstacion(req, res);
   if (!ctx) return;
   await ctx.az.restartStation(ctx.c.azuracast_station_id); // restart registra los servicios y arranca
@@ -525,6 +555,14 @@ router.post('/servicios/:id/iniciar', wrap(async (req, res) => {
 
 /** POST /api/provision/servicios/:id/detener — detiene la transmisión (no suspende la cuenta). */
 router.post('/servicios/:id/detener', wrap(async (req, res) => {
+  const c = await clienteModel.findById(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Servicio no encontrado' });
+
+  if ((c.tipo || 'audio') === 'video') {
+    await emisionVideo(c, false);
+    return res.json({ ok: true, message: 'Canal fuera del aire' });
+  }
+
   const ctx = await conEstacion(req, res);
   if (!ctx) return;
   await ctx.az.stopStation(ctx.c.azuracast_station_id);
@@ -533,6 +571,17 @@ router.post('/servicios/:id/detener', wrap(async (req, res) => {
 
 /** POST /api/provision/servicios/:id/reiniciar — reinicia el stream. */
 router.post('/servicios/:id/reiniciar', wrap(async (req, res) => {
+  const c = await clienteModel.findById(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Servicio no encontrado' });
+
+  if ((c.tipo || 'audio') === 'video') {
+    // Apagar y encender: así relee su lista, que es justo para lo que se usa
+    // reiniciar tras cambiar los videos.
+    await emisionVideo(c, false).catch(() => {});
+    const r = await emisionVideo(c, true);
+    return res.json({ ok: true, message: 'Canal reiniciado', videos: r.videos ?? null });
+  }
+
   const ctx = await conEstacion(req, res);
   if (!ctx) return;
   await ctx.az.restartStation(ctx.c.azuracast_station_id);
