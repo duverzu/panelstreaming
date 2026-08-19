@@ -14,6 +14,7 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const bienvenida = require('./bienvenida');
+const listas = require('./listas');
 
 const HOME = process.env.HOME_BASE || '/home';
 const CONF = process.env.NGINX_CUENTAS_DIR || '/opt/nginx-panel/conf/cuentas';
@@ -102,7 +103,22 @@ async function crearCuenta(user, { puertos } = {}) {
   // nada que emitir. El cliente le da a «Iniciar» y no pasa nada, sin ningún
   // mensaje que lo explique. Se le deja un clip de bienvenida para que su canal
   // funcione desde el primer minuto; en cuanto suba lo suyo, deja de usarse.
-  await bienvenida.ponerEn(dir).catch((e) => console.error('[crear] bienvenida:', e.message));
+  const puesto = await bienvenida.ponerEn(dir).catch((e) => {
+    console.error('[crear] bienvenida:', e.message);
+    return false;
+  });
+
+  // Y su primera lista de emisión. Sin ninguna lista, el panel del cliente no
+  // tiene dónde pulsar «Poner al aire»: esa acción vive DENTRO de una lista.
+  // El canal podía emitir, pero el cliente no tenía forma de arrancarlo.
+  try {
+    const datos = await listas.leer(dir);
+    if (!Object.keys(datos.listas || {}).length) {
+      const l = await listas.crear(dir, 'Programación principal');
+      if (puesto) await listas.fijarVideos(dir, l.id, ['bienvenida.mp4']);
+      await listas.marcarActiva(dir, l.id);
+    }
+  } catch (e) { console.error('[crear] lista por defecto:', e.message); }
 
   const reemplazos = {
     USER: u, HOME, DOMINIO,
