@@ -25,7 +25,7 @@ const webtv = require('./webtv');
 const restream = require('./restream');
 const compat = require('./compat');
 const compat247 = require('./compat247');
-const { crearCuenta, eliminarConfig } = require('./crear');
+const { crearCuenta, eliminarConfig, renombrarCuenta } = require('./crear');
 const listas = require('./listas');
 const fsp2 = require('fs/promises');
 const normalizar = require('./normalizar');
@@ -646,6 +646,40 @@ app.post('/cuentas', wrap(async (req, res) => {
   }
 
   res.status(201).json({ ok: true, ...info, webtv: webtvEstado });
+}));
+
+/**
+ * POST /cuentas/:user/renombrar — le cambia el nombre a una cuenta.
+ * body: { nuevo }
+ *
+ * Si estaba al aire, vuelve al aire con el nombre nuevo: el cliente no debería
+ * quedarse fuera de antena por corregirle una letra.
+ */
+app.post('/cuentas/:user/renombrar', wrap(async (req, res) => {
+  const actual = String(req.params.user);
+  const nuevo = String(req.body?.nuevo || '');
+  if (!nuevo) return res.status(400).json({ error: 'Falta el nombre nuevo' });
+
+  const emitia = Boolean(webtv.estado(actual)?.emitiendo);
+  if (emitia) webtv.detener(actual);
+
+  let info;
+  try { info = await renombrarCuenta(actual, nuevo); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
+
+  // La clave de transmisión viaja con la cuenta: el cliente no tiene por qué
+  // cambiarla en su OBS por un cambio de nombre nuestro.
+  const clave = await claves.obtener(actual);
+  if (clave) { await claves.definir(info.user, clave); await claves.quitar(actual); }
+
+  const r = await recargarNginx();
+  if (!r.ok) return res.status(500).json({ error: 'nginx rechazó la configuración', detalle: r.error, ...info });
+
+  if (emitia) {
+    await webtv.iniciar(info.user, { dirCuenta: path.join(BASE, info.user), puertoRtmp: info.puertos.rtmp })
+      .catch((e) => console.error('[renombrar] no volvió al aire:', e.message));
+  }
+  res.json({ ok: true, ...info, volvio_al_aire: emitia });
 }));
 
 /** DELETE /cuentas/:user — quita la config y apaga el canal (NO borra videos). */

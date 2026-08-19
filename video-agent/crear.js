@@ -138,6 +138,50 @@ async function crearCuenta(user, { puertos } = {}) {
   return { user: u, puertos: { http, rtmp }, dir };
 }
 
+/**
+ * Renombra una cuenta conservando TODO lo suyo: sus videos, sus listas y —lo
+ * más importante— sus PUERTOS. Si cambiaran, al cliente le cambiaría también
+ * la dirección de su canal y la de su OBS, y habría que avisarle: justo lo que
+ * se quiere evitar cuando lo que está mal es solo el nombre.
+ *
+ * Las aplicaciones RTMP de nginx llevan el nombre dentro (`<user>live`,
+ * `<user>stream`…), así que la configuración no se puede renombrar: se vuelve
+ * a generar desde la plantilla con el nombre nuevo y los mismos puertos.
+ *
+ * NO recarga nginx ni reanuda la emisión: eso lo decide quien llama, que sabe
+ * si el canal estaba al aire.
+ */
+async function renombrarCuenta(actual, nuevo) {
+  const viejo = slug(actual);
+  const nueva = slug(nuevo);
+  if (nueva.length < 3) throw new Error('El nombre nuevo debe tener al menos 3 caracteres alfanuméricos');
+  if (viejo === nueva) return { user: nueva, sin_cambios: true };
+
+  const dirViejo = path.join(HOME, viejo);
+  const dirNuevo = path.join(HOME, nueva);
+  try { await fsp.access(dirViejo); } catch { throw new Error(`La cuenta ${viejo} no existe en este nodo`); }
+  try { await fsp.access(dirNuevo); throw new Error(`Ya hay una cuenta llamada ${nueva}`); } catch (e) {
+    if (String(e.message).startsWith('Ya hay')) throw e;   // existe de verdad
+  }
+
+  // Sus puertos actuales, para conservarlos.
+  let http = null, rtmp = null;
+  try {
+    const conf = await fsp.readFile(path.join(CONF, `${viejo}.http`), 'utf8');
+    http = Number((conf.match(/listen\s+(\d+)/) || [])[1]) || null;
+  } catch (_) {}
+  try {
+    const conf = await fsp.readFile(path.join(CONF, `${viejo}.rtmp`), 'utf8');
+    rtmp = Number((conf.match(/listen\s+(\d+)/) || [])[1]) || null;
+  } catch (_) {}
+
+  await fsp.rename(dirViejo, dirNuevo);
+  await eliminarConfig(viejo);
+  const info = await crearCuenta(nueva, { puertos: http && rtmp ? { http, rtmp } : undefined });
+
+  return { user: nueva, anterior: viejo, puertos: info.puertos, conservo_puertos: Boolean(http && rtmp) };
+}
+
 /** Elimina la configuración de una cuenta (no borra sus videos). */
 async function eliminarConfig(user) {
   const u = slug(user);
@@ -147,4 +191,4 @@ async function eliminarConfig(user) {
   return { user: u };
 }
 
-module.exports = { crearCuenta, eliminarConfig, puertosUsados, slug };
+module.exports = { crearCuenta, renombrarCuenta, eliminarConfig, puertosUsados, slug };
