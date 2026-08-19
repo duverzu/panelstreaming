@@ -72,4 +72,23 @@ async function ponerEn(dirCuenta) {
   return true;
 }
 
-module.exports = { asegurar, ponerEn, ARCHIVO };
+/**
+ * Quita el clip de bienvenida en cuanto la cuenta tiene contenido propio.
+ *
+ * Es un arranque, no contenido: si se queda, el cliente lo ve en su bucle para
+ * siempre y encima obliga a recodificar toda la emisión, porque su firma no
+ * coincidirá con la de los videos que suba.
+ */
+async function retirarDe(dirCuenta) {
+  const uploads = path.join(dirCuenta, 'uploads');
+  const clip = path.join(uploads, 'bienvenida.mp4');
+  try {
+    const propios = (await fsp.readdir(uploads))
+      .filter((f) => /\.(mp4|mkv|mov|webm|flv)$/i.test(f) && f !== 'bienvenida.mp4');
+    if (!propios.length) return false;          // todavía es lo único que tiene
+    await fsp.unlink(clip);
+    return true;
+  } catch (_) { return false; }
+}
+
+module.exports = { asegurar, ponerEn, retirarDe, ARCHIVO };

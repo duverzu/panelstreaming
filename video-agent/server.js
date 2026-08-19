@@ -20,6 +20,7 @@ const path = require('path');
 const readline = require('readline');
 const claves = require('./claves');
 const salud = require('./salud');
+const bienvenida = require('./bienvenida');
 const webtv = require('./webtv');
 const restream = require('./restream');
 const compat = require('./compat');
@@ -856,6 +857,10 @@ app.post('/subir', (req, res) => {
   subida.subir(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'No se recibió ningún video (formatos: mp4, mkv, mov, webm, flv)' });
+
+    // Ya tiene contenido propio: el clip de bienvenida se retira. Era el
+    // arranque para que su canal pudiera emitir desde el primer minuto.
+    await bienvenida.retirarDe(path.join(BASE, user)).catch(() => {});
 
     // Cuenta de la capa asilivehd (compat): su AutoDJ es compat247, no el motor
     // por-puerto. Actualiza su 24/7 con el nuevo video, SIN pisar un directo:
