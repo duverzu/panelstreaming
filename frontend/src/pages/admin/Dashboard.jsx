@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api';
 import { useAmbito } from '../../ambito';
 import DonutChart from '../../components/charts/DonutChart';
-import ServerStats from '../../components/ServerStats';
 import GuardianBanda from '../../components/GuardianBanda';
 
 /** GB legible: 850 GB, 2.4 TB… */
@@ -158,8 +157,6 @@ export default function AdminDashboard() {
         </div>
         )}
 
-        {/* ─── VPS ─── */}
-        <ServerStats />
       </div>
 
       {/* ═══ 3) DETALLE AUDIO: dona de estado + ranking ═══ */}

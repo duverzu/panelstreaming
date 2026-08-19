@@ -55,8 +55,35 @@ function Barra({ etiqueta, detalle, pct, aviso = 75, critico = 90 }) {
   );
 }
 
-/** Cómo está la máquina del nodo por dentro. Solo la reportan los nodos con
- *  agente propio; los demás enseñan lo que sí se sabe de ellos. */
+/**
+ * Las dos fuentes de "cómo está la máquina" se dejan en la MISMA forma antes de
+ * pintarlas. Los nodos de video lo reportan por su agente, en bytes; la máquina
+ * de AzuraCast lo reporta por su propia API, ya formateado. Sin este paso, la
+ * tarjeta tendría que saber de dónde viene cada dato y se llenaría de ifs.
+ */
+function deNodoVideo(n) {
+  if (!n?.responde) return null;
+  return {
+    disco: { total: peso(n.disco?.total_bytes), libre: peso(n.disco?.libre_bytes), usado_pct: n.disco?.usado_pct },
+    cpu: { nucleos: n.cpu?.nucleos, usado_pct: n.cpu?.usado_pct, robado_pct: n.cpu?.robado_pct, carga: n.cpu?.carga },
+    memoria: { total: peso(n.memoria?.total_bytes), usado: peso(n.memoria?.usado_bytes), usado_pct: n.memoria?.usado_pct },
+    uptime_s: n.uptime_s,
+    servicios: n.servicios,
+  };
+}
+
+function deAzuracast(v) {
+  if (!v?.cpu) return null;
+  return {
+    disco: { total: v.disco?.total, libre: v.disco?.libre, usado_pct: v.disco?.usado_pct },
+    cpu: { nucleos: v.cpu?.cores, usado_pct: v.cpu?.usado_pct, robado_pct: v.cpu?.robado_pct, carga: v.cpu?.load },
+    memoria: { total: v.memoria?.total, usado: v.memoria?.usado, usado_pct: v.memoria?.usado_pct },
+    uptime_s: null,
+    servicios: null,
+  };
+}
+
+/** Cómo está la máquina del nodo por dentro. */
 function Maquina({ salud, ocupacion }) {
   const tiempo = (s) => {
     const d = Math.floor(s / 86400); const h = Math.floor((s % 86400) / 3600);
@@ -73,11 +100,11 @@ function Maquina({ salud, ocupacion }) {
         </div>
       )}
 
-      {salud?.responde ? (
+      {salud ? (
         <>
           <Barra
-            etiqueta={`Disco · ${peso(salud.disco?.total_bytes)}`}
-            detalle={`quedan ${peso(salud.disco?.libre_bytes)}`}
+            etiqueta={`Disco · ${salud.disco?.total || '—'}`}
+            detalle={`quedan ${salud.disco?.libre || '—'}`}
             pct={salud.disco?.usado_pct} aviso={80} critico={92}
           />
           <Barra
@@ -87,12 +114,12 @@ function Maquina({ salud, ocupacion }) {
           />
           {salud.cpu?.robado_pct >= 5 && (
             <div className="text-[11px] text-amber-600 dark:text-amber-400 -mt-1.5">
-              +{salud.cpu.robado_pct}% que se lleva el vecino (CPU robado)
+              +{salud.cpu.robado_pct}% que se lleva el vecino (CPU robado por el proveedor)
             </div>
           )}
           <Barra
-            etiqueta={`Memoria · ${peso(salud.memoria?.total_bytes)}`}
-            detalle={`${peso(salud.memoria?.usado_bytes)} · ${salud.memoria?.usado_pct ?? '—'}%`}
+            etiqueta={`Memoria · ${salud.memoria?.total || '—'}`}
+            detalle={`${salud.memoria?.usado || '—'} · ${salud.memoria?.usado_pct ?? '—'}%`}
             pct={salud.memoria?.usado_pct} aviso={80} critico={90}
           />
         </>
@@ -113,9 +140,9 @@ function Maquina({ salud, ocupacion }) {
 
       {/* Apilados, no en una fila: en la columna estrecha de la tarjeta los dos
           juntos se partían por la mitad y quedaba un "29 d / 4 h". */}
-      {salud?.responde && (
+      {salud && (salud.uptime_s || salud.cpu?.carga?.length) && (
         <div className="text-[11px] text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-800 space-y-0.5">
-          <div>Encendido hace {tiempo(salud.uptime_s || 0)}</div>
+          {salud.uptime_s ? <div>Encendido hace {tiempo(salud.uptime_s)}</div> : null}
           {Array.isArray(salud.cpu?.carga) && salud.cpu.carga.length === 3 && (
             <div>
               Carga {salud.cpu.carga.map((x) => Number(x).toFixed(2)).join(' · ')}
@@ -135,6 +162,9 @@ export default function GuardianBanda() {
   // nodo: la banda dice cuánto tráfico le queda y esto si la máquina aguanta.
   // Separadas obligaban a cruzar dos sitios para responder una sola pregunta.
   const [salud, setSalud] = useState({});
+  // La máquina del nodo de AUDIO es la de AzuraCast, y esa la reporta el propio
+  // AzuraCast por otra ruta: no tiene agente como los nodos de video.
+  const [vps, setVps] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -143,6 +173,7 @@ export default function GuardianBanda() {
       apiFetch('/admin/nodos-video/salud')
         .then((d) => alive && setSalud(Object.fromEntries((d.nodos || []).map((n) => [n.id, n]))))
         .catch(() => {});
+      apiFetch('/admin/servidor').then((d) => alive && setVps(d)).catch(() => {});
     };
     load();
     const id = setInterval(load, 30000);
@@ -208,7 +239,7 @@ export default function GuardianBanda() {
                     {/* La máquina por dentro, al lado del reloj */}
                     <div className="flex-1 w-full min-w-0">
                       <Maquina
-                        salud={salud[s.id]}
+                        salud={esVideo ? deNodoVideo(salud[s.id]) : deAzuracast(vps)}
                         ocupacion={pctOcup != null ? {
                           etiqueta: esVideo ? 'Canales alojados' : 'Radios alojadas',
                           usados: s.radios, total: s.capacidad, pct: pctOcup, esVideo,
