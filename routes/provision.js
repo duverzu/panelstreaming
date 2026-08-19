@@ -17,6 +17,7 @@ const bcrypt = require('bcryptjs');
 
 const apiKeyAuth = require('../middleware/apiKey');
 const provisioning = require('../services/provisioning');
+const videoNode = require('../services/videoNode');
 const clienteModel = require('../models/clienteModel');
 const planModel = require('../models/planModel');
 const planResellerModel = require('../models/planResellerModel');
@@ -53,7 +54,20 @@ router.get('/test', wrap(async (req, res) => {
 /** GET /api/provision/planes — planes disponibles (para mapear productos). */
 router.get('/planes', wrap(async (req, res) => {
   const planes = await planModel.findGlobales();
-  res.json({ planes: planes.map((p) => ({ id: p.id, nombre: p.nombre, max_bitrate: p.max_bitrate, max_oyentes: p.max_oyentes, espacio_mb: p.espacio_mb, permite_dj: p.permite_dj })) });
+  // `tipo` es imprescindible aquí: sin él, quien factura no puede saber que
+  // "Video Esencial" es de video salvo adivinándolo por el nombre — y un plan
+  // que se llame distinto mañana rompería esa adivinanza en silencio.
+  res.json({
+    planes: planes.map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      tipo: p.tipo || 'audio',
+      max_bitrate: p.max_bitrate,
+      max_oyentes: p.max_oyentes,
+      espacio_mb: p.espacio_mb,
+      permite_dj: p.permite_dj,
+    })),
+  });
 }));
 
 /**
@@ -73,6 +87,9 @@ router.get('/servicios', wrap(async (req, res) => {
     usuario: c.username,
     email: c.email,
     plan: c.plan,
+    // Audio y video se administran distinto: quien factura necesita saber cuál
+    // es cada uno para enseñar los botones y los datos que corresponden.
+    tipo: c.tipo || 'audio',
     activo: c.activo,
     url_streaming: c.url_streaming,
     servidor_id: c.servidor_id,
@@ -305,6 +322,55 @@ router.post('/servicios/:id/reactivar', wrap(async (req, res) => {
  * sirve para canjearse por una sesión (no es la sesión en sí). No se entrega
  * para cuentas suspendidas.
  */
+/**
+ * GET /provision/servicios/:id — la ficha completa de UN servicio, con lo que
+ * hace falta para atenderlo: en audio sus datos de DJ, en video su servidor
+ * RTMP, su clave y sus enlaces.
+ *
+ * Existe aparte del listado porque estos datos hay que ir a buscarlos al nodo
+ * uno por uno: meterlos en la lista de 34 servicios la volvería lentísima y
+ * casi siempre no se necesitan.
+ */
+router.get('/servicios/:id', wrap(async (req, res) => {
+  const c = await clienteModel.findById(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Servicio no encontrado' });
+
+  const base = {
+    servicio_id: c.id,
+    nombre_empresa: c.nombre_empresa,
+    usuario: c.short_name,
+    plan: c.plan,
+    tipo: c.tipo || 'audio',
+    activo: c.activo,
+    url_streaming: c.url_streaming,
+    servidor_id: c.servidor_id,
+  };
+
+  if ((c.tipo || 'audio') !== 'video') return res.json({ servicio: base });
+
+  // Los datos de conexión los tiene el NODO, no el panel: se le preguntan.
+  const servidor = c.servidor_id ? await servidorModel.findById(c.servidor_id) : null;
+  if (!servidor || servidor.tipo !== 'video') {
+    return res.json({ servicio: { ...base, aviso: 'El servicio no está asignado a un nodo de video.' } });
+  }
+  const nodo = videoNode.crearCliente(servidor.url, servidor.api_key);
+  // Los canales heredados de asilivehd no son "cuentas" del nodo: su conexión
+  // vive en la capa de compatibilidad. Preguntar solo por una de las dos deja
+  // fuera a la mayoría de los canales.
+  const info = c.compat
+    ? await nodo.compatCliente(c.short_name)
+    : await nodo.conexion(c.short_name);
+
+  res.json({
+    servicio: {
+      ...base,
+      compat: Boolean(c.compat),
+      conexion: info ? { servidor_rtmp: info.servidor_rtmp, clave: info.clave } : null,
+      urls: info ? { canal: info.m3u8 || c.url_streaming, player: info.player || null } : null,
+    },
+  });
+}));
+
 router.post('/servicios/:id/login', wrap(async (req, res) => {
   const c = await clienteModel.findById(Number(req.params.id));
   if (!c) return res.status(404).json({ error: 'Servicio no encontrado' });
