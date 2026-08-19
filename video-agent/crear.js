@@ -13,6 +13,7 @@
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
+const bienvenida = require('./bienvenida');
 
 const HOME = process.env.HOME_BASE || '/home';
 const CONF = process.env.NGINX_CUENTAS_DIR || '/opt/nginx-panel/conf/cuentas';
@@ -96,6 +97,12 @@ async function crearCuenta(user, { puertos } = {}) {
   for (const sub of ['live-streaming/hls', 'stream/hls', 'stream-hybrid/hls']) {
     await fsp.chmod(path.join(dir, sub), 0o777);
   }
+
+  // Un canal sin videos NO puede arrancar el 24/7: la lista sale vacía y no hay
+  // nada que emitir. El cliente le da a «Iniciar» y no pasa nada, sin ningún
+  // mensaje que lo explique. Se le deja un clip de bienvenida para que su canal
+  // funcione desde el primer minuto; en cuanto suba lo suyo, deja de usarse.
+  await bienvenida.ponerEn(dir).catch((e) => console.error('[crear] bienvenida:', e.message));
 
   const reemplazos = {
     USER: u, HOME, DOMINIO,
