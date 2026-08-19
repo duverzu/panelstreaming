@@ -147,6 +147,10 @@ router.post('/servicios', wrap(async (req, res) => {
         puerto_http: r.video.puerto_http,
         puerto_rtmp: r.video.puerto_rtmp,
       },
+      // El player queda creado en la plataforma; su `user` puede no coincidir
+      // con el del servicio si el nombre ya estaba tomado allá.
+      player: r.player,
+      aviso_player: r.aviso_player,
       // Se repite bajo `estacion` a propósito: quien ya lee esa clave para las
       // radios sigue funcionando sin cambiar una línea, y ve el canal en vez
       // de una ficha vacía.
