@@ -1,115 +1,101 @@
 /**
- * Gauge — medidor semicircular (tipo tablero de auto) para UNA razón contra un
- * límite: cuánta banda llevas del tope del mes.
+ * Gauge — reloj de aguja para UNA razón contra un límite: cuánta banda llevas
+ * del tope del mes.
  *
- * Dos datos en el mismo dibujo:
- *   · el arco relleno   = lo consumido HOY
- *   · la aguja punteada = dónde terminarás el mes al ritmo actual
+ * Tres datos en el mismo dibujo:
+ *   · las ZONAS del arco = dónde están los umbrales (50% vigilar, 90% crítico)
+ *   · la AGUJA           = dónde vas hoy
+ *   · la MARCA del borde = dónde terminarás el mes al ritmo actual
  *
- * El color es de ESTADO (no de serie) y nunca va solo: siempre lo acompaña una
- * etiqueta con texto, para quien no distingue colores.
+ * Las zonas no son un arcoíris decorativo: son exactamente los cortes con los
+ * que el panel decide el estado, así que el color del tramo donde cae la aguja
+ * y la etiqueta de estado dicen siempre lo mismo.
  *
- * props: valor, maximo, proyeccion (misma unidad), formato(v) -> string, estado
+ * El color nunca va solo — quien no distingue verde de ámbar lee la posición
+ * de la aguja y la etiqueta de texto que acompaña a la tarjeta.
+ *
+ * props: valor, maximo, proyeccion (misma unidad), formato(v) -> string
  */
 
-// Paleta de estado, validada en claro y en oscuro (scripts/validate_palette).
-//
-// Son TRES colores para CUATRO estados, a propósito. La paleta anterior daba
-// un tono distinto a «Vigilar» y a «En riesgo», pero estaban a ΔE 13.6: ni con
-// visión perfecta se distinguen, así que fingían decir algo que no decían.
-// Además dos de aquellos cuatro no llegaban al contraste mínimo sobre el fondo.
-//
-// Lo que separa esos dos estados es la etiqueta con su texto y su icono, que
-// es lo que de verdad lee la gente. El color solo tiene que gritar «tranquilo»,
-// «ojo» o «ya». Y la posición de la aguja da el detalle fino.
-const COLOR = {
-  ok: '#0ca30c',
-  atencion: '#d97706',
-  riesgo: '#d97706',
-  critico: '#c62828',
-};
+// Paleta de estado, validada en claro y en oscuro (scripts/validate_palette):
+// banda de luminosidad, croma, suelo de visión normal y contraste, todo OK.
+// Verde y ámbar seguirán chocando bajo daltonismo: eso no lo arregla ningún
+// color, y es para lo que existe la etiqueta de texto.
+const VERDE = '#0ca30c';
+const AMBAR = '#d97706';
+const ROJO = '#c62828';
 
-const R = 70;          // radio del arco
-const GROSOR = 16;
-const W = 200, H = 128;
-const CX = W / 2, CY = 96;
+// Los mismos cortes que usa el backend para decidir el estado.
+const CORTE_VIGILAR = 0.5;
+const CORTE_CRITICO = 0.9;
 
-/** Punto del arco para una fracción 0..1 (de izquierda a derecha). */
+const W = 200, H = 124;
+const CX = 100, CY = 104, R = 76, GROSOR = 12;
+const ANG0 = 200, BARRIDO = 220;    // arranca abajo-izquierda y barre por arriba
+
+const rad = (g) => (g * Math.PI) / 180;
+
+/** Punto del arco para una fracción 0..1. */
 function punto(frac, radio = R) {
-  const ang = Math.PI * (1 - Math.min(1, Math.max(0, frac)));
-  return [CX + radio * Math.cos(ang), CY - radio * Math.sin(ang)];
+  const f = Math.min(1, Math.max(0, frac));
+  const a = rad(ANG0 - BARRIDO * f);
+  return [CX + radio * Math.cos(a), CY - radio * Math.sin(a)];
 }
 
 function arco(desde, hasta, radio = R) {
   const [x1, y1] = punto(desde, radio);
   const [x2, y2] = punto(hasta, radio);
-  const largo = hasta - desde > 0.5 ? 1 : 0;
+  const largo = (hasta - desde) * BARRIDO > 180 ? 1 : 0;
   return `M ${x1} ${y1} A ${radio} ${radio} 0 ${largo} 1 ${x2} ${y2}`;
 }
 
-export default function Gauge({
-  valor = 0, maximo = 0, proyeccion = null,
-  formato = (v) => String(v), estado = 'ok', etiqueta = '',
-}) {
-  const frac = maximo > 0 ? Math.min(1, valor / maximo) : 0;
-  const fracProy = maximo > 0 && proyeccion != null ? Math.min(1, proyeccion / maximo) : null;
-  const color = COLOR[estado] || COLOR.ok;
-  const pct = maximo > 0 ? Math.round((valor / maximo) * 100) : 0;
+export default function Gauge({ valor = 0, maximo = 0, proyeccion = null, formato = (v) => String(v) }) {
+  if (!(maximo > 0)) return null;
 
-  const [px, py] = fracProy != null ? punto(fracProy, R + GROSOR / 2 + 3) : [0, 0];
-  const [pxi, pyi] = fracProy != null ? punto(fracProy, R - GROSOR / 2 - 3) : [0, 0];
+  const frac = Math.min(1, valor / maximo);
+  const fracProy = proyeccion != null ? Math.min(1, proyeccion / maximo) : null;
+  const pct = Math.round((valor / maximo) * 100);
+
+  const [nx, ny] = punto(frac, R - GROSOR / 2 - 9);
+  const [pa, pb] = fracProy != null ? punto(fracProy, R - GROSOR / 2 - 4) : [0, 0];
+  const [pc, pd] = fracProy != null ? punto(fracProy, R + GROSOR / 2 + 4) : [0, 0];
 
   return (
-    <div className="relative">
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxWidth: 240, display: 'block', margin: '0 auto' }}>
-        {/* Pista: el 100% del tope. Del MISMO tono que el relleno, apagado —
-            así el estado se lee a lo largo de todo el arco y no solo en el
-            trozo lleno, que es lo que pasa con una pista gris neutra. */}
-        <path d={arco(0, 1)} fill="none" stroke={color} strokeOpacity="0.16"
-          strokeWidth={GROSOR} strokeLinecap="round" />
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxWidth: 220, display: 'block', margin: '0 auto' }}>
+        <path d={arco(0, CORTE_VIGILAR)} fill="none" stroke={VERDE} strokeWidth={GROSOR} strokeLinecap="round" />
+        <path d={arco(CORTE_VIGILAR, CORTE_CRITICO)} fill="none" stroke={AMBAR} strokeWidth={GROSOR} />
+        <path d={arco(CORTE_CRITICO, 1)} fill="none" stroke={ROJO} strokeWidth={GROSOR} strokeLinecap="round" />
 
-        {/* Consumido */}
-        {frac > 0 && (
-          <path d={arco(0, frac)} fill="none" stroke={color} strokeWidth={GROSOR} strokeLinecap="round" />
-        )}
+        {/* Separadores entre zonas, del color del fondo */}
+        {[CORTE_VIGILAR, CORTE_CRITICO].map((t) => {
+          const [ax, ay] = punto(t, R - GROSOR / 2);
+          const [bx, by] = punto(t, R + GROSOR / 2);
+          return <line key={t} x1={ax} y1={ay} x2={bx} y2={by}
+            className="stroke-white dark:stroke-gray-900" strokeWidth="2" />;
+        })}
 
-        {/* Aguja de proyección a fin de mes. Lleva un contorno del color del
-            fondo para que se despegue del arco cuando lo cruza: sin él, sobre
-            el trozo relleno se pierde justo en el caso que más importa. */}
+        {/* Dónde terminará el mes. Cruza el arco con un contorno del color del
+            fondo para no perderse sobre el tramo de color. */}
         {fracProy != null && (
-          <g>
-            <line x1={pxi} y1={pyi} x2={px} y2={py}
-              className="stroke-white dark:stroke-gray-900" strokeWidth="6" strokeLinecap="round" />
-            <line x1={pxi} y1={pyi} x2={px} y2={py}
-              className="stroke-gray-900 dark:stroke-gray-100" strokeWidth="2.5" strokeLinecap="round" />
-            <circle cx={px} cy={py} r="4" className="fill-white dark:fill-gray-900" />
-            <circle cx={px} cy={py} r="3" className="fill-gray-900 dark:fill-gray-100" />
-          </g>
+          <>
+            <line x1={pa} y1={pb} x2={pc} y2={pd} className="stroke-white dark:stroke-gray-900" strokeWidth="6" strokeLinecap="round" />
+            <line x1={pa} y1={pb} x2={pc} y2={pd} className="stroke-gray-900 dark:stroke-gray-100" strokeWidth="2.5" strokeLinecap="round" />
+          </>
         )}
 
-        {/* Extremos de la escala. Van por debajo del arco con holgura: cuando
-            la proyección se va al tope, la aguja aterriza justo encima de la
-            cifra de la derecha y se pisaban. */}
-        <text x="4" y={CY + 24} className="fill-gray-400" style={{ fontSize: 9 }}>0</text>
-        <text x={W - 4} y={CY + 24} textAnchor="end" className="fill-gray-400" style={{ fontSize: 9 }}>
-          {formato(maximo)}
-        </text>
+        {/* La aguja: dónde vas hoy */}
+        <line x1={CX} y1={CY} x2={nx} y2={ny} className="stroke-white dark:stroke-gray-900" strokeWidth="6.5" strokeLinecap="round" />
+        <line x1={CX} y1={CY} x2={nx} y2={ny} className="stroke-gray-900 dark:stroke-gray-100" strokeWidth="3" strokeLinecap="round" />
+        <circle cx={CX} cy={CY} r="6.5" className="fill-white dark:fill-gray-900 stroke-gray-900 dark:stroke-gray-100" strokeWidth="2.5" />
       </svg>
 
-      {/* Cifra principal, dentro del arco */}
-      <div className="absolute inset-x-0" style={{ top: '46%' }}>
-        <div className="text-center">
-          {/* Cifra grande: sin tabular-nums. Ese ajuste le da a cada dígito el
-              ancho de un cero, y a este tamaño un "12%" se ve suelto. Se
-              reserva para columnas de números que deben alinearse. */}
-          <div className="text-2xl font-bold leading-none">{pct}%</div>
-          <div className="text-[11px] text-gray-400 mt-1">{formato(valor)}</div>
-        </div>
+      <div className="text-center -mt-1">
+        {/* Sin tabular-nums: ese ajuste da a cada dígito el ancho de un cero y a
+            este tamaño un "30%" se ve suelto. Se reserva para columnas. */}
+        <div className="text-2xl font-bold leading-none">{pct}%</div>
+        <div className="text-[11px] text-gray-400 mt-1">{formato(valor)} de {formato(maximo)}</div>
       </div>
-
-      {etiqueta && <div className="text-center text-xs text-gray-400 mt-1">{etiqueta}</div>}
     </div>
   );
 }
-
-export { COLOR as COLOR_ESTADO };

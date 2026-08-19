@@ -20,33 +20,110 @@ const ESTADO = {
   'sin-tope': { icono: '–', texto: 'Sin tope definido', clase: 'text-gray-500 bg-gray-100 dark:bg-gray-800 dark:text-gray-400' },
 };
 
-/** Una cifra con su nombre. El número manda; el apunte va debajo, callado. */
-function Dato({ etiqueta, valor, apunte }) {
+/** Nombre a la izquierda, cifra a la derecha. Para datos que se leen de reojo. */
+function Linea({ etiqueta, valor }) {
   return (
-    <div className="rounded-xl bg-gray-50 dark:bg-gray-950 px-3 py-2">
-      <div className="text-[11px] text-gray-400 leading-tight">{etiqueta}</div>
-      <div className="text-lg font-semibold leading-tight mt-0.5">{valor}</div>
-      {apunte && <div className="text-[11px] text-gray-400 leading-tight">{apunte}</div>}
+    <div className="flex justify-between items-baseline text-xs gap-2">
+      <span className="text-gray-400 truncate">{etiqueta}</span>
+      <span className="font-semibold shrink-0">{valor}</span>
     </div>
   );
 }
 
-/** Cuántas cuentas caben en el nodo. La banda dice cuánto TRÁFICO queda; esto,
- *  cuántas CUENTAS. Un nodo puede ir sobrado de una cosa y al límite de la
- *  otra, y son decisiones distintas. */
-function Ocupacion({ etiqueta, usados, total, pct, esVideo }) {
+/** Bytes a la unidad que se lee mejor. */
+function peso(b) {
+  const n = Number(b) || 0;
+  if (n >= 1099511627776) return (n / 1099511627776).toFixed(1) + ' TB';
+  if (n >= 1073741824) return (n / 1073741824).toFixed(n >= 10737418240 ? 0 : 1) + ' GB';
+  return Math.round(n / 1048576) + ' MB';
+}
+
+/** Barra con umbral: verde tranquilo, ámbar mírame, rojo actúa. */
+function Barra({ etiqueta, detalle, pct, aviso = 75, critico = 90 }) {
+  const p = Math.max(0, Math.min(100, Number(pct) || 0));
+  const color = p >= critico ? 'bg-red-600' : p >= aviso ? 'bg-amber-600' : 'bg-brand-500';
   return (
-    <div className="rounded-xl bg-gray-50 dark:bg-gray-950 px-3 py-2">
-      <div className="flex justify-between items-baseline">
-        <span className="text-[11px] text-gray-400">{etiqueta}</span>
-        <span className="text-sm font-semibold tabular-nums">{usados} <span className="text-gray-400 font-normal">/ {total}</span></span>
+    <div>
+      <div className="flex justify-between items-baseline text-xs mb-1 gap-2">
+        <span className="text-gray-400 truncate">{etiqueta}</span>
+        <span className="font-semibold shrink-0">{detalle}</span>
       </div>
-      <div className="h-1.5 rounded-full bg-gray-200/70 dark:bg-gray-800 overflow-hidden mt-1.5">
-        <div
-          className={`h-full rounded-full ${pct >= 100 ? 'bg-red-600' : pct > 80 ? 'bg-amber-600' : esVideo ? 'bg-fuchsia-500' : 'bg-brand-500'}`}
-          style={{ width: pct + '%' }}
+      <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: p + '%' }} />
+      </div>
+    </div>
+  );
+}
+
+/** Cómo está la máquina del nodo por dentro. Solo la reportan los nodos con
+ *  agente propio; los demás enseñan lo que sí se sabe de ellos. */
+function Maquina({ salud, ocupacion }) {
+  const tiempo = (s) => {
+    const d = Math.floor(s / 86400); const h = Math.floor((s % 86400) / 3600);
+    return d ? `${d} d ${h} h` : `${h} h`;
+  };
+  const svc = salud?.servicios || {};
+  const caidos = Object.entries(svc).filter(([, ok]) => !ok).map(([k]) => k);
+
+  return (
+    <div className="space-y-3">
+      {caidos.length > 0 && (
+        <div className="text-xs rounded-xl bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 px-3 py-2">
+          <b>{caidos.join(' y ')}</b> {caidos.length > 1 ? 'están caídos' : 'está caído'}
+        </div>
+      )}
+
+      {salud?.responde ? (
+        <>
+          <Barra
+            etiqueta={`Disco · ${peso(salud.disco?.total_bytes)}`}
+            detalle={`quedan ${peso(salud.disco?.libre_bytes)}`}
+            pct={salud.disco?.usado_pct} aviso={80} critico={92}
+          />
+          <Barra
+            etiqueta={`CPU · ${salud.cpu?.nucleos || '?'} cores`}
+            detalle={`${salud.cpu?.usado_pct ?? '—'}%`}
+            pct={salud.cpu?.usado_pct} aviso={70} critico={85}
+          />
+          {salud.cpu?.robado_pct >= 5 && (
+            <div className="text-[11px] text-amber-600 dark:text-amber-400 -mt-1.5">
+              +{salud.cpu.robado_pct}% que se lleva el vecino (CPU robado)
+            </div>
+          )}
+          <Barra
+            etiqueta={`Memoria · ${peso(salud.memoria?.total_bytes)}`}
+            detalle={`${peso(salud.memoria?.usado_bytes)} · ${salud.memoria?.usado_pct ?? '—'}%`}
+            pct={salud.memoria?.usado_pct} aviso={80} critico={90}
+          />
+        </>
+      ) : (
+        <p className="text-xs text-gray-400">
+          Este nodo no reporta el estado de su máquina. Se ve su tráfico, pero no su
+          disco ni su CPU.
+        </p>
+      )}
+
+      {ocupacion && (
+        <Barra
+          etiqueta={ocupacion.etiqueta}
+          detalle={`${ocupacion.usados} / ${ocupacion.total}`}
+          pct={ocupacion.pct} aviso={80} critico={100}
         />
-      </div>
+      )}
+
+      {salud?.responde && (
+        {/* Apilados, no en una fila: en la columna estrecha de la tarjeta los
+            dos juntos se partían por la mitad y quedaba un "29 d / 4 h". */}
+        <div className="text-[11px] text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-800 space-y-0.5">
+          <div>Encendido hace {tiempo(salud.uptime_s || 0)}</div>
+          {Array.isArray(salud.cpu?.carga) && salud.cpu.carga.length === 3 && (
+            <div>
+              Carga {salud.cpu.carga.map((x) => Number(x).toFixed(2)).join(' · ')}
+              <span className="text-gray-300 dark:text-gray-600"> sobre {salud.cpu.nucleos} cores</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -54,10 +131,19 @@ function Ocupacion({ etiqueta, usados, total, pct, esVideo }) {
 export default function GuardianBanda() {
   const [servidores, setServidores] = useState([]);
   const [cargado, setCargado] = useState(false);
+  // La salud de la máquina se pedía en otra tarjeta, más abajo. Es del MISMO
+  // nodo: la banda dice cuánto tráfico le queda y esto si la máquina aguanta.
+  // Separadas obligaban a cruzar dos sitios para responder una sola pregunta.
+  const [salud, setSalud] = useState({});
 
   useEffect(() => {
     let alive = true;
-    const load = () => apiFetch('/admin/banda').then((d) => alive && (setServidores(d.servidores), setCargado(true))).catch(() => {});
+    const load = () => {
+      apiFetch('/admin/banda').then((d) => alive && (setServidores(d.servidores), setCargado(true))).catch(() => {});
+      apiFetch('/admin/nodos-video/salud')
+        .then((d) => alive && setSalud(Object.fromEntries((d.nodos || []).map((n) => [n.id, n]))))
+        .catch(() => {});
+    };
     load();
     const id = setInterval(load, 30000);
     return () => { alive = false; clearInterval(id); };
@@ -105,31 +191,29 @@ export default function GuardianBanda() {
                   {/* Medidor y cifras EN LA MISMA FILA. Apilados, la tarjeta se
                       volvía una columna larga y había que bajar la vista para
                       saber si el número del medidor era bueno o malo. */}
-                  <div className="flex flex-col sm:flex-row items-center gap-4">
-                    <div className="shrink-0 w-full sm:w-[210px]">
+                  <div className="flex flex-col sm:flex-row items-center gap-5">
+                    <div className="shrink-0 w-full sm:w-[220px]">
                       <Gauge
                         valor={s.consumido_gb}
                         maximo={s.tope_gb}
                         proyeccion={s.proyeccion_gb}
-                        estado={s.estado}
                         formato={tam}
                       />
+                      <div className="mt-3 space-y-1.5">
+                        <Linea etiqueta="Ritmo actual" valor={`${tam(s.promedio_diario_gb)}/día`} />
+                        <Linea etiqueta="Fin de mes" valor={`${tam(s.proyeccion_gb)} · ${s.proyeccion_pct}%`} />
+                      </div>
                     </div>
 
-                    {/* La lectura que importa: cómo termina el mes */}
-                    <div className="flex-1 w-full space-y-2.5">
-                      <Dato etiqueta="Ritmo actual" valor={`${tam(s.promedio_diario_gb)}/día`} />
-                      <Dato
-                        etiqueta="Terminarás el mes en"
-                        valor={tam(s.proyeccion_gb)}
-                        apunte={`${s.proyeccion_pct}% del tope`}
+                    {/* La máquina por dentro, al lado del reloj */}
+                    <div className="flex-1 w-full min-w-0">
+                      <Maquina
+                        salud={salud[s.id]}
+                        ocupacion={pctOcup != null ? {
+                          etiqueta: esVideo ? 'Canales alojados' : 'Radios alojadas',
+                          usados: s.radios, total: s.capacidad, pct: pctOcup, esVideo,
+                        } : null}
                       />
-                      {pctOcup != null && (
-                        <Ocupacion
-                          etiqueta={esVideo ? 'Canales alojados' : 'Radios alojadas'}
-                          usados={s.radios} total={s.capacidad} pct={pctOcup} esVideo={esVideo}
-                        />
-                      )}
                     </div>
                   </div>
 
@@ -156,9 +240,10 @@ export default function GuardianBanda() {
 
               {/* Sin tope no hay medidor, pero la ocupación sí se puede ver. */}
               {!conTope && pctOcup != null && (
-                <Ocupacion
+                <Barra
                   etiqueta={esVideo ? 'Canales alojados' : 'Radios alojadas'}
-                  usados={s.radios} total={s.capacidad} pct={pctOcup} esVideo={esVideo}
+                  detalle={`${s.radios} / ${s.capacidad}`}
+                  pct={pctOcup} aviso={80} critico={100}
                 />
               )}
 
