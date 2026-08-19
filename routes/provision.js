@@ -52,8 +52,17 @@ router.get('/test', wrap(async (req, res) => {
 }));
 
 /** GET /api/provision/planes — planes disponibles (para mapear productos). */
+/**
+ * GET /provision/planes[?tipo=audio|video]
+ *
+ * Sin `tipo` devuelve todo, como siempre: quien ya llamaba a esta ruta sigue
+ * funcionando igual. Con `tipo`, solo lo suyo — una ficha de servidor de video
+ * no tiene por qué cargar las radios ni al revés.
+ */
 router.get('/planes', wrap(async (req, res) => {
-  const planes = await planModel.findGlobales();
+  const filtro = req.query.tipo === 'video' ? 'video' : req.query.tipo === 'audio' ? 'audio' : null;
+  let planes = await planModel.findGlobales();
+  if (filtro) planes = planes.filter((p) => (p.tipo || 'audio') === filtro);
   // `tipo` es imprescindible aquí: sin él, quien factura no puede saber que
   // "Video Esencial" es de video salvo adivinándolo por el nombre — y un plan
   // que se llame distinto mañana rompería esa adivinanza en silencio.
@@ -74,8 +83,11 @@ router.get('/planes', wrap(async (req, res) => {
  * GET /api/provision/servicios — LISTA todas las radios (para sincronizar cuentas).
  * ?oyentes=1 incluye oyentes en vivo (más lento).
  */
+/** GET /provision/servicios[?tipo=audio|video][&oyentes=1] */
 router.get('/servicios', wrap(async (req, res) => {
-  const clientes = await clienteModel.findAllWithEmail();
+  const filtro = req.query.tipo === 'video' ? 'video' : req.query.tipo === 'audio' ? 'audio' : null;
+  let clientes = await clienteModel.findAllWithEmail();
+  if (filtro) clientes = clientes.filter((c) => (c.tipo || 'audio') === filtro);
   let oyentesPorCliente = {};
   if (req.query.oyentes === '1') {
     const { ranking } = await agregarOyentes(clientes);
