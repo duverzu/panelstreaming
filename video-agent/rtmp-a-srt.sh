@@ -25,7 +25,13 @@ if [ -f "$CANDADO" ] && kill -0 "$(cat "$CANDADO" 2>/dev/null)" 2>/dev/null; the
 fi
 
 echo "[srt-salida] $USUARIO: sacando la señal para quien la pide"
+# -analyzeduration/-probesize: sin esto ffmpeg decide que pistas trae el canal
+# con lo poco que ha visto en su primer medio segundo, y en un canal cuyos
+# fotogramas clave van espaciados se queda SOLO CON EL AUDIO. Al operador le
+# llegaba sonido y pantalla negra. Se le dan 10 segundos para mirar antes de
+# decidir; solo cuesta al abrir, no durante la emision.
 ffmpeg -hide_banner -loglevel warning -nostdin \
+  -analyzeduration 10000000 -probesize 10000000 \
   -i "rtmp://127.0.0.1:1935/asilivehls/$USUARIO" \
   -c copy -f rtsp -rtsp_transport tcp "rtsp://127.0.0.1:8554/$USUARIO" &
 FF=$!
