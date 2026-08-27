@@ -500,6 +500,14 @@ app.post('/srt/auth', (req, res) => {
     return res.status(401).end();
   }
 
+  // La API local de MediaMTX pasa por este mismo control. La usa el extractor
+  // de salida para saber si alguien sigue leyendo su canal, y escucha solo en
+  // 127.0.0.1 — de fuera no se llega. Sin esto responde 401 y el extractor no
+  // puede saber cuándo cerrarse.
+  if (['api', 'metrics', 'pprof'].includes(action)) {
+    return esLocal ? res.status(200).end() : res.status(401).end();
+  }
+
   if (action !== 'publish') return res.status(401).end();
 
   // Nuestro propio extractor de salida, que mete en MediaMTX por RTSP lo que
