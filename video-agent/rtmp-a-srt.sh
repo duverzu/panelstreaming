@@ -9,6 +9,9 @@
 # cierra al irse el ultimo lector. Sin esto, el extractor se queda tirando del
 # canal para NADIE -- se encontraron dos corriendo 28 y 3 horas sin un solo
 # lector. Asi que cierra el mismo cuando ya no hay a quien servir.
+# NOTA: desde que el agente mantiene los puentes encendidos (srt-salida.js),
+# MediaMTX ya no necesita abrirlos bajo demanda. Este guion se conserva para
+# levantar uno a mano si hiciera falta.
 USUARIO="$1"
 [ -z "$USUARIO" ] && exit 1
 

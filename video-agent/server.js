@@ -20,6 +20,7 @@ const path = require('path');
 const readline = require('readline');
 const claves = require('./claves');
 const salud = require('./salud');
+const srtSalida = require('./srt-salida');
 const bienvenida = require('./bienvenida');
 const webtv = require('./webtv');
 const restream = require('./restream');
@@ -1102,6 +1103,10 @@ app.get('/nodo/red', wrap(async (req, res) => {
   }
   res.json({ ok: true, iface, rx_bytes: rx, tx_bytes: tx });
 }));
+
+// Los puentes de salida SRT se mantienen encendidos mientras el canal esté al
+// aire: un cable operador engancha y espera señal, no reintenta con paciencia.
+srtSalida.iniciar(srtSalidaHabilitados, compatAlAire);
 
 app.use((req, res) => res.status(404).json({ error: `Ruta no encontrada: ${req.method} ${req.path}` }));
 app.use((err, req, res, next) => {
